@@ -154,6 +154,33 @@ class SystemRoleController extends BaseController
     }
 
     /**
+     * 根据角色获取部门
+     * @param Request $request
+     * @return Response
+     */
+    #[Permission('角色部门数据', 'core:role:data')]
+    public function getDeptByRole(Request $request): Response
+    {
+        $id = $request->get('id');
+        $data = $this->logic->getDeptByRole($id);
+        return $this->success($data);
+    }
+
+    /**
+     * 数据权限
+     * @param Request $request
+     * @return Response
+     */
+    #[Permission('角色数据权限', 'core:role:data')]
+    public function dataPermission(Request $request): Response
+    {
+        $id = $request->post('id');
+        $data = $request->post();
+        $this->logic->saveDeptPermission($id, $data);
+        return $this->success('操作成功');
+    }
+
+    /**
      * 可操作角色
      * @param Request $request
      * @return Response

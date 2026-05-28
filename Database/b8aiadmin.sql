@@ -750,7 +750,7 @@ VALUES(14,'是否','yes_or_no',1,'',1,1,'2026-01-01 00:00:00.0','2026-01-01 00:0
 INSERT INTO `b8aiadmin`.`sa_system_dict_type`(`id`,`name`,`code`,`status`,`remark`,`created_by`,`updated_by`,`create_time`,`update_time`,`delete_time`) 
 VALUES(20,'定时任务类型','crontab_task_type',1,'',1,1,'2026-01-01 00:00:00.0','2026-01-01 00:00:00.0',null);
 
-INSERT INTO `b8aiadmin`.`sa_system_menu`(`id`,`parent_id`,`name`,`code`,`slug`,`type`,`path`,`component`,`method`,`icon`,`sort`,`link_url`,`is_iframe`,`is_keep_alive`,`is_hidden`,`is_fixed_tab`,`is_full_page`,`generate_id`,`generate_key`,`status`,`remark`,`created_by`,`updated_by`,`create_time`,`update_time`,`delete_time`) 
+INSERT INTO `b8aiadmin`.`sa_system_menu`(`id`,`parent_id`,`name`,`code`,`slug`,`type`,`path`,`component`,`method`,`icon`,`sort`,`link_url`,`is_iframe`,`is_keep_alive`,`is_hidden`,`is_fixed_tab`,`is_full_page`,`generate_id`,`generate_key`,`status`,`remark`,`created_by`,`updated_by`,`create_time`,`update_time`,`delete_time`)
 VALUES(1,0,'仪表盘','Dashboard',null,1,'/dashboard',null,null,'ri:pie-chart-line',100,null,2,2,2,2,2,0,null,1,null,1,1,'2026-01-01 00:00:00.0','2026-01-01 00:00:00.0',null);
 INSERT INTO `b8aiadmin`.`sa_system_menu`(`id`,`parent_id`,`name`,`code`,`slug`,`type`,`path`,`component`,`method`,`icon`,`sort`,`link_url`,`is_iframe`,`is_keep_alive`,`is_hidden`,`is_fixed_tab`,`is_full_page`,`generate_id`,`generate_key`,`status`,`remark`,`created_by`,`updated_by`,`create_time`,`update_time`,`delete_time`) 
 VALUES(2,1,'工作台','Console',null,2,'console','/dashboard/console',null,'ri:home-smile-2-line',100,null,2,2,2,2,2,0,null,1,null,1,1,'2026-01-01 00:00:00.0','2026-01-01 00:00:00.0',null);
@@ -827,6 +827,8 @@ VALUES(38,6,'删除','','core:role:destroy',3,'','',null,'',100,'',2,2,2,2,2,0,n
 INSERT INTO `b8aiadmin`.`sa_system_menu`(`id`,`parent_id`,`name`,`code`,`slug`,`type`,`path`,`component`,`method`,`icon`,`sort`,`link_url`,`is_iframe`,`is_keep_alive`,`is_hidden`,`is_fixed_tab`,`is_full_page`,`generate_id`,`generate_key`,`status`,`remark`,`created_by`,`updated_by`,`create_time`,`update_time`,`delete_time`) 
 VALUES(39,6,'菜单权限','','core:role:menu',3,'','',null,'',100,'',2,2,2,2,2,0,null,1,null,1,1,'2026-01-01 00:00:00.0','2026-01-01 00:00:00.0',null);
 INSERT INTO `b8aiadmin`.`sa_system_menu`(`id`,`parent_id`,`name`,`code`,`slug`,`type`,`path`,`component`,`method`,`icon`,`sort`,`link_url`,`is_iframe`,`is_keep_alive`,`is_hidden`,`is_fixed_tab`,`is_full_page`,`generate_id`,`generate_key`,`status`,`remark`,`created_by`,`updated_by`,`create_time`,`update_time`,`delete_time`) 
+VALUES(40,6,'数据权限','','core:role:data',3,'','',null,'',100,'',2,2,2,2,2,0,null,1,null,1,1,'2026-01-01 00:00:00.0','2026-01-01 00:00:00.0',null);
+INSERT INTO `b8aiadmin`.`sa_system_menu`(`id`,`parent_id`,`name`,`code`,`slug`,`type`,`path`,`component`,`method`,`icon`,`sort`,`link_url`,`is_iframe`,`is_keep_alive`,`is_hidden`,`is_fixed_tab`,`is_full_page`,`generate_id`,`generate_key`,`status`,`remark`,`created_by`,`updated_by`,`create_time`,`update_time`,`delete_time`)
 VALUES(41,7,'数据列表','','core:post:index',3,'','',null,'',100,'',2,2,2,2,2,0,null,1,null,1,1,'2026-01-01 00:00:00.0','2026-01-01 00:00:00.0',null);
 INSERT INTO `b8aiadmin`.`sa_system_menu`(`id`,`parent_id`,`name`,`code`,`slug`,`type`,`path`,`component`,`method`,`icon`,`sort`,`link_url`,`is_iframe`,`is_keep_alive`,`is_hidden`,`is_fixed_tab`,`is_full_page`,`generate_id`,`generate_key`,`status`,`remark`,`created_by`,`updated_by`,`create_time`,`update_time`,`delete_time`) 
 VALUES(42,7,'添加','','core:post:save',3,'','',null,'',100,'',2,2,2,2,2,0,null,1,null,1,1,'2026-01-01 00:00:00.0','2026-01-01 00:00:00.0',null);
@@ -967,4 +969,3 @@ INSERT INTO `b8aiadmin`.`sa_tool_crontab`(`id`,`name`,`type`,`target`,`parameter
 VALUES(2,'登录gitee',2,'https://gitee.com/check_user_login','{"user_login": "saiadmin"}',1,'0 0 10 * * *',2,1,'',1,1,'2026-01-01 00:00:00.0','2026-01-01 00:00:00.0',null);
 INSERT INTO `b8aiadmin`.`sa_tool_crontab`(`id`,`name`,`type`,`target`,`parameter`,`task_style`,`rule`,`singleton`,`status`,`remark`,`created_by`,`updated_by`,`create_time`,`update_time`,`delete_time`) 
 VALUES(3,'定时执行任务',3,'\\plugin\\saiadmin\\process\\Test','{"type":"1"}',5,'0 0 */12 * * *',2,1,'',1,1,'2026-01-01 00:00:00.0','2026-01-01 00:00:00.0',null);
-
