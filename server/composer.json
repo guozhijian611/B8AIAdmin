@@ -38,7 +38,8 @@
         "w7corp/easywechat": "^6.18",
         "yansongda/pay": "~3.7.0",
         "hyperf/pimple": "*",
-        "overtrue/easy-sms": "*"
+        "overtrue/easy-sms": "*",
+        "guozhijian611/thinkorm-log": "dev-main"
     },
     "suggest": {
         "ext-event": "For better performance. "

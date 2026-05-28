@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "a38cfebcc68ac5931eeb7d270d73d84d",
+    "content-hash": "2703c61ae3c47a79251a034d38407f45",
     "packages": [
         {
             "name": "brick/math",
@@ -536,6 +536,61 @@
                 }
             ],
             "time": "2025-12-27T19:43:20+00:00"
+        },
+        {
+            "name": "guozhijian611/thinkorm-log",
+            "version": "dev-main",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/guozhijian611/thinkorm-log.git",
+                "reference": "2df645cbf10fa0103725fb7b6af673e4c62b8e93"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/guozhijian611/thinkorm-log/zipball/2df645cbf10fa0103725fb7b6af673e4c62b8e93",
+                "reference": "2df645cbf10fa0103725fb7b6af673e4c62b8e93",
+                "shasum": ""
+            },
+            "require": {
+                "monolog/monolog": "^2.0|^3.0",
+                "php": ">=8.0",
+                "topthink/think-orm": "^2.0|^3.0",
+                "workerman/webman-framework": "^1.0|^2.0"
+            },
+            "default-branch": true,
+            "type": "library",
+            "extra": {
+                "webman": {
+                    "plugin": true
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "Guozhijian611\\ThinkOrmLog\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "guozhijian611",
+                    "email": "allen@gzj2001.com"
+                }
+            ],
+            "description": "基于webman开发的ThinkOrm日志记录插件，增强版支持API请求日志记录",
+            "keywords": [
+                "ThinkORM",
+                "api",
+                "log",
+                "middleware",
+                "webman"
+            ],
+            "support": {
+                "source": "https://github.com/guozhijian611/thinkorm-log/tree/main"
+            },
+            "time": "2025-06-14T22:43:00+00:00"
         },
         {
             "name": "guzzlehttp/guzzle",
@@ -9669,7 +9724,9 @@
     "packages-dev": [],
     "aliases": [],
     "minimum-stability": "dev",
-    "stability-flags": {},
+    "stability-flags": {
+        "guozhijian611/thinkorm-log": 20
+    },
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {
