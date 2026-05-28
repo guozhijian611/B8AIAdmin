@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "2703c61ae3c47a79251a034d38407f45",
+    "content-hash": "c69d09115f8854e793aefbb3fc00abcf",
     "packages": [
         {
             "name": "brick/math",
@@ -9038,6 +9038,40 @@
             "time": "2026-03-25T02:00:19+00:00"
         },
         {
+            "name": "webman/redis-queue",
+            "version": "v2.1.1",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/webman-php/redis-queue.git",
+                "reference": "ff4791e21f3c324a47e21da7b6f2dae5a7311dcb"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/webman-php/redis-queue/zipball/ff4791e21f3c324a47e21da7b6f2dae5a7311dcb",
+                "reference": "ff4791e21f3c324a47e21da7b6f2dae5a7311dcb",
+                "shasum": ""
+            },
+            "require": {
+                "ext-redis": "*",
+                "php": ">=8.1",
+                "workerman/redis-queue": "^1.2",
+                "workerman/webman-framework": "^2.1 || dev-master"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Webman\\RedisQueue\\": "./src"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "description": "Redis message queue plugin for webman.",
+            "support": {
+                "issues": "https://github.com/webman-php/redis-queue/issues",
+                "source": "https://github.com/webman-php/redis-queue/tree/v2.1.1"
+            },
+            "time": "2025-11-14T07:12:52+00:00"
+        },
+        {
             "name": "webman/think-cache",
             "version": "v2.1.6",
             "source": {
@@ -9299,6 +9333,78 @@
                 "wiki": "http://doc.workerman.net/"
             },
             "time": "2025-01-15T07:20:50+00:00"
+        },
+        {
+            "name": "workerman/redis",
+            "version": "v2.0.5",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/walkor/redis.git",
+                "reference": "49627c1809eff1ef7175eb8ee7549234a1d67ec5"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/walkor/redis/zipball/49627c1809eff1ef7175eb8ee7549234a1d67ec5",
+                "reference": "49627c1809eff1ef7175eb8ee7549234a1d67ec5",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=7",
+                "workerman/workerman": "^4.1.0||^5.0.0"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Workerman\\Redis\\": "./src"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "homepage": "http://www.workerman.net",
+            "support": {
+                "issues": "https://github.com/walkor/redis/issues",
+                "source": "https://github.com/walkor/redis/tree/v2.0.5"
+            },
+            "time": "2025-04-07T01:58:58+00:00"
+        },
+        {
+            "name": "workerman/redis-queue",
+            "version": "v1.2.2",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/walkor/redis-queue.git",
+                "reference": "f0ba4ea9143ae02f39b998ed908d107354cb43c0"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/walkor/redis-queue/zipball/f0ba4ea9143ae02f39b998ed908d107354cb43c0",
+                "reference": "f0ba4ea9143ae02f39b998ed908d107354cb43c0",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=7.0",
+                "workerman/redis": "^1.0||^2.0",
+                "workerman/workerman": ">=4.0.20"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Workerman\\RedisQueue\\": "./src"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "description": "Message queue system written in PHP based on workerman and backed by Redis.",
+            "homepage": "http://www.workerman.net",
+            "support": {
+                "issues": "https://github.com/walkor/redis-queue/issues",
+                "source": "https://github.com/walkor/redis-queue/tree/v1.2.2"
+            },
+            "time": "2026-01-20T14:57:09+00:00"
         },
         {
             "name": "workerman/webman-framework",
