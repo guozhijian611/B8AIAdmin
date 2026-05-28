@@ -53,6 +53,7 @@ class TraceMiddleware implements MiddlewareInterface
             if ($status >= 500) {
                 $span->setStatus(StatusCode::STATUS_ERROR);
             }
+            $this->recordBusinessCode($response, $span);
             $this->injectResponseTraceHeaders($response);
             return $response;
         } catch (Throwable $throwable) {
@@ -110,6 +111,45 @@ class TraceMiddleware implements MiddlewareInterface
         $context = TraceContext::current();
         if ($context['trace_id']) {
             $response->withHeader('x-trace-id', $context['trace_id']);
+        }
+    }
+
+    private function recordBusinessCode(Response $response, $span): void
+    {
+        if (!config('plugin.openb8.webman-otel-trace.app.trace.capture_business_code', true)) {
+            return;
+        }
+
+        $body = $response->rawBody();
+        $maxLength = max(1024, (int)config('plugin.openb8.webman-otel-trace.app.trace.max_response_body_parse_length', 8192));
+        if ($body === '' || strlen($body) > $maxLength) {
+            return;
+        }
+
+        $decoded = json_decode($body, true);
+        if (!is_array($decoded) || !array_key_exists('code', $decoded)) {
+            return;
+        }
+
+        $code = $decoded['code'];
+        if (!is_int($code) && !is_string($code)) {
+            return;
+        }
+
+        $codeString = (string)$code;
+        $span->setAttribute('app.response.code', $codeString);
+
+        $message = $decoded['message'] ?? $decoded['msg'] ?? null;
+        if (is_string($message) && $message !== '') {
+            $span->setAttribute('app.response.message', substr($message, 0, 256));
+        }
+
+        $successCodes = array_map('strval', (array)config(
+            'plugin.openb8.webman-otel-trace.app.trace.business_success_codes',
+            [0, 200]
+        ));
+        if (!in_array($codeString, $successCodes, true)) {
+            $span->setStatus(StatusCode::STATUS_ERROR, 'business_code=' . $codeString);
         }
     }
 }

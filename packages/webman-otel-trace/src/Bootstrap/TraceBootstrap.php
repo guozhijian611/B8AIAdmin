@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OpenB8\WebmanOtelTrace\Bootstrap;
 
 use OpenB8\WebmanOtelTrace\Logging\TraceLogProcessor;
+use OpenB8\WebmanOtelTrace\Support\TraceContext;
 use OpenTelemetry\API\Baggage\Propagation\BaggagePropagator;
 use OpenTelemetry\API\Globals;
 use OpenTelemetry\API\Instrumentation\Configurator;
@@ -22,6 +23,7 @@ use OpenTelemetry\SDK\Trace\Sampler\TraceIdRatioBasedSampler;
 use OpenTelemetry\SDK\Trace\SpanProcessor\SimpleSpanProcessor;
 use OpenTelemetry\SDK\Trace\TracerProvider;
 use support\Log;
+use think\facade\Db;
 use Throwable;
 use Webman\Bootstrap;
 use Workerman\Worker;
@@ -40,6 +42,7 @@ class TraceBootstrap implements Bootstrap
         try {
             self::registerSdk();
             self::registerLogProcessor();
+            self::registerSqlLogListener();
         } catch (Throwable $throwable) {
             self::logBootstrapError($throwable);
         }
@@ -122,6 +125,45 @@ class TraceBootstrap implements Bootstrap
     private static function registerLogProcessor(): void
     {
         Log::channel()->pushProcessor(new TraceLogProcessor());
+    }
+
+    private static function registerSqlLogListener(): void
+    {
+        $config = (array)config('plugin.openb8.webman-otel-trace.app.sql_log', []);
+        if (!($config['enable'] ?? false) || !class_exists(Db::class)) {
+            return;
+        }
+
+        Db::listen(static function ($sql, $runtime) use ($config): void {
+            $sql = (string)$sql;
+            $runtime = (float)$runtime;
+            $ignoreSql = array_map('strtolower', (array)($config['ignore_sql'] ?? ['select 1']));
+            if (in_array(strtolower(trim($sql)), $ignoreSql, true)) {
+                return;
+            }
+
+            $trace = TraceContext::current();
+            $payload = [
+                'time' => date('Y-m-d H:i:s'),
+                'trace_id' => $trace['trace_id'],
+                'span_id' => $trace['span_id'],
+                'sql' => $sql,
+                'runtime_seconds' => $runtime,
+            ];
+            $line = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: $sql;
+
+            if ($config['console'] ?? false) {
+                echo '[otel-sql] ' . $line . PHP_EOL;
+            }
+
+            if ($config['file'] ?? true) {
+                try {
+                    Log::channel('plugin.openb8.webman-otel-trace.sql')->debug($line);
+                } catch (Throwable $throwable) {
+                    echo '[otel-sql] 写入日志失败: ' . $throwable->getMessage() . PHP_EOL;
+                }
+            }
+        });
     }
 
     private static function logBootstrapError(Throwable $throwable): void

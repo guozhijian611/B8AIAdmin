@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+$bool = static function (string $name, bool $default): bool {
+    $value = getenv($name);
+    return $value === false ? $default : filter_var($value, FILTER_VALIDATE_BOOLEAN);
+};
+
 return [
     'enable' => true,
     'service' => [
@@ -21,6 +26,9 @@ return [
     'trace' => [
         'sample_rate' => (float)(getenv('OTEL_TRACES_SAMPLER_ARG') ?: 1.0),
         'response_trace_header' => true,
+        'capture_business_code' => true,
+        'business_success_codes' => [0, 200],
+        'max_response_body_parse_length' => 8192,
         'capture_request_headers' => [
             'user-agent',
             'x-request-id',
@@ -34,6 +42,40 @@ return [
     'metrics' => [
         'enable' => true,
         'path' => '/metrics',
+        // memory | file，file 可以聚合 Webman 多 worker 指标，适合 Prometheus 抓取。
+        'storage' => getenv('OTEL_METRICS_STORAGE') ?: 'file',
+        'file' => runtime_path() . '/otel-trace/metrics.json',
+    ],
+    'request_log' => [
+        'enable' => $bool('OTEL_REQUEST_LOG', true),
+        'console' => $bool('OTEL_REQUEST_LOG_CONSOLE', false),
+        'file' => $bool('OTEL_REQUEST_LOG_FILE', true),
+        'include_headers' => false,
+        'include_request_body' => true,
+        'include_response_body' => true,
+        'max_body_length' => 4096,
+        'ignore_paths' => [
+            '/metrics',
+        ],
+        'sensitive_fields' => [
+            'authorization',
+            'cookie',
+            'password',
+            'passwd',
+            'token',
+            'access_token',
+            'refresh_token',
+            'secret',
+        ],
+    ],
+    'sql_log' => [
+        // ThinkORM 底层 PDO 已经会产生 span；这里是给人看的 SQL 文件日志，默认关闭避免和 thinkorm-log 重复。
+        'enable' => $bool('OTEL_SQL_LOG', false),
+        'console' => $bool('OTEL_SQL_LOG_CONSOLE', false),
+        'file' => $bool('OTEL_SQL_LOG_FILE', true),
+        'ignore_sql' => [
+            'select 1',
+        ],
     ],
     'rabbitmq' => [
         'enable' => true,
