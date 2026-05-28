@@ -41,7 +41,8 @@
         "overtrue/easy-sms": "*",
         "guozhijian611/thinkorm-log": "dev-main",
         "webman/redis-queue": "^2.1",
-        "workbunny/webman-rabbitmq": "^3.0"
+        "workbunny/webman-rabbitmq": "^3.0",
+        "openb8/webman-otel-trace": "dev-main"
     },
     "suggest": {
         "ext-event": "For better performance. "
@@ -66,5 +67,10 @@
         ]
     },
     "minimum-stability": "dev",
-    "prefer-stable": true
+    "prefer-stable": true,
+    "repositories": [{
+        "name": "openb8-webman-otel-trace",
+        "type": "path",
+        "url": "../packages/webman-otel-trace"
+    }]
 }

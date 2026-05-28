@@ -1,0 +1,28 @@
+{
+    "name": "openb8/webman-otel-trace",
+    "description": "OpenTelemetry trace integration for Webman.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.2",
+        "open-telemetry/sdk": "^1.14",
+        "open-telemetry/exporter-otlp": "^1.4",
+        "open-telemetry/opentelemetry-auto-pdo": "^0.4",
+        "psr/log": "^1.1 || ^2.0 || ^3.0",
+        "workerman/webman-framework": "^2.1",
+        "workbunny/webman-rabbitmq": "^3.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "OpenB8\\WebmanOtelTrace\\": "src/"
+        },
+        "files": [
+            "src/functions.php"
+        ]
+    },
+    "extra": {
+        "webman": {
+            "plugin": true
+        }
+    }
+}
