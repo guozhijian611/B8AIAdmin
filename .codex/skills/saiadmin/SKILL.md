@@ -996,12 +996,26 @@ php webman sai:upgrade
 
 ### DataScope 数据权限
 
+- DataScope 不是普通业务插件，通常会改 SaiAdmin 核心能力：`plugin/saiadmin/basic/think/BaseLogic.php`、角色控制器/逻辑层、角色前端页面和角色按钮权限。安装前先读插件 README 和 diff，不要整文件覆盖核心文件。
+- 安装前确认当前项目目录：后端通常在 `server/plugin/saiadmin`，前端通常在 `saiadmin-artd/src`；拷贝来的插件包可能在项目根目录，不能直接按包内相对路径覆盖。
+- 后端接入点：
+  - `BaseLogic` 增加 `$scope` 开关、数据范围常量和 `userDataScope($query)`，并在 `getList`、`getAll`、`read`、`edit`、`destroy` 中按需调用。
+  - `SystemRoleController` 增加 `getDeptByRole`、`dataPermission`，权限 slug 通常为 `core:role:data`。
+  - `SystemRoleLogic` 增加 `getDeptByRole`、`saveDeptPermission`，保存后清理 `UserInfoCache::clearUserInfoByRoleId($id)`。
+  - `plugin/saiadmin/config/route.php` 手动注册 `/core/role/getDeptByRole` 和 `/core/role/dataPermission`，不要只改控制器后就假设路由已自动装载。
+- 前端接入点：
+  - `src/api/system/role.ts` 确认有 `deptByRole`、`dataPermission`；`deptByRole` 返回包含 `depts` 的对象，不是数组。
+  - `src/views/system/role/index.vue` 增加数据权限列、下拉菜单入口和 `DataDialog`。
+  - `src/views/system/role/modules/data-dialog.vue` 通过部门树配置自定义数据权限。
+- 数据库按钮权限：在 `sa_system_menu` 的角色管理菜单下增加按钮 `数据权限 / core:role:data`。优先使用幂等 SQL，安装后查询确认；如果项目维护基础库 SQL，也要同步到对应 SQL 文件。
+- 写入按钮权限后如果页面不显示，清理 `UserMenuCache`、`UserAuthCache`、`UserInfoCache` 或文件缓存，并重新登录。Webman 是常驻进程，改路由/控制器/Logic 后必须重启再验证。
 - 需要数据权限控制的业务表必须有 `created_by` 字段。
 - 对应 Logic 必须继承 ThinkORM 版 `BaseLogic`。
 - 如果项目已接入 DataScope，且该业务模块需要受数据权限控制，对应 Logic 必须显式开启 `protected bool $scope = true;`。
 - 角色 `data_scope` 和 `sa_system_role_dept` 要同时检查。
 - 不能只用超级管理员验证数据范围；必须用普通角色账号验证。
 - SaiCode 重新生成后，重点检查 `$scope` 是否被覆盖。
+- 推荐验证：`php -l` 检查改动 PHP 文件，`php webman route:list` 确认新接口，`pnpm exec vue-tsc --noEmit` 做前端类型检查；避免默认跑完整前端构建，除非用户明确要求。
 
 ### SaiCode 生成后检查
 
