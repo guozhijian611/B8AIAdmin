@@ -1,6 +1,6 @@
 # B8AIadmin 数据表结构规范
 
-> 来源：`Database/b8aiadmin.sql`。本文档只记录表结构、字段语义、软删除、审计与数据权限约定，不记录 INSERT 初始化数据。
+> 来源：当前本地 MySQL 数据库 `b8aiadmin` 的表结构；已先备份到 `Database/backups/b8aiadmin_20260529_014358.sql`。本文档只记录表结构、字段语义、软删除、审计与数据权限约定，不记录 INSERT 初始化数据或密钥值。
 
 ## 一、全局约定
 
@@ -8,11 +8,12 @@
 
 - 表名与字段名统一使用小写蛇形命名，例如 `sa_system_user`、`created_by`。
 - 主键字段优先使用 `id`，当前大多数表为 `AUTO_INCREMENT` 自增主键。
-- 关联表保留独立 `id` 主键，并使用 `user_id`、`role_id`、`dept_id`、`menu_id`、`post_id` 等字段表达关系。
+- 关联表保留独立 `id` 主键，并使用 `user_id`、`role_id`、`dept_id`、`menu_id`、`post_id`、`group_id` 等字段表达关系。
 
 ### 2. SaiAdmin 布尔与状态值
 
 - 常规 SaiAdmin 是否类字段统一记录为：`1` 表示是，`2` 表示否。典型字段包括 `is_link`、`is_href`、`is_iframe`、`is_keep_alive`、`is_hidden`、`is_fixed_tab`、`is_full_page`、`singleton`、`build_menu`、`generate_model`、`generate_menus`、`is_full`。
+- saiai 插件当前存在 `0/1` 是否字段，例如 `saiai_config.is_default` 为 `1是/0否`、`saiai_chat_group.is_top` 默认 `0`。这些字段以 SQL 注释和现有代码为准，新增业务表不要混用。
 - 代码生成器元数据表存在历史反向枚举，例如 `sa_tool_generate_columns.is_pk` 为 `1 非主键 / 2 主键`，`is_required` 为 `1 非必填 / 2 必填`。这些字段以 SQL 注释为准，新增业务表不要沿用反向枚举。
 - 历史核心表中已明确写入 `0/1` 的字段按 SQL 注释执行，例如 `sa_system_user.is_super` 为 `1是/0否`，`sa_system_user.status`、`sa_system_role.status`、`sa_system_dept.status` 为 `1启用/0禁用`。新增业务表建议避免混用。
 - 字典状态、登录状态等已在字段注释中定义 `1/2` 的字段，以字段注释为准，例如 `1正常/2停用`、`1成功/2失败`。
@@ -40,6 +41,8 @@
 | 角色菜单 | `sa_system_role_menu.role_id`、`menu_id` | 角色菜单/按钮/API 权限授权。 |
 | 菜单权限 | `sa_system_menu.slug` | 权限标识，建议与后端 `Permission` 注解和前端按钮权限保持一致。 |
 | 业务数据 | `created_by` | “仅本人”数据范围与创建归属的基础字段。 |
+| AI 会话 | `saiai_chat.user_id`、`saiai_chat.group_id` | AI 对话记录归属用户与会话分组。 |
+| AI 分组 | `saiai_chat_group.user_id` | AI 会话分组归属用户。 |
 
 ## 二、数据表清单
 
@@ -70,6 +73,9 @@
 | 23 | 系统工具 | `sa_tool_crontab_log` | 定时任务执行日志表 | 10 | 是 | 否 | 否 | - |
 | 24 | 系统工具 | `sa_tool_generate_columns` | 代码生成业务字段表 | 25 | 是 | 是 | 是 | 创建人归属、更新人审计 |
 | 25 | 系统工具 | `sa_tool_generate_tables` | 代码生成业务表 | 28 | 是 | 是 | 是 | 创建人归属、更新人审计 |
+| 26 | AI 插件 | `saiai_chat` | AI对话记录表 | 14 | 是 | 是 | 是 | 创建人归属、更新人审计、AI 对话归属用户/分组 |
+| 27 | AI 插件 | `saiai_chat_group` | AI对话分组表 | 9 | 是 | 是 | 是 | 创建人归属、更新人审计、AI 会话归属用户 |
+| 28 | AI 插件 | `saiai_config` | AI配置表 | 14 | 是 | 是 | 是 | 创建人归属、更新人审计、AI 平台配置审计 |
 
 ## 三、逐表结构
 
@@ -863,6 +869,97 @@
 | `create_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 创建时间 | 创建时间字段。 |
 | `update_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 修改时间 | 更新时间字段。 |
 | `delete_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 删除时间 | 软删除字段：NULL 表示未删除，非 NULL 表示已删除。 |
+
+| 索引/约束 |
+| --- |
+| <code>PRIMARY KEY (&#96;id&#96;) USING BTREE</code> |
+
+### saiai_chat（AI对话记录表）
+
+- 存储引擎：InnoDB
+- 字符集：utf8mb4
+- 排序规则：utf8mb4_0900_ai_ci
+- 行格式：DYNAMIC
+- 软删除：`delete_time`
+- 创建/更新人：`created_by` / `updated_by`
+- 权限/审计备注：创建人归属、更新人审计、AI 对话归属用户/分组
+
+| 字段 | 定义 | 必填 | 默认值 | 说明 | 规范备注 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `int NOT NULL AUTO_INCREMENT` | 是 | `-` | - | - |
+| `group_id` | `int DEFAULT NULL` | 否 | `NULL` | 分组ID | AI 对话分组关联字段。 |
+| `user_id` | `int NOT NULL DEFAULT '0'` | 是 | `'0'` | 用户ID | AI 会话归属用户字段，关联系统用户。 |
+| `role` | `varchar(20) NOT NULL DEFAULT 'user'` | 是 | `'user'` | 角色 | - |
+| `model` | `varchar(50) DEFAULT ''` | 否 | `''` | 模型名称 | - |
+| `content` | `text` | 否 | `-` | 消息内容 | - |
+| `tokens` | `int DEFAULT '0'` | 否 | `'0'` | 消耗token数 | - |
+| `ip` | `varchar(50) DEFAULT ''` | 否 | `''` | IP地址 | - |
+| `user_agent` | `varchar(255) DEFAULT ''` | 否 | `''` | User Agent | - |
+| `created_by` | `int DEFAULT NULL` | 否 | `NULL` | 创建人 | 创建人字段：记录创建用户 ID，也是数据归属/本人数据权限的重要依据。 |
+| `updated_by` | `int DEFAULT NULL` | 否 | `NULL` | 修改人 | 更新人字段：记录最后更新用户 ID，用于审计追踪。 |
+| `create_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 创建时间 | 创建时间字段。 |
+| `update_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 修改时间 | 更新时间字段。 |
+| `delete_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 删除时间 | 软删除字段：NULL 表示未删除，非 NULL 表示已删除。 |
+
+| 索引/约束 |
+| --- |
+| <code>PRIMARY KEY (&#96;id&#96;) USING BTREE</code> |
+| <code>KEY &#96;idx_user_id&#96; (&#96;user_id&#96;) USING BTREE</code> |
+| <code>KEY &#96;idx_session_id&#96; (&#96;group_id&#96;) USING BTREE</code> |
+
+### saiai_chat_group（AI对话分组表）
+
+- 存储引擎：InnoDB
+- 字符集：utf8mb4
+- 排序规则：utf8mb4_0900_ai_ci
+- 行格式：DYNAMIC
+- 软删除：`delete_time`
+- 创建/更新人：`created_by` / `updated_by`
+- 权限/审计备注：创建人归属、更新人审计、AI 会话归属用户
+
+| 字段 | 定义 | 必填 | 默认值 | 说明 | 规范备注 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `int NOT NULL AUTO_INCREMENT` | 是 | `-` | - | - |
+| `user_id` | `int NOT NULL DEFAULT '0'` | 是 | `'0'` | 用户ID | AI 会话归属用户字段，关联系统用户。 |
+| `title` | `varchar(255) DEFAULT ''` | 否 | `''` | 会话标题 | - |
+| `is_top` | `tinyint DEFAULT '0'` | 否 | `'0'` | 是否置顶 | 按字段注释使用 0/1 枚举；新增 SaiAdmin 是否类字段优先使用 1=是、2=否。 |
+| `created_by` | `int DEFAULT NULL` | 否 | `NULL` | 创建者 | 创建人字段：记录创建用户 ID，也是数据归属/本人数据权限的重要依据。 |
+| `updated_by` | `int DEFAULT NULL` | 否 | `NULL` | 更新者 | 更新人字段：记录最后更新用户 ID，用于审计追踪。 |
+| `create_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 创建时间 | 创建时间字段。 |
+| `update_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 修改时间 | 更新时间字段。 |
+| `delete_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 删除时间 | 软删除字段：NULL 表示未删除，非 NULL 表示已删除。 |
+
+| 索引/约束 |
+| --- |
+| <code>PRIMARY KEY (&#96;id&#96;) USING BTREE</code> |
+| <code>KEY &#96;idx_user_id&#96; (&#96;user_id&#96;) USING BTREE</code> |
+
+### saiai_config（AI配置表）
+
+- 存储引擎：InnoDB
+- 字符集：utf8mb4
+- 排序规则：utf8mb4_0900_ai_ci
+- 行格式：DYNAMIC
+- 软删除：`delete_time`
+- 创建/更新人：`created_by` / `updated_by`
+- 权限/审计备注：创建人归属、更新人审计、AI 平台配置审计
+
+| 字段 | 定义 | 必填 | 默认值 | 说明 | 规范备注 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `int NOT NULL AUTO_INCREMENT` | 是 | `-` | - | - |
+| `name` | `varchar(50) NOT NULL` | 是 | `-` | 配置名称 | - |
+| `type` | `varchar(20) NOT NULL` | 是 | `-` | 平台类型: gemini, openai, deepseek | - |
+| `ai_url` | `varchar(255) NOT NULL` | 是 | `-` | API URL | AI 平台 API 地址字段。 |
+| `ai_key` | `varchar(255) NOT NULL` | 是 | `-` | API Key | AI 平台密钥字段，文档只记录结构，不记录实际密钥值。 |
+| `model` | `varchar(50) NOT NULL` | 是 | `-` | 模型名称 | - |
+| `is_default` | `tinyint(1) NOT NULL DEFAULT '0'` | 是 | `'0'` | 是否默认: 1是,0否 | 按字段注释使用 0/1 枚举；新增 SaiAdmin 是否类字段优先使用 1=是、2=否。 |
+| `status` | `tinyint(1) DEFAULT '1'` | 否 | `'1'` | 状态 | 状态字段；新增业务建议统一 1启用/正常，2禁用/停用。 |
+| `remark` | `varchar(255) DEFAULT NULL` | 否 | `NULL` | 备注 | - |
+| `created_by` | `int DEFAULT NULL` | 否 | `NULL` | 创建者 | 创建人字段：记录创建用户 ID，也是数据归属/本人数据权限的重要依据。 |
+| `updated_by` | `int DEFAULT NULL` | 否 | `NULL` | 更新者 | 更新人字段：记录最后更新用户 ID，用于审计追踪。 |
+| `create_time` | `datetime DEFAULT NULL` | 否 | `NULL` | - | 创建时间字段。 |
+| `update_time` | `datetime DEFAULT NULL` | 否 | `NULL` | - | 更新时间字段。 |
+| `delete_time` | `datetime DEFAULT NULL` | 否 | `NULL` | - | 软删除字段：NULL 表示未删除，非 NULL 表示已删除。 |
 
 | 索引/约束 |
 | --- |
