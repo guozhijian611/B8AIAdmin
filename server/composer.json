@@ -34,7 +34,8 @@
         "symfony/ai-gemini-platform": "*",
         "symfony/ai-open-ai-platform": "*",
         "symfony/ai-deep-seek-platform": "*",
-        "symfony/ai-generic-platform": "*"
+        "symfony/ai-generic-platform": "*",
+        "w7corp/easywechat": "^6.18"
     },
     "suggest": {
         "ext-event": "For better performance. "
