@@ -47,6 +47,9 @@ importers:
       highlight.js:
         specifier: ^11.10.0
         version: 11.11.1
+      marked:
+        specifier: ^17.0.1
+        version: 17.0.6
       md-editor-v3:
         specifier: ^6.3.1
         version: 6.5.1(vue@3.5.22(typescript@5.6.3))
@@ -2975,6 +2978,11 @@ packages:
 
   markdown-it@14.2.0:
     resolution: {integrity: sha512-1TGiQiJVRQ3NPmZH6sx5Cfnmg6GQm9jvC1ch4TK511NjSJvjzKLzn5pPfZRNZkRPZP0HqCioSndqH8v2nRaWVQ==}
+    hasBin: true
+
+  marked@17.0.6:
+    resolution: {integrity: sha512-gB0gkNafnonOw0obSTEGZTT86IuhILt2Wfx0mWH/1Au83kybTayroZ/V6nS25mN7u8ASy+5fMhgB3XPNrOZdmA==}
+    engines: {node: '>= 20'}
     hasBin: true
 
   math-intrinsics@1.1.0:
@@ -7115,6 +7123,8 @@ snapshots:
       mdurl: 2.0.0
       punycode.js: 2.3.1
       uc.micro: 2.1.0
+
+  marked@17.0.6: {}
 
   math-intrinsics@1.1.0: {}
 
