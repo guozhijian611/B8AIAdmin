@@ -1,6 +1,6 @@
 # B8AIadmin 数据表结构规范
 
-> 来源：当前本地 MySQL 数据库 `b8aiadmin` 的表结构；`saiuser` 插件表已按 `server/runtime/saipackage/saiuser/install.sql` 校对。历史备份文件：`Database/backups/b8aiadmin_20260529_014358.sql`。本文档只记录表结构、字段语义、软删除、审计与数据权限约定，不记录 INSERT 初始化数据或密钥值。
+> 来源：当前本地 MySQL 数据库 `b8aiadmin` 的 42 张表结构；`saiuser` 插件表已按 `server/runtime/saipackage/saiuser/install.sql` 校对。历史备份文件：`Database/backups/b8aiadmin_20260529_014358.sql`。本文档只记录表结构、字段语义、软删除、审计与数据权限约定，不记录 INSERT 初始化数据或密钥值。
 
 ## 一、全局约定
 
@@ -47,6 +47,10 @@
 | 会员主体 | `sa_member.id`、`sa_member.member_level_id`、`sa_member.register_platform_id` | 会员身份、等级和注册平台归属。 |
 | 会员关联 | `sa_member_platform_rel.member_id`、`platform_id`、`platform_openid` | 第三方平台账号绑定关系。 |
 | 会员日志 | `sa_member_login_log.member_id`、`sa_member_points_log.member_id` | 会员登录、积分流水归属。 |
+| 低代码生成 | `saicode_column.table_id`、`saicode_table.belong_menu_id` | 低代码生成字段与业务表、所属菜单的关联。 |
+| 支付订单 | `saipay_order.member_id`、`saipay_order.order_id`、`saipay_order.order_no` | 支付订单归属会员、关联业务订单与唯一订单号。 |
+| 短信记录 | `saisms_record.mobile`、`code`、`is_verify` | 短信验证码接收手机号、验证码与验证状态。 |
+| 短信配置 | `saisms_config.gateway`、`saisms_tag.gateway` | 短信网关配置与短信模板标签关联。 |
 
 ## 二、数据表清单
 
@@ -88,6 +92,12 @@
 | 34 | AI 插件 | `saiai_chat` | AI对话记录表 | 14 | 是 | 是 | 是 | 创建人归属、更新人审计、AI 对话归属用户/分组 |
 | 35 | AI 插件 | `saiai_chat_group` | AI对话分组表 | 9 | 是 | 是 | 是 | 创建人归属、更新人审计、AI 会话归属用户 |
 | 36 | AI 插件 | `saiai_config` | AI配置表 | 14 | 是 | 是 | 是 | 创建人归属、更新人审计、AI 平台配置审计 |
+| 37 | 低代码插件 | `saicode_column` | 代码生成业务字段表 | 33 | 是 | 是 | 是 | 创建人归属、更新人审计、低代码字段配置 |
+| 38 | 低代码插件 | `saicode_table` | 低代码数据表 | 28 | 是 | 是 | 是 | 创建人归属、更新人审计、低代码表配置 |
+| 39 | 支付插件 | `saipay_order` | 订单记录表 | 21 | 是 | 是 | 是 | 创建人归属、更新人审计、支付订单归属 |
+| 40 | 短信插件 | `saisms_config` | 短信配置 | 12 | 是 | 是 | 是 | 创建人归属、更新人审计、短信网关配置 |
+| 41 | 短信插件 | `saisms_record` | 短信记录 | 10 | 否 | 否 | 否 | 短信发送与验证码验证记录 |
+| 42 | 短信插件 | `saisms_tag` | 短信标签 | 12 | 是 | 是 | 是 | 创建人归属、更新人审计、短信模板标签 |
 
 ## 三、逐表结构
 
@@ -1220,6 +1230,230 @@
 | `create_time` | `datetime DEFAULT NULL` | 否 | `NULL` | - | 创建时间字段。 |
 | `update_time` | `datetime DEFAULT NULL` | 否 | `NULL` | - | 更新时间字段。 |
 | `delete_time` | `datetime DEFAULT NULL` | 否 | `NULL` | - | 软删除字段：NULL 表示未删除，非 NULL 表示已删除。 |
+
+| 索引/约束 |
+| --- |
+| <code>PRIMARY KEY (&#96;id&#96;) USING BTREE</code> |
+
+### saicode_column（代码生成业务字段表）
+
+- 存储引擎：InnoDB
+- 字符集：utf8mb4
+- 排序规则：utf8mb4_0900_ai_ci
+- 行格式：DYNAMIC
+- 软删除：`delete_time`
+- 创建/更新人：`created_by` / `updated_by`
+- 权限/审计备注：创建人归属、更新人审计、低代码字段配置
+
+| 字段 | 定义 | 必填 | 默认值 | 说明 | 规范备注 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `int unsigned NOT NULL AUTO_INCREMENT` | 是 | `-` | 主键 | - |
+| `table_id` | `int unsigned DEFAULT NULL` | 否 | `NULL` | 所属表ID | 关联 `saicode_table.id`。 |
+| `column_name` | `varchar(200) DEFAULT NULL` | 否 | `NULL` | 字段名称 | - |
+| `column_comment` | `varchar(255) DEFAULT NULL` | 否 | `NULL` | 字段注释 | - |
+| `column_type` | `varchar(50) DEFAULT NULL` | 否 | `NULL` | 字段类型 | - |
+| `column_width` | `int DEFAULT '0'` | 否 | `'0'` | 列表宽度 | - |
+| `default_value` | `varchar(50) DEFAULT NULL` | 否 | `NULL` | 默认值 | - |
+| `is_pk` | `smallint DEFAULT '1'` | 否 | `'1'` | 1 非主键 2 主键 | 代码生成器历史反向枚举，以字段注释为准。 |
+| `is_required` | `smallint DEFAULT '1'` | 否 | `'1'` | 1 非必填 2 必填 | 代码生成器历史反向枚举，以字段注释为准。 |
+| `is_insert` | `smallint DEFAULT '1'` | 否 | `'1'` | 1 非插入字段 2 插入字段 | 代码生成器历史反向枚举，以字段注释为准。 |
+| `is_edit` | `smallint DEFAULT '1'` | 否 | `'1'` | 1 非编辑字段 2 编辑字段 | 代码生成器历史反向枚举，以字段注释为准。 |
+| `is_list` | `smallint DEFAULT '1'` | 否 | `'1'` | 1 非列表显示字段 2 列表显示字段 | 代码生成器历史反向枚举，以字段注释为准。 |
+| `is_query` | `smallint DEFAULT '1'` | 否 | `'1'` | 1 非查询字段 2 查询字段 | 代码生成器历史反向枚举，以字段注释为准。 |
+| `is_sort` | `smallint DEFAULT '1'` | 否 | `'1'` | 1 非排序 2 排序 | 代码生成器历史反向枚举，以字段注释为准。 |
+| `query_type` | `varchar(100) DEFAULT 'eq'` | 否 | `'eq'` | 查询方式 | - |
+| `view_type` | `varchar(100) DEFAULT 'input'` | 否 | `'input'` | 页面控件 | - |
+| `dict_type` | `varchar(200) DEFAULT NULL` | 否 | `NULL` | 字典类型 | - |
+| `options` | `text` | 否 | `-` | 字段其他设置 | - |
+| `list_sort` | `smallint unsigned DEFAULT '0'` | 否 | `'0'` | 列表排序 | - |
+| `span` | `smallint DEFAULT NULL` | 否 | `NULL` | 布局 | - |
+| `form_sort` | `smallint unsigned DEFAULT '0'` | 否 | `'0'` | 字段排序 | - |
+| `query_component` | `varchar(200) DEFAULT 'input'` | 否 | `'input'` | 查询控件 | - |
+| `query_dict` | `varchar(200) DEFAULT NULL` | 否 | `NULL` | 查询字典 | - |
+| `query_span` | `int DEFAULT '6'` | 否 | `'6'` | 搜索栅格宽度 | - |
+| `query_sort` | `int DEFAULT '0'` | 否 | `'0'` | 搜索排序 | - |
+| `query_options` | `text` | 否 | `-` | 查询属性配置 | - |
+| `table_field` | `varchar(255) DEFAULT NULL` | 否 | `NULL` | 列表名称 | - |
+| `remark` | `varchar(255) DEFAULT NULL` | 否 | `NULL` | 备注 | - |
+| `created_by` | `int DEFAULT NULL` | 否 | `NULL` | 创建者 | 创建人字段：记录创建用户 ID，也是数据归属/本人数据权限的重要依据。 |
+| `updated_by` | `int DEFAULT NULL` | 否 | `NULL` | 更新者 | 更新人字段：记录最后更新用户 ID，用于审计追踪。 |
+| `create_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 创建时间 | 创建时间字段。 |
+| `update_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 修改时间 | 更新时间字段。 |
+| `delete_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 删除时间 | 软删除字段：NULL 表示未删除，非 NULL 表示已删除。 |
+
+| 索引/约束 |
+| --- |
+| <code>PRIMARY KEY (&#96;id&#96;) USING BTREE</code> |
+
+### saicode_table（低代码数据表）
+
+- 存储引擎：InnoDB
+- 字符集：utf8mb4
+- 排序规则：utf8mb4_0900_ai_ci
+- 行格式：DYNAMIC
+- 软删除：`delete_time`
+- 创建/更新人：`created_by` / `updated_by`
+- 权限/审计备注：创建人归属、更新人审计、低代码表配置
+
+| 字段 | 定义 | 必填 | 默认值 | 说明 | 规范备注 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `int unsigned NOT NULL AUTO_INCREMENT` | 是 | `-` | 主键 | - |
+| `table_name` | `varchar(200) DEFAULT NULL` | 否 | `NULL` | 表名称 | - |
+| `table_comment` | `varchar(500) DEFAULT NULL` | 否 | `NULL` | 表注释 | - |
+| `stub` | `varchar(50) DEFAULT NULL` | 否 | `NULL` | stub类型 | - |
+| `template` | `varchar(50) DEFAULT NULL` | 否 | `NULL` | 模板名称 | - |
+| `namespace` | `varchar(255) DEFAULT NULL` | 否 | `NULL` | 命名空间 | - |
+| `package_name` | `varchar(100) DEFAULT NULL` | 否 | `NULL` | 控制器包名 | - |
+| `business_name` | `varchar(50) DEFAULT NULL` | 否 | `NULL` | 业务名称 | - |
+| `class_name` | `varchar(50) DEFAULT NULL` | 否 | `NULL` | 类名称 | - |
+| `menu_name` | `varchar(100) DEFAULT NULL` | 否 | `NULL` | 生成菜单名 | - |
+| `belong_menu_id` | `int DEFAULT NULL` | 否 | `NULL` | 所属菜单 | 关联 `sa_system_menu.id`。 |
+| `tpl_category` | `varchar(100) DEFAULT NULL` | 否 | `NULL` | 生成类型 | - |
+| `generate_type` | `smallint DEFAULT '1'` | 否 | `'1'` | 1 压缩包下载 2 生成到模块 | - |
+| `generate_model` | `smallint DEFAULT '1'` | 否 | `'1'` | 1 软删除 2 非软删除 | - |
+| `generate_path` | `varchar(100) DEFAULT 'saiadmin-artd'` | 否 | `'saiadmin-artd'` | 前端根目录 | - |
+| `generate_menus` | `varchar(255) DEFAULT NULL` | 否 | `NULL` | 生成菜单列表 | - |
+| `component_type` | `smallint DEFAULT '1'` | 否 | `'1'` | 组件方式 | - |
+| `form_width` | `int DEFAULT '600'` | 否 | `'600'` | 宽度 | - |
+| `is_full` | `smallint DEFAULT '1'` | 否 | `'1'` | 是否全屏 | SaiAdmin 是否类字段约定：1=是，2=否。 |
+| `span` | `smallint DEFAULT NULL` | 否 | `NULL` | 布局 | - |
+| `options` | `varchar(1500) DEFAULT NULL` | 否 | `NULL` | 其他业务选项 | - |
+| `remark` | `varchar(255) DEFAULT NULL` | 否 | `NULL` | 备注 | - |
+| `source` | `varchar(255) DEFAULT NULL` | 否 | `NULL` | 数据源 | - |
+| `created_by` | `int DEFAULT NULL` | 否 | `NULL` | 创建者 | 创建人字段：记录创建用户 ID，也是数据归属/本人数据权限的重要依据。 |
+| `updated_by` | `int DEFAULT NULL` | 否 | `NULL` | 更新者 | 更新人字段：记录最后更新用户 ID，用于审计追踪。 |
+| `create_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 创建时间 | 创建时间字段。 |
+| `update_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 修改时间 | 更新时间字段。 |
+| `delete_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 删除时间 | 软删除字段：NULL 表示未删除，非 NULL 表示已删除。 |
+
+| 索引/约束 |
+| --- |
+| <code>PRIMARY KEY (&#96;id&#96;) USING BTREE</code> |
+
+### saipay_order（订单记录表）
+
+- 存储引擎：InnoDB
+- 字符集：utf8mb4
+- 排序规则：utf8mb4_0900_ai_ci
+- 行格式：DYNAMIC
+- 软删除：`delete_time`
+- 创建/更新人：`created_by` / `updated_by`
+- 权限/审计备注：创建人归属、更新人审计、支付订单归属
+
+| 字段 | 定义 | 必填 | 默认值 | 说明 | 规范备注 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `int unsigned NOT NULL AUTO_INCREMENT` | 是 | `-` | 订单ID | - |
+| `plugin` | `varchar(50) DEFAULT NULL` | 否 | `NULL` | 插件平台 | 支付插件来源字段。 |
+| `order_no` | `varchar(50) NOT NULL DEFAULT ''` | 是 | `''` | 订单号 | 订单唯一编号，受唯一索引 `unx_order_no` 约束。 |
+| `order_name` | `varchar(255) NOT NULL` | 是 | `-` | 订单名称 | - |
+| `order_price` | `decimal(10,2) unsigned NOT NULL` | 是 | `-` | 订单金额 | 金额字段，单位和精度以业务代码为准。 |
+| `pay_price` | `decimal(10,2) unsigned DEFAULT NULL` | 否 | `NULL` | 支付金额 | 金额字段，单位和精度以业务代码为准。 |
+| `remark` | `varchar(255) DEFAULT ''` | 否 | `''` | 备注留言 | - |
+| `pay_method` | `varchar(60) NOT NULL DEFAULT ''` | 是 | `''` | 支付方式 | 支付方式字段，通常对应支付渠道/方式字典。 |
+| `pay_type` | `varchar(60) DEFAULT NULL` | 否 | `NULL` | 支付类型 | - |
+| `pay_status` | `tinyint unsigned DEFAULT '0'` | 否 | `'0'` | 付款状态 | 支付状态枚举按支付插件业务代码使用。 |
+| `pay_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 付款时间 | 支付成功或状态变更时间字段。 |
+| `trade_no` | `varchar(255) DEFAULT '0'` | 否 | `'0'` | 第三方交易 | 第三方支付平台交易号。 |
+| `pay_url` | `varchar(1000) DEFAULT NULL` | 否 | `NULL` | 支付链接 | 支付跳转或收银台链接。 |
+| `pay_url_expire` | `datetime DEFAULT NULL` | 否 | `NULL` | 过期时间 | 支付链接过期时间。 |
+| `member_id` | `int DEFAULT NULL` | 否 | `NULL` | 关联用户 | 支付订单归属会员字段，关联 `sa_member.id`。 |
+| `order_id` | `int DEFAULT NULL` | 否 | `NULL` | 关联订单 | 关联业务订单 ID。 |
+| `created_by` | `int DEFAULT NULL` | 否 | `NULL` | 创建者 | 创建人字段：记录创建用户 ID，也是数据归属/本人数据权限的重要依据。 |
+| `updated_by` | `int DEFAULT NULL` | 否 | `NULL` | 更新者 | 更新人字段：记录最后更新用户 ID，用于审计追踪。 |
+| `create_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 创建时间 | 创建时间字段。 |
+| `update_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 修改时间 | 更新时间字段。 |
+| `delete_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 删除时间 | 软删除字段：NULL 表示未删除，非 NULL 表示已删除。 |
+
+| 索引/约束 |
+| --- |
+| <code>PRIMARY KEY (&#96;id&#96;) USING BTREE</code> |
+| <code>UNIQUE KEY &#96;unx_order_no&#96; (&#96;order_no&#96;)</code> |
+| <code>KEY &#96;idx_plugin&#96; (&#96;plugin&#96;)</code> |
+| <code>KEY &#96;idx_trade_no&#96; (&#96;trade_no&#96;)</code> |
+| <code>KEY &#96;idx_pay_time&#96; (&#96;pay_time&#96;)</code> |
+| <code>KEY &#96;idx_pay_method&#96; (&#96;pay_method&#96;)</code> |
+
+### saisms_config（短信配置）
+
+- 存储引擎：InnoDB
+- 字符集：utf8mb4
+- 排序规则：utf8mb4_0900_ai_ci
+- 行格式：DYNAMIC
+- 软删除：`delete_time`
+- 创建/更新人：`created_by` / `updated_by`
+- 权限/审计备注：创建人归属、更新人审计、短信网关配置
+
+| 字段 | 定义 | 必填 | 默认值 | 说明 | 规范备注 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `int unsigned NOT NULL AUTO_INCREMENT` | 是 | `-` | 编号 | - |
+| `gateway` | `varchar(50) DEFAULT NULL` | 否 | `NULL` | 网关标识 | 短信网关唯一标识，受唯一索引 `unx_gateway` 约束。 |
+| `config_name` | `varchar(50) DEFAULT NULL` | 否 | `NULL` | 网关名称 | - |
+| `config` | `varchar(1000) DEFAULT NULL` | 否 | `NULL` | 配置 | 短信网关配置字段，文档只记录结构，不记录实际密钥值。 |
+| `status` | `tinyint(1) DEFAULT '1'` | 否 | `'1'` | 状态 | 状态字段；新增业务建议统一 1启用/正常，2禁用/停用。 |
+| `sort` | `smallint DEFAULT '100'` | 否 | `'100'` | 排序 | - |
+| `remark` | `varchar(255) DEFAULT NULL` | 否 | `NULL` | 备注 | - |
+| `created_by` | `int DEFAULT NULL` | 否 | `NULL` | 创建人 | 创建人字段：记录创建用户 ID，也是数据归属/本人数据权限的重要依据。 |
+| `updated_by` | `int DEFAULT NULL` | 否 | `NULL` | 更新人 | 更新人字段：记录最后更新用户 ID，用于审计追踪。 |
+| `create_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 创建时间 | 创建时间字段。 |
+| `update_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 修改时间 | 更新时间字段。 |
+| `delete_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 删除时间 | 软删除字段：NULL 表示未删除，非 NULL 表示已删除。 |
+
+| 索引/约束 |
+| --- |
+| <code>PRIMARY KEY (&#96;id&#96;) USING BTREE</code> |
+| <code>UNIQUE KEY &#96;unx_gateway&#96; (&#96;gateway&#96;) USING BTREE</code> |
+
+### saisms_record（短信记录）
+
+- 存储引擎：InnoDB
+- 字符集：utf8mb4
+- 排序规则：utf8mb4_0900_ai_ci
+- 行格式：DYNAMIC
+- 软删除：无
+- 创建/更新人：无 / 无
+- 权限/审计备注：短信发送与验证码验证记录
+
+| 字段 | 定义 | 必填 | 默认值 | 说明 | 规范备注 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `int unsigned NOT NULL AUTO_INCREMENT` | 是 | `-` | 编号 | - |
+| `gateway` | `varchar(50) DEFAULT NULL` | 否 | `NULL` | 网关 | 短信网关标识，通常关联 `saisms_config.gateway`。 |
+| `mobile` | `varchar(20) DEFAULT NULL` | 否 | `NULL` | 手机号码 | 个人信息字段，查询、导出、日志中注意脱敏。 |
+| `code` | `varchar(20) DEFAULT NULL` | 否 | `NULL` | 验证码 | 验证码字段，日志和响应中避免明文暴露。 |
+| `content` | `varchar(500) DEFAULT NULL` | 否 | `NULL` | 短信内容 | - |
+| `status` | `varchar(20) DEFAULT NULL` | 否 | `NULL` | 发送状态 | 发送状态以短信网关返回和业务代码为准。 |
+| `response` | `varchar(500) DEFAULT NULL` | 否 | `NULL` | 返回结果 | 网关响应结果，可能包含敏感信息，展示时注意脱敏。 |
+| `is_verify` | `tinyint(1) DEFAULT '2'` | 否 | `'2'` | 是否验证 | SaiAdmin 是否类字段约定：1=是，2=否。 |
+| `create_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 创建时间 | 创建时间字段。 |
+| `update_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 修改时间 | 更新时间字段。 |
+
+| 索引/约束 |
+| --- |
+| <code>PRIMARY KEY (&#96;id&#96;) USING BTREE</code> |
+
+### saisms_tag（短信标签）
+
+- 存储引擎：InnoDB
+- 字符集：utf8mb4
+- 排序规则：utf8mb4_0900_ai_ci
+- 行格式：DYNAMIC
+- 软删除：`delete_time`
+- 创建/更新人：`created_by` / `updated_by`
+- 权限/审计备注：创建人归属、更新人审计、短信模板标签
+
+| 字段 | 定义 | 必填 | 默认值 | 说明 | 规范备注 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `int unsigned NOT NULL AUTO_INCREMENT` | 是 | `-` | 编号 | - |
+| `tag_name` | `varchar(50) DEFAULT NULL` | 否 | `NULL` | 标签名称 | - |
+| `gateway` | `varchar(50) DEFAULT NULL` | 否 | `NULL` | 网关标识 | 短信网关标识，通常关联 `saisms_config.gateway`。 |
+| `sms_type` | `tinyint(1) DEFAULT '1'` | 否 | `'1'` | 短信类型 | 短信类型枚举按短信插件业务代码使用。 |
+| `template_id` | `varchar(255) DEFAULT NULL` | 否 | `NULL` | 模板编号 | 第三方短信平台模板编号。 |
+| `content` | `varchar(255) DEFAULT NULL` | 否 | `NULL` | 短信内容 | - |
+| `remark` | `varchar(255) DEFAULT NULL` | 否 | `NULL` | 备注 | - |
+| `created_by` | `int DEFAULT NULL` | 否 | `NULL` | 创建人 | 创建人字段：记录创建用户 ID，也是数据归属/本人数据权限的重要依据。 |
+| `updated_by` | `int DEFAULT NULL` | 否 | `NULL` | 更新人 | 更新人字段：记录最后更新用户 ID，用于审计追踪。 |
+| `create_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 创建时间 | 创建时间字段。 |
+| `update_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 修改时间 | 更新时间字段。 |
+| `delete_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 删除时间 | 软删除字段：NULL 表示未删除，非 NULL 表示已删除。 |
 
 | 索引/约束 |
 | --- |
