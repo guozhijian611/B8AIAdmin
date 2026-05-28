@@ -10,6 +10,7 @@ use support\think\Cache;
 use plugin\saisms\app\admin\logic\SmsConfigLogic;
 use plugin\saisms\app\admin\logic\SmsTagLogic;
 use plugin\saisms\service\Link;
+use plugin\saisms\service\Smsbao;
 
 class Sms
 {
@@ -63,6 +64,9 @@ class Sms
         // 注册自定义网关
         $easySms->extend('link', function ($gatewayConfig) {
             return new Link($gatewayConfig);
+        });
+        $easySms->extend('smsbao', function ($gatewayConfig) {
+            return new Smsbao($gatewayConfig);
         });
 
         return $easySms;

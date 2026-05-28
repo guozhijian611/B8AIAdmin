@@ -31,12 +31,14 @@ if (!function_exists('autoReplace'))
     function autoReplace($content, $templateData): string
     {
         if ($templateData) {
-            $search = [];
+            $replacePairs = [];
             foreach ($templateData as $key => $value) {
-                $search[] = '${' . $key . '}';
+                $replacePairs['${' . $key . '}'] = (string) $value;
+                $replacePairs['{' . $key . '}'] = (string) $value;
             }
-            $content = str_replace($search, array_values($templateData), $content);
+            $content = strtr((string) $content, $replacePairs);
         }
-        return $content;
+
+        return (string) $content;
     }
 }

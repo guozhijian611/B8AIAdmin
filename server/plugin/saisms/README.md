@@ -21,6 +21,7 @@ server/plugin/saisms/
 │   └── saithink.php                       # 缓存配置
 ├── service/
 │   ├── Link.php                           # 自定义第三方服务商`凌凯`案例
+│   ├── Smsbao.php                         # 短信宝网关
 │   └── SMS.php                            # 短信发送功能实现
 └── README.md                              # 本文档
 ```
@@ -73,3 +74,4 @@ $model->save();
 ## 注意事项
 1. **短信配置**：请先到 `SAISMS` -> `短信配置` 中配置短信服务商。
 2. **标签配置**：标签主要是模板功能，就是你当前要使用哪个模板或者内容发送短信。
+3. **短信宝配置**：网关标识填写 `smsbao`，配置参数至少填写 `user` 和 `password`；如果使用短信宝 ApiKey，可填写 `api_key`，会优先于 `password` 使用。模板内容支持 `${code}` 和 `{code}` 两种变量写法。
