@@ -11,7 +11,7 @@ composer require openb8/webman-otel-trace:dev-main
 
 Composer 会通过 Webman 的 `support\Plugin::install` 事件复制 `config/plugin/openb8/webman-otel-trace` 配置目录。
 
-HTTP trace 会通过全局中间件自动创建 server span，并从 `traceparent`、`tracestate`、`baggage` 提取上游上下文。
+HTTP trace 会通过 Webman 全局中间件 `@` 自动创建 server span，主应用和 SaiAdmin 等 plugin 路由都会覆盖，并从 `traceparent`、`tracestate`、`baggage` 提取上游上下文。
 
 ThinkORM 底层走 PDO 时，由 `open-telemetry/opentelemetry-auto-pdo` 负责自动埋点，前提是 PHP 安装并启用了 `ext-opentelemetry`。
 
@@ -50,6 +50,8 @@ class DemoQueue extends TraceQueueBuilder
     'protocol' => 'http/protobuf',
 ],
 ```
+
+不想在控制台输出 trace 时，可以把 `exporter.driver` 设置为 `otlp` 发到 Collector，或者设置为 `none` 暂时关闭 trace 导出。`thinkorm-log` 自己的 SQL/API 控制台输出不受这个配置控制，需要在 `config/plugin/guozhijian611/thinkorm-log/app.php` 里分别关闭 `console`。
 
 `/metrics` 暴露 Prometheus 文本指标；日志会通过 Monolog processor 自动带上 `trace_id` 和 `span_id`。
 
