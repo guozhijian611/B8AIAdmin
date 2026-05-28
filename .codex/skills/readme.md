@@ -1,5 +1,29 @@
 # AI生成skills说明
 
+## workbunny-rabbitmq
+
+基于 Workerman 插件市场 67 号 `workbunny/webman-rabbitmq` 3.x 和本项目当前 Webman/SaiAdmin 后端配置生成的 RabbitMQ 队列开发技能。
+
+> **生成时间**: 2026-05-29
+
+### 参考资料
+
+| 文档         | 链接                                      | 内容                                 |
+| ------------ | ----------------------------------------- | ------------------------------------ |
+| 插件市场     | https://www.workerman.net/plugin/67       | 3.x 版本说明、快速开始、配置和队列用法 |
+| GitHub       | https://github.com/workbunny/webman-rabbitmq | 插件源码、测试 Builder、命令行实现     |
+| 本地配置     | server/config/plugin/workbunny/webman-rabbitmq | 当前项目插件配置、命令和进程注册       |
+
+### 生成内容
+
+- B8AIadmin 中 `workbunny/webman-rabbitmq` 的本地目录、依赖和连接配置事实
+- Builder 创建、查看、删除命令和生成文件位置
+- 消费者 `handler()` 返回值、幂等、重试和 `REQUEUE` 注意事项
+- 普通消息、路由消息和延迟队列的发布方式
+- 后端语法检查、Builder 列表和 Webman 重启/日志排查建议
+
+---
+
 ## unibest
 
 基于 unibest 官方文档生成的 uni-app 多端开发技能，包含脚手架创建、路由配置、tabbar 策略、UI 库、请求封装、App 打包和 CLI 开发规范。

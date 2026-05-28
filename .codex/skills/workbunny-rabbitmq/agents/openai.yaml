@@ -1,0 +1,4 @@
+interface:
+  display_name: "Workbunny RabbitMQ"
+  short_description: "B8AIadmin RabbitMQ 队列开发指南"
+  default_prompt: "Use $workbunny-rabbitmq to add or debug RabbitMQ producers and consumers in B8AIadmin."
