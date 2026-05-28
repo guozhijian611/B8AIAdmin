@@ -40,7 +40,8 @@
         "hyperf/pimple": "*",
         "overtrue/easy-sms": "*",
         "guozhijian611/thinkorm-log": "dev-main",
-        "webman/redis-queue": "^2.1"
+        "webman/redis-queue": "^2.1",
+        "workbunny/webman-rabbitmq": "^3.0"
     },
     "suggest": {
         "ext-event": "For better performance. "

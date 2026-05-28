@@ -1,7 +1,7 @@
 # OpenB8AiAdmin开发框架
 
 # 下一步集成
-1. rabbitmq https://www.workerman.net/plugin/67
+1. rabbitmq https://www.workerman.net/plugin/67 ✅
 2. log-reader https://www.workerman.net/plugin/73
 3. 后台 redis 和 rabbitmq 队列管理
 4. open-telemetry trace 集成
