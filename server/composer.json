@@ -35,7 +35,10 @@
         "symfony/ai-open-ai-platform": "*",
         "symfony/ai-deep-seek-platform": "*",
         "symfony/ai-generic-platform": "*",
-        "w7corp/easywechat": "^6.18"
+        "w7corp/easywechat": "^6.18",
+        "yansongda/pay": "~3.7.0",
+        "hyperf/pimple": "*",
+        "overtrue/easy-sms": "*"
     },
     "suggest": {
         "ext-event": "For better performance. "
