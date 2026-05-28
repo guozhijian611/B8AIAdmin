@@ -1,6 +1,6 @@
 # B8AIadmin 数据表结构规范
 
-> 来源：当前本地 MySQL 数据库 `b8aiadmin` 的表结构；已先备份到 `Database/backups/b8aiadmin_20260529_014358.sql`。本文档只记录表结构、字段语义、软删除、审计与数据权限约定，不记录 INSERT 初始化数据或密钥值。
+> 来源：当前本地 MySQL 数据库 `b8aiadmin` 的表结构；`saiuser` 插件表已按 `server/runtime/saipackage/saiuser/install.sql` 校对。历史备份文件：`Database/backups/b8aiadmin_20260529_014358.sql`。本文档只记录表结构、字段语义、软删除、审计与数据权限约定，不记录 INSERT 初始化数据或密钥值。
 
 ## 一、全局约定
 
@@ -8,12 +8,13 @@
 
 - 表名与字段名统一使用小写蛇形命名，例如 `sa_system_user`、`created_by`。
 - 主键字段优先使用 `id`，当前大多数表为 `AUTO_INCREMENT` 自增主键。
-- 关联表保留独立 `id` 主键，并使用 `user_id`、`role_id`、`dept_id`、`menu_id`、`post_id`、`group_id` 等字段表达关系。
+- 关联表保留独立 `id` 主键，并使用 `user_id`、`role_id`、`dept_id`、`menu_id`、`post_id`、`group_id`、`member_id`、`platform_id` 等字段表达关系。
 
 ### 2. SaiAdmin 布尔与状态值
 
 - 常规 SaiAdmin 是否类字段统一记录为：`1` 表示是，`2` 表示否。典型字段包括 `is_link`、`is_href`、`is_iframe`、`is_keep_alive`、`is_hidden`、`is_fixed_tab`、`is_full_page`、`singleton`、`build_menu`、`generate_model`、`generate_menus`、`is_full`。
 - saiai 插件当前存在 `0/1` 是否字段，例如 `saiai_config.is_default` 为 `1是/0否`、`saiai_chat_group.is_top` 默认 `0`。这些字段以 SQL 注释和现有代码为准，新增业务表不要混用。
+- saiuser 插件存在多处 `0/1` 与多值状态字段，例如 `sa_member.status` 为 `1正常/2冻结/3注销`，`sa_member_platform.status` 为 `1启用/0禁用`，`sa_member_platform_rel.is_bind` 为是否绑定。使用时以字段注释为准。
 - 代码生成器元数据表存在历史反向枚举，例如 `sa_tool_generate_columns.is_pk` 为 `1 非主键 / 2 主键`，`is_required` 为 `1 非必填 / 2 必填`。这些字段以 SQL 注释为准，新增业务表不要沿用反向枚举。
 - 历史核心表中已明确写入 `0/1` 的字段按 SQL 注释执行，例如 `sa_system_user.is_super` 为 `1是/0否`，`sa_system_user.status`、`sa_system_role.status`、`sa_system_dept.status` 为 `1启用/0禁用`。新增业务表建议避免混用。
 - 字典状态、登录状态等已在字段注释中定义 `1/2` 的字段，以字段注释为准，例如 `1正常/2停用`、`1成功/2失败`。
@@ -28,7 +29,7 @@
 
 - `created_by` 记录创建用户 ID，是业务数据归属与“仅本人”数据权限的关键字段。
 - `updated_by` 记录最后更新用户 ID，用于审计追踪，不建议作为数据归属判断依据。
-- 新增需要参与数据权限的业务表，应同时包含 `created_by`、`updated_by`、`create_time`、`update_time`、`delete_time`。
+- 新增需要参与数据权限的业务表，应同时包含 `created_by`、`updated_by`、`create_time`、`update_time`、`delete_time`；saiuser 会员域表当前主要通过 `member_id`、`platform_id` 建立业务归属。
 
 ### 5. 数据权限相关字段
 
@@ -43,6 +44,9 @@
 | 业务数据 | `created_by` | “仅本人”数据范围与创建归属的基础字段。 |
 | AI 会话 | `saiai_chat.user_id`、`saiai_chat.group_id` | AI 对话记录归属用户与会话分组。 |
 | AI 分组 | `saiai_chat_group.user_id` | AI 会话分组归属用户。 |
+| 会员主体 | `sa_member.id`、`sa_member.member_level_id`、`sa_member.register_platform_id` | 会员身份、等级和注册平台归属。 |
+| 会员关联 | `sa_member_platform_rel.member_id`、`platform_id`、`platform_openid` | 第三方平台账号绑定关系。 |
+| 会员日志 | `sa_member_login_log.member_id`、`sa_member_points_log.member_id` | 会员登录、积分流水归属。 |
 
 ## 二、数据表清单
 
@@ -51,31 +55,39 @@
 | 1 | 文章内容 | `sa_article` | 文章表 | 18 | 是 | 是 | 是 | 创建人归属、更新人审计 |
 | 2 | 文章内容 | `sa_article_banner` | 文章轮播图 | 14 | 是 | 是 | 是 | 创建人归属、更新人审计 |
 | 3 | 文章内容 | `sa_article_category` | 文章分类表 | 12 | 是 | 是 | 是 | 创建人归属、更新人审计 |
-| 4 | 系统核心 | `sa_system_attachment` | 附件信息表 | 18 | 是 | 是 | 是 | 创建人归属、更新人审计 |
-| 5 | 系统核心 | `sa_system_category` | 附件分类表 | 12 | 是 | 是 | 是 | 创建人归属、更新人审计 |
-| 6 | 系统核心 | `sa_system_config` | 参数配置信息表 | 14 | 是 | 是 | 是 | 创建人归属、更新人审计 |
-| 7 | 系统核心 | `sa_system_config_group` | 参数配置分组表 | 9 | 是 | 是 | 是 | 创建人归属、更新人审计 |
-| 8 | 系统核心 | `sa_system_dept` | 部门表 | 14 | 是 | 是 | 是 | 创建人归属、更新人审计 |
-| 9 | 系统核心 | `sa_system_dict_data` | 字典数据表 | 14 | 是 | 是 | 是 | 创建人归属、更新人审计 |
-| 10 | 系统核心 | `sa_system_dict_type` | 字典类型表 | 10 | 是 | 是 | 是 | 创建人归属、更新人审计 |
-| 11 | 系统核心 | `sa_system_login_log` | 登录日志表 | 15 | 是 | 是 | 是 | 创建人归属、更新人审计 |
-| 12 | 系统核心 | `sa_system_mail` | 邮件记录 | 11 | 是 | 否 | 否 | - |
-| 13 | 系统核心 | `sa_system_menu` | 菜单权限表 | 26 | 是 | 是 | 是 | 创建人归属、更新人审计、菜单与按钮权限 |
-| 14 | 系统核心 | `sa_system_oper_log` | 操作日志表 | 15 | 是 | 是 | 是 | 创建人归属、更新人审计 |
-| 15 | 系统核心 | `sa_system_post` | 岗位信息表 | 11 | 是 | 是 | 是 | 创建人归属、更新人审计 |
-| 16 | 系统核心 | `sa_system_role` | 角色表 | 13 | 是 | 是 | 是 | 创建人归属、更新人审计、角色数据范围 |
-| 17 | 系统核心 | `sa_system_role_dept` | 角色-自定义数据权限关联 | 3 | 否 | 否 | 否 | 自定义部门数据权限 |
-| 18 | 系统核心 | `sa_system_role_menu` | 角色权限关联 | 3 | 否 | 否 | 否 | 角色菜单权限 |
-| 19 | 系统核心 | `sa_system_user` | 用户表 | 21 | 是 | 是 | 是 | 创建人归属、更新人审计、用户部门/超管标识 |
-| 20 | 系统核心 | `sa_system_user_post` | 用户与岗位关联表 | 3 | 否 | 否 | 否 | 用户岗位授权 |
-| 21 | 系统核心 | `sa_system_user_role` | 用户角色关联 | 3 | 否 | 否 | 否 | 用户角色授权 |
-| 22 | 系统工具 | `sa_tool_crontab` | 定时任务信息表 | 15 | 是 | 是 | 是 | 创建人归属、更新人审计 |
-| 23 | 系统工具 | `sa_tool_crontab_log` | 定时任务执行日志表 | 10 | 是 | 否 | 否 | - |
-| 24 | 系统工具 | `sa_tool_generate_columns` | 代码生成业务字段表 | 25 | 是 | 是 | 是 | 创建人归属、更新人审计 |
-| 25 | 系统工具 | `sa_tool_generate_tables` | 代码生成业务表 | 28 | 是 | 是 | 是 | 创建人归属、更新人审计 |
-| 26 | AI 插件 | `saiai_chat` | AI对话记录表 | 14 | 是 | 是 | 是 | 创建人归属、更新人审计、AI 对话归属用户/分组 |
-| 27 | AI 插件 | `saiai_chat_group` | AI对话分组表 | 9 | 是 | 是 | 是 | 创建人归属、更新人审计、AI 会话归属用户 |
-| 28 | AI 插件 | `saiai_config` | AI配置表 | 14 | 是 | 是 | 是 | 创建人归属、更新人审计、AI 平台配置审计 |
+| 4 | 会员插件 | `sa_member` | 会员基础信息表 | 17 | 是 | 否 | 否 | 平台来源、会员主体信息 |
+| 5 | 会员插件 | `sa_member_level` | 会员等级表 | 13 | 是 | 否 | 否 | - |
+| 6 | 会员插件 | `sa_member_login_log` | 会员登录日志表 | 12 | 是 | 否 | 否 | 会员归属、平台来源 |
+| 7 | 会员插件 | `sa_member_platform` | 多平台配置表 | 8 | 是 | 否 | 否 | - |
+| 8 | 会员插件 | `sa_member_platform_rel` | 会员-平台关联表（多平台账号绑定） | 10 | 是 | 否 | 否 | 会员归属、平台来源 |
+| 9 | 会员插件 | `sa_member_points_log` | 积分变动记录表 | 13 | 是 | 否 | 否 | 会员归属、平台来源 |
+| 10 | 会员插件 | `sa_member_protocol` | 使用协议 | 8 | 是 | 否 | 否 | - |
+| 11 | 会员插件 | `sa_site_info` | 站点信息表 | 13 | 是 | 否 | 否 | 站点配置 |
+| 12 | 系统核心 | `sa_system_attachment` | 附件信息表 | 18 | 是 | 是 | 是 | 创建人归属、更新人审计 |
+| 13 | 系统核心 | `sa_system_category` | 附件分类表 | 12 | 是 | 是 | 是 | 创建人归属、更新人审计 |
+| 14 | 系统核心 | `sa_system_config` | 参数配置信息表 | 14 | 是 | 是 | 是 | 创建人归属、更新人审计 |
+| 15 | 系统核心 | `sa_system_config_group` | 参数配置分组表 | 9 | 是 | 是 | 是 | 创建人归属、更新人审计 |
+| 16 | 系统核心 | `sa_system_dept` | 部门表 | 14 | 是 | 是 | 是 | 创建人归属、更新人审计 |
+| 17 | 系统核心 | `sa_system_dict_data` | 字典数据表 | 14 | 是 | 是 | 是 | 创建人归属、更新人审计 |
+| 18 | 系统核心 | `sa_system_dict_type` | 字典类型表 | 10 | 是 | 是 | 是 | 创建人归属、更新人审计 |
+| 19 | 系统核心 | `sa_system_login_log` | 登录日志表 | 15 | 是 | 是 | 是 | 创建人归属、更新人审计 |
+| 20 | 系统核心 | `sa_system_mail` | 邮件记录 | 11 | 是 | 否 | 否 | - |
+| 21 | 系统核心 | `sa_system_menu` | 菜单权限表 | 26 | 是 | 是 | 是 | 创建人归属、更新人审计、菜单与按钮权限 |
+| 22 | 系统核心 | `sa_system_oper_log` | 操作日志表 | 15 | 是 | 是 | 是 | 创建人归属、更新人审计 |
+| 23 | 系统核心 | `sa_system_post` | 岗位信息表 | 11 | 是 | 是 | 是 | 创建人归属、更新人审计 |
+| 24 | 系统核心 | `sa_system_role` | 角色表 | 13 | 是 | 是 | 是 | 创建人归属、更新人审计、角色数据范围 |
+| 25 | 系统核心 | `sa_system_role_dept` | 角色-自定义数据权限关联 | 3 | 否 | 否 | 否 | 自定义部门数据权限 |
+| 26 | 系统核心 | `sa_system_role_menu` | 角色权限关联 | 3 | 否 | 否 | 否 | 角色菜单权限 |
+| 27 | 系统核心 | `sa_system_user` | 用户表 | 21 | 是 | 是 | 是 | 创建人归属、更新人审计、用户部门/超管标识 |
+| 28 | 系统核心 | `sa_system_user_post` | 用户与岗位关联表 | 3 | 否 | 否 | 否 | 用户岗位授权 |
+| 29 | 系统核心 | `sa_system_user_role` | 用户角色关联 | 3 | 否 | 否 | 否 | 用户角色授权 |
+| 30 | 系统工具 | `sa_tool_crontab` | 定时任务信息表 | 15 | 是 | 是 | 是 | 创建人归属、更新人审计 |
+| 31 | 系统工具 | `sa_tool_crontab_log` | 定时任务执行日志表 | 10 | 是 | 否 | 否 | - |
+| 32 | 系统工具 | `sa_tool_generate_columns` | 代码生成业务字段表 | 25 | 是 | 是 | 是 | 创建人归属、更新人审计 |
+| 33 | 系统工具 | `sa_tool_generate_tables` | 代码生成业务表 | 28 | 是 | 是 | 是 | 创建人归属、更新人审计 |
+| 34 | AI 插件 | `saiai_chat` | AI对话记录表 | 14 | 是 | 是 | 是 | 创建人归属、更新人审计、AI 对话归属用户/分组 |
+| 35 | AI 插件 | `saiai_chat_group` | AI对话分组表 | 9 | 是 | 是 | 是 | 创建人归属、更新人审计、AI 会话归属用户 |
+| 36 | AI 插件 | `saiai_config` | AI配置表 | 14 | 是 | 是 | 是 | 创建人归属、更新人审计、AI 平台配置审计 |
 
 ## 三、逐表结构
 
@@ -169,6 +181,254 @@
 | `updated_by` | `int DEFAULT NULL` | 否 | `NULL` | 更新者 | 更新人字段：记录最后更新用户 ID，用于审计追踪。 |
 | `create_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 创建时间 | 创建时间字段。 |
 | `update_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 修改时间 | 更新时间字段。 |
+| `delete_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 删除时间 | 软删除字段：NULL 表示未删除，非 NULL 表示已删除。 |
+
+| 索引/约束 |
+| --- |
+| <code>PRIMARY KEY (&#96;id&#96;) USING BTREE</code> |
+
+### sa_member（会员基础信息表）
+
+- 存储引擎：InnoDB
+- 字符集：utf8mb4
+- 排序规则：utf8mb4_0900_ai_ci
+- 行格式：DYNAMIC
+- 结构来源：`server/runtime/saipackage/saiuser/install.sql`
+- 软删除：`delete_time`
+- 创建/更新人：无 / 无
+- 权限/审计备注：平台来源、会员主体信息
+
+| 字段 | 定义 | 必填 | 默认值 | 说明 | 规范备注 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `int NOT NULL AUTO_INCREMENT` | 是 | `-` | 会员ID | - |
+| `username` | `varchar(50) DEFAULT NULL` | 否 | `NULL` | 用户名 | - |
+| `nickname` | `varchar(50) DEFAULT NULL` | 否 | `NULL` | 昵称 | - |
+| `avatar` | `varchar(255) DEFAULT NULL` | 否 | `NULL` | 头像 | - |
+| `mobile` | `varchar(20) DEFAULT NULL` | 否 | `NULL` | 手机号 | 会员个人信息字段，查询、导出、日志中注意脱敏。 |
+| `email` | `varchar(100) DEFAULT NULL` | 否 | `NULL` | 邮箱 | 会员个人信息字段，查询、导出、日志中注意脱敏。 |
+| `password_hash` | `varchar(100) DEFAULT NULL` | 否 | `NULL` | 密码哈希 | 密码哈希字段，只记录结构，不记录真实值。 |
+| `member_level_id` | `int NOT NULL DEFAULT '1'` | 是 | `'1'` | 会员等级ID | 会员等级字段，关联 `sa_member_level.id`。 |
+| `points_balance` | `int NOT NULL DEFAULT '0'` | 是 | `'0'` | 当前积分余额 | - |
+| `last_login_ip` | `varchar(20) DEFAULT NULL` | 否 | `NULL` | 最后登录IP | - |
+| `last_login_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 最后登录时间 | - |
+| `register_platform_id` | `tinyint DEFAULT NULL` | 否 | `NULL` | 注册平台 | 会员平台字段，关联 `sa_member_platform.id`。 |
+| `status` | `tinyint NOT NULL DEFAULT '1'` | 是 | `'1'` | 状态：1-正常，2-冻结，3-注销 | 状态枚举按字段注释使用。 |
+| `remark` | `varchar(255) DEFAULT NULL` | 否 | `NULL` | 备注 | - |
+| `create_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 创建时间 | 创建时间字段。 |
+| `update_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 更新时间 | 更新时间字段。 |
+| `delete_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 删除时间 | 软删除字段：NULL 表示未删除，非 NULL 表示已删除。 |
+
+| 索引/约束 |
+| --- |
+| <code>PRIMARY KEY (&#96;id&#96;) USING BTREE</code> |
+| <code>KEY &#96;idx_mobile&#96; (&#96;mobile&#96;) USING BTREE</code> |
+
+### sa_member_level（会员等级表）
+
+- 存储引擎：InnoDB
+- 字符集：utf8mb4
+- 排序规则：utf8mb4_0900_ai_ci
+- 行格式：DYNAMIC
+- 结构来源：`server/runtime/saipackage/saiuser/install.sql`
+- 软删除：`delete_time`
+- 创建/更新人：无 / 无
+- 权限/审计备注：-
+
+| 字段 | 定义 | 必填 | 默认值 | 说明 | 规范备注 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `int NOT NULL AUTO_INCREMENT` | 是 | `-` | 等级ID | - |
+| `level_name` | `varchar(50) NOT NULL` | 是 | `-` | 等级名称：如普通会员、白银、黄金 | - |
+| `level_code` | `varchar(20) NOT NULL` | 是 | `-` | 等级标识：如NORMAL、SILVER、GOLD | - |
+| `min_points` | `int NOT NULL DEFAULT '0'` | 是 | `'0'` | 升级所需最低积分 | - |
+| `max_points` | `int DEFAULT NULL` | 否 | `NULL` | 等级上限积分（null表示无上限） | - |
+| `level_icon` | `varchar(200) DEFAULT NULL` | 否 | `NULL` | 等级图标URL（多平台通用） | - |
+| `privileges` | `text` | 否 | `-` | 等级权益（JSON格式，如{"discount":0.9,"free_shipping":true}） | - |
+| `sort` | `int NOT NULL DEFAULT '0'` | 是 | `'0'` | 排序 | - |
+| `status` | `tinyint NOT NULL DEFAULT '1'` | 是 | `'1'` | 状态 | 状态字段；新增业务建议统一 1启用/正常，2禁用/停用。 |
+| `remark` | `varchar(255) DEFAULT NULL` | 否 | `NULL` | 备注 | - |
+| `create_time` | `datetime DEFAULT NULL` | 否 | `NULL` | - | 创建时间字段。 |
+| `update_time` | `datetime DEFAULT NULL` | 否 | `NULL` | - | 更新时间字段。 |
+| `delete_time` | `datetime DEFAULT NULL` | 否 | `NULL` | - | 软删除字段：NULL 表示未删除，非 NULL 表示已删除。 |
+
+| 索引/约束 |
+| --- |
+| <code>PRIMARY KEY (&#96;id&#96;) USING BTREE</code> |
+| <code>UNIQUE KEY &#96;uk_level_code&#96; (&#96;level_code&#96;) USING BTREE</code> |
+| <code>KEY &#96;idx_min_points&#96; (&#96;min_points&#96;) USING BTREE</code> |
+
+### sa_member_login_log（会员登录日志表）
+
+- 存储引擎：InnoDB
+- 字符集：utf8mb4
+- 排序规则：utf8mb4_0900_ai_ci
+- 行格式：DYNAMIC
+- 结构来源：`server/runtime/saipackage/saiuser/install.sql`
+- 软删除：`delete_time`
+- 创建/更新人：无 / 无
+- 权限/审计备注：会员归属、平台来源
+
+| 字段 | 定义 | 必填 | 默认值 | 说明 | 规范备注 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `bigint NOT NULL AUTO_INCREMENT` | 是 | `-` | 日志ID | - |
+| `member_id` | `bigint NOT NULL` | 是 | `-` | 会员ID（关联member表） | 会员业务归属字段，关联 `sa_member.id`。 |
+| `platform_id` | `tinyint NOT NULL` | 是 | `-` | 登录平台ID（关联member_platform表） | 会员平台字段，关联 `sa_member_platform.id`。 |
+| `login_type` | `tinyint DEFAULT NULL` | 否 | `NULL` | 登录方式 | - |
+| `login_ip` | `varchar(50) DEFAULT NULL` | 否 | `NULL` | 登录IP | - |
+| `login_location` | `varchar(100) DEFAULT NULL` | 否 | `NULL` | 登录地点（通过IP解析） | - |
+| `user_agent` | `text` | 否 | `-` | 用户代理（浏览器/设备信息） | - |
+| `login_result` | `tinyint DEFAULT NULL` | 否 | `NULL` | 登录结果：1-成功，0-失败 | - |
+| `fail_reason` | `varchar(200) DEFAULT NULL` | 否 | `NULL` | 失败原因（如密码错误、账号冻结） | - |
+| `create_time` | `datetime DEFAULT NULL` | 否 | `NULL` | - | 创建时间字段。 |
+| `update_time` | `datetime DEFAULT NULL` | 否 | `NULL` | - | 更新时间字段。 |
+| `delete_time` | `datetime DEFAULT NULL` | 否 | `NULL` | - | 软删除字段：NULL 表示未删除，非 NULL 表示已删除。 |
+
+| 索引/约束 |
+| --- |
+| <code>PRIMARY KEY (&#96;id&#96;) USING BTREE</code> |
+| <code>KEY &#96;idx_member_id&#96; (&#96;member_id&#96;) USING BTREE</code> |
+| <code>KEY &#96;idx_platform_time&#96; (&#96;platform_id&#96;) USING BTREE</code> |
+
+### sa_member_platform（多平台配置表）
+
+- 存储引擎：InnoDB
+- 字符集：utf8mb4
+- 排序规则：utf8mb4_0900_ai_ci
+- 行格式：DYNAMIC
+- 结构来源：`server/runtime/saipackage/saiuser/install.sql`
+- 软删除：`delete_time`
+- 创建/更新人：无 / 无
+- 权限/审计备注：-
+
+| 字段 | 定义 | 必填 | 默认值 | 说明 | 规范备注 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `tinyint NOT NULL AUTO_INCREMENT` | 是 | `-` | 平台ID | - |
+| `platform_name` | `varchar(50) NOT NULL` | 是 | `-` | 平台名称：PC、小程序、公众号、H5、钉钉、企业微信 | - |
+| `platform_code` | `varchar(20) NOT NULL` | 是 | `-` | 平台唯一标识：如PC-WEB、MINI-PROGRAM、WECHAT-OFFICIAL、H5、DINGTALK、WEWORK | - |
+| `status` | `tinyint NOT NULL DEFAULT '1'` | 是 | `'1'` | 状态：1-启用，0-禁用 | 历史状态字段按注释使用 1启用、0禁用；新增业务状态建议统一 1启用、2禁用/停用。 |
+| `remark` | `varchar(255) DEFAULT NULL` | 否 | `NULL` | 备注 | - |
+| `create_time` | `datetime DEFAULT NULL` | 否 | `NULL` | - | 创建时间字段。 |
+| `update_time` | `datetime DEFAULT NULL` | 否 | `NULL` | - | 更新时间字段。 |
+| `delete_time` | `datetime DEFAULT NULL` | 否 | `NULL` | - | 软删除字段：NULL 表示未删除，非 NULL 表示已删除。 |
+
+| 索引/约束 |
+| --- |
+| <code>PRIMARY KEY (&#96;id&#96;) USING BTREE</code> |
+| <code>UNIQUE KEY &#96;uk_platform_code&#96; (&#96;platform_code&#96;) USING BTREE</code> |
+
+### sa_member_platform_rel（会员-平台关联表（多平台账号绑定））
+
+- 存储引擎：InnoDB
+- 字符集：utf8mb4
+- 排序规则：utf8mb4_0900_ai_ci
+- 行格式：DYNAMIC
+- 结构来源：`server/runtime/saipackage/saiuser/install.sql`
+- 软删除：`delete_time`
+- 创建/更新人：无 / 无
+- 权限/审计备注：会员归属、平台来源
+
+| 字段 | 定义 | 必填 | 默认值 | 说明 | 规范备注 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `bigint NOT NULL AUTO_INCREMENT` | 是 | `-` | 自增ID | - |
+| `member_id` | `bigint NOT NULL` | 是 | `-` | 会员ID（关联member表） | 会员业务归属字段，关联 `sa_member.id`。 |
+| `platform_id` | `tinyint NOT NULL` | 是 | `-` | 平台ID（关联member_platform表） | 会员平台字段，关联 `sa_member_platform.id`。 |
+| `platform_openid` | `varchar(100) NOT NULL` | 是 | `-` | 平台唯一标识（如微信openid、钉钉unionid） | 第三方平台唯一标识，属于敏感绑定凭据，避免明文外泄。 |
+| `is_bind` | `tinyint NOT NULL DEFAULT '1'` | 是 | `'1'` | 是否绑定 | SaiAdmin 是否类字段约定：1=是，2=否。 |
+| `bind_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 绑定时间 | - |
+| `unbind_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 解绑时间（null表示未解绑） | - |
+| `create_time` | `datetime DEFAULT NULL` | 否 | `NULL` | - | 创建时间字段。 |
+| `update_time` | `datetime DEFAULT NULL` | 否 | `NULL` | - | 更新时间字段。 |
+| `delete_time` | `datetime DEFAULT NULL` | 否 | `NULL` | - | 软删除字段：NULL 表示未删除，非 NULL 表示已删除。 |
+
+| 索引/约束 |
+| --- |
+| <code>PRIMARY KEY (&#96;id&#96;) USING BTREE</code> |
+| <code>UNIQUE KEY &#96;uk_platform_openid&#96; (&#96;platform_id&#96;,&#96;platform_openid&#96;) USING BTREE COMMENT '同一平台openid唯一'</code> |
+| <code>KEY &#96;idx_member_id&#96; (&#96;member_id&#96;) USING BTREE</code> |
+
+### sa_member_points_log（积分变动记录表）
+
+- 存储引擎：InnoDB
+- 字符集：utf8mb4
+- 排序规则：utf8mb4_0900_ai_ci
+- 行格式：DYNAMIC
+- 结构来源：`server/runtime/saipackage/saiuser/install.sql`
+- 软删除：`delete_time`
+- 创建/更新人：无 / 无
+- 权限/审计备注：会员归属、平台来源
+
+| 字段 | 定义 | 必填 | 默认值 | 说明 | 规范备注 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `int NOT NULL AUTO_INCREMENT` | 是 | `-` | 记录ID | - |
+| `member_id` | `int NOT NULL` | 是 | `-` | 会员ID（关联member表） | 会员业务归属字段，关联 `sa_member.id`。 |
+| `platform_id` | `tinyint NOT NULL` | 是 | `-` | 操作平台ID（关联member_platform表） | 会员平台字段，关联 `sa_member_platform.id`。 |
+| `points_change` | `int NOT NULL` | 是 | `-` | 积分变动值（正数增加，负数减少） | - |
+| `points_before` | `int NOT NULL` | 是 | `-` | 变动前积分 | - |
+| `points_after` | `int NOT NULL` | 是 | `-` | 变动后积分 | - |
+| `operate_type` | `tinyint NOT NULL` | 是 | `-` | 操作类型：1-充值，2-消费 | - |
+| `operate_desc` | `varchar(200) NOT NULL` | 是 | `-` | 操作描述 | - |
+| `related_id` | `int DEFAULT NULL` | 否 | `NULL` | 关联业务ID（如订单号、任务ID） | - |
+| `order_no` | `varchar(100) DEFAULT NULL` | 否 | `NULL` | 订单号 | - |
+| `create_time` | `datetime NOT NULL DEFAULT CURRENT_TIMESTAMP` | 是 | `CURRENT_TIMESTAMP` | - | 创建时间字段。 |
+| `update_time` | `datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | 是 | `CURRENT_TIMESTAMP` | - | 更新时间字段。 |
+| `delete_time` | `datetime DEFAULT NULL` | 否 | `NULL` | - | 软删除字段：NULL 表示未删除，非 NULL 表示已删除。 |
+
+| 索引/约束 |
+| --- |
+| <code>PRIMARY KEY (&#96;id&#96;) USING BTREE</code> |
+| <code>KEY &#96;idx_member_id&#96; (&#96;member_id&#96;) USING BTREE</code> |
+| <code>KEY &#96;idx_related_id&#96; (&#96;related_id&#96;) USING BTREE</code> |
+
+### sa_member_protocol（使用协议）
+
+- 存储引擎：InnoDB
+- 字符集：utf8mb4
+- 排序规则：utf8mb4_0900_ai_ci
+- 行格式：DYNAMIC
+- 结构来源：`server/runtime/saipackage/saiuser/install.sql`
+- 软删除：`delete_time`
+- 创建/更新人：无 / 无
+- 权限/审计备注：-
+
+| 字段 | 定义 | 必填 | 默认值 | 说明 | 规范备注 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `int unsigned NOT NULL AUTO_INCREMENT` | 是 | `-` | 编号 | - |
+| `protocol_type` | `tinyint(1) DEFAULT NULL` | 否 | `NULL` | 协议类型 | - |
+| `title` | `varchar(255) DEFAULT NULL` | 否 | `NULL` | 协议标题 | - |
+| `content` | `text` | 否 | `-` | 协议内容 | - |
+| `status` | `tinyint(1) DEFAULT '1'` | 否 | `'1'` | 状态 | 状态字段；新增业务建议统一 1启用/正常，2禁用/停用。 |
+| `create_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 创建时间 | 创建时间字段。 |
+| `update_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 修改时间 | 更新时间字段。 |
+| `delete_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 删除时间 | 软删除字段：NULL 表示未删除，非 NULL 表示已删除。 |
+
+| 索引/约束 |
+| --- |
+| <code>PRIMARY KEY (&#96;id&#96;) USING BTREE</code> |
+
+### sa_site_info（站点信息表）
+
+- 存储引擎：InnoDB
+- 字符集：utf8mb4
+- 排序规则：utf8mb4_0900_ai_ci
+- 行格式：DYNAMIC
+- 结构来源：`server/runtime/saipackage/saiuser/install.sql`
+- 软删除：`delete_time`
+- 创建/更新人：无 / 无
+- 权限/审计备注：站点配置
+
+| 字段 | 定义 | 必填 | 默认值 | 说明 | 规范备注 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `int NOT NULL AUTO_INCREMENT` | 是 | `-` | 主键 | - |
+| `site_name` | `varchar(50) DEFAULT NULL` | 否 | `NULL` | 站点名称 | - |
+| `site_logo` | `varchar(255) DEFAULT NULL` | 否 | `NULL` | 站点logo | - |
+| `site_desc` | `varchar(255) DEFAULT NULL` | 否 | `NULL` | 站点描述 | - |
+| `site_keywords` | `varchar(255) DEFAULT NULL` | 否 | `NULL` | 站点关键词 | - |
+| `site_copyright` | `varchar(255) DEFAULT NULL` | 否 | `NULL` | 版权信息 | - |
+| `site_record_number` | `varchar(255) DEFAULT NULL` | 否 | `NULL` | 备案号 | - |
+| `site_config` | `text` | 否 | `-` | 站点配置 | - |
+| `contact` | `varchar(255) DEFAULT NULL` | 否 | `NULL` | 联系方式 | - |
+| `remark` | `varchar(255) DEFAULT NULL` | 否 | `NULL` | 备注 | - |
+| `create_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 创建时间 | 创建时间字段。 |
+| `update_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 更新时间 | 更新时间字段。 |
 | `delete_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 删除时间 | 软删除字段：NULL 表示未删除，非 NULL 表示已删除。 |
 
 | 索引/约束 |
@@ -355,7 +615,7 @@
 | `color` | `varchar(50) DEFAULT NULL` | 否 | `NULL` | 字典颜色 | - |
 | `code` | `varchar(100) DEFAULT NULL` | 否 | `NULL` | 字典标示 | - |
 | `sort` | `smallint unsigned DEFAULT '0'` | 否 | `'0'` | 排序 | - |
-| `status` | `smallint DEFAULT '1'` | 否 | `'1'` | 状态 (1正常 2停用) | 状态枚举按注释使用 1/2。 |
+| `status` | `smallint DEFAULT '1'` | 否 | `'1'` | 状态 (1正常 2停用) | 状态枚举按字段注释使用。 |
 | `remark` | `varchar(255) DEFAULT NULL` | 否 | `NULL` | 备注 | - |
 | `created_by` | `int DEFAULT NULL` | 否 | `NULL` | 创建者 | 创建人字段：记录创建用户 ID，也是数据归属/本人数据权限的重要依据。 |
 | `updated_by` | `int DEFAULT NULL` | 否 | `NULL` | 更新者 | 更新人字段：记录最后更新用户 ID，用于审计追踪。 |
@@ -384,7 +644,7 @@
 | `id` | `int unsigned NOT NULL AUTO_INCREMENT` | 是 | `-` | 主键 | - |
 | `name` | `varchar(50) DEFAULT NULL` | 否 | `NULL` | 字典名称 | - |
 | `code` | `varchar(100) DEFAULT NULL` | 否 | `NULL` | 字典标示 | - |
-| `status` | `smallint DEFAULT '1'` | 否 | `'1'` | 状态 (1正常 2停用) | 状态枚举按注释使用 1/2。 |
+| `status` | `smallint DEFAULT '1'` | 否 | `'1'` | 状态 (1正常 2停用) | 状态枚举按字段注释使用。 |
 | `remark` | `varchar(255) DEFAULT NULL` | 否 | `NULL` | 备注 | - |
 | `created_by` | `int DEFAULT NULL` | 否 | `NULL` | 创建者 | 创建人字段：记录创建用户 ID，也是数据归属/本人数据权限的重要依据。 |
 | `updated_by` | `int DEFAULT NULL` | 否 | `NULL` | 更新者 | 更新人字段：记录最后更新用户 ID，用于审计追踪。 |
@@ -416,7 +676,7 @@
 | `ip_location` | `varchar(255) DEFAULT NULL` | 否 | `NULL` | IP所属地 | - |
 | `os` | `varchar(50) DEFAULT NULL` | 否 | `NULL` | 操作系统 | - |
 | `browser` | `varchar(50) DEFAULT NULL` | 否 | `NULL` | 浏览器 | - |
-| `status` | `smallint DEFAULT '1'` | 否 | `'1'` | 登录状态 (1成功 2失败) | 状态枚举按注释使用 1/2。 |
+| `status` | `smallint DEFAULT '1'` | 否 | `'1'` | 登录状态 (1成功 2失败) | 状态枚举按字段注释使用。 |
 | `message` | `varchar(50) DEFAULT NULL` | 否 | `NULL` | 提示消息 | - |
 | `login_time` | `datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | 是 | `CURRENT_TIMESTAMP` | 登录时间 | - |
 | `remark` | `varchar(255) DEFAULT NULL` | 否 | `NULL` | 备注 | - |
@@ -557,7 +817,7 @@
 | `name` | `varchar(50) DEFAULT NULL` | 否 | `NULL` | 岗位名称 | - |
 | `code` | `varchar(100) DEFAULT NULL` | 否 | `NULL` | 岗位代码 | - |
 | `sort` | `smallint unsigned DEFAULT '0'` | 否 | `'0'` | 排序 | - |
-| `status` | `smallint DEFAULT '1'` | 否 | `'1'` | 状态 (1正常 2停用) | 状态枚举按注释使用 1/2。 |
+| `status` | `smallint DEFAULT '1'` | 否 | `'1'` | 状态 (1正常 2停用) | 状态枚举按字段注释使用。 |
 | `remark` | `varchar(255) DEFAULT NULL` | 否 | `NULL` | 备注 | - |
 | `created_by` | `int DEFAULT NULL` | 否 | `NULL` | 创建者 | 创建人字段：记录创建用户 ID，也是数据归属/本人数据权限的重要依据。 |
 | `updated_by` | `int DEFAULT NULL` | 否 | `NULL` | 更新者 | 更新人字段：记录最后更新用户 ID，用于审计追踪。 |
@@ -748,7 +1008,7 @@
 | `task_style` | `tinyint(1) DEFAULT NULL` | 否 | `NULL` | 执行类型 | - |
 | `rule` | `varchar(32) DEFAULT NULL` | 否 | `NULL` | 任务执行表达式 | - |
 | `singleton` | `smallint DEFAULT '1'` | 否 | `'1'` | 是否单次执行 (1 是 2 不是) | SaiAdmin 是否类字段约定：1=是，2=否。 |
-| `status` | `smallint DEFAULT '1'` | 否 | `'1'` | 状态 (1正常 2停用) | 状态枚举按注释使用 1/2。 |
+| `status` | `smallint DEFAULT '1'` | 否 | `'1'` | 状态 (1正常 2停用) | 状态枚举按字段注释使用。 |
 | `remark` | `varchar(255) DEFAULT NULL` | 否 | `NULL` | 备注 | - |
 | `created_by` | `int DEFAULT NULL` | 否 | `NULL` | 创建者 | 创建人字段：记录创建用户 ID，也是数据归属/本人数据权限的重要依据。 |
 | `updated_by` | `int DEFAULT NULL` | 否 | `NULL` | 更新者 | 更新人字段：记录最后更新用户 ID，用于审计追踪。 |
@@ -778,7 +1038,7 @@
 | `target` | `varchar(500) DEFAULT NULL` | 否 | `NULL` | 任务调用目标字符串 | - |
 | `parameter` | `varchar(1000) DEFAULT NULL` | 否 | `NULL` | 任务调用参数 | - |
 | `exception_info` | `varchar(2000) DEFAULT NULL` | 否 | `NULL` | 异常信息 | - |
-| `status` | `smallint DEFAULT '1'` | 否 | `'1'` | 执行状态 (1成功 2失败) | 状态枚举按注释使用 1/2。 |
+| `status` | `smallint DEFAULT '1'` | 否 | `'1'` | 执行状态 (1成功 2失败) | 状态枚举按字段注释使用。 |
 | `create_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 创建时间 | 创建时间字段。 |
 | `update_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 修改时间 | 更新时间字段。 |
 | `delete_time` | `datetime DEFAULT NULL` | 否 | `NULL` | 删除时间 | 软删除字段：NULL 表示未删除，非 NULL 表示已删除。 |
@@ -964,4 +1224,3 @@
 | 索引/约束 |
 | --- |
 | <code>PRIMARY KEY (&#96;id&#96;) USING BTREE</code> |
-
