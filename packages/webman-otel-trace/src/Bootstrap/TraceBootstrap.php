@@ -55,9 +55,6 @@ class TraceBootstrap implements Bootstrap
         self::configureContextStorage();
 
         $exporterDriver = strtolower((string)config('plugin.openb8.webman-otel-trace.app.exporter.driver', 'stdout'));
-        if ($exporterDriver === 'none') {
-            return;
-        }
 
         $spanExporter = self::createSpanExporter($exporterDriver);
 
@@ -94,6 +91,10 @@ class TraceBootstrap implements Bootstrap
 
     private static function createSpanExporter(string $exporterDriver): mixed
     {
+        if ($exporterDriver === 'none') {
+            return new LoggerExporter((string)config('plugin.openb8.webman-otel-trace.app.service.name', 'b8aiadmin-webman'));
+        }
+
         if ($exporterDriver === 'otlp') {
             self::applyOtlpEnvironment();
 

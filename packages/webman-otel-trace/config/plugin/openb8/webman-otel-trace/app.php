@@ -17,7 +17,7 @@ return [
     ],
     'exporter' => [
         // none | stdout | otlp
-        'driver' => getenv('OTEL_TRACES_EXPORTER') ?: 'stdout',
+        'driver' => getenv('OTEL_TRACES_EXPORTER') ?: 'none',
         'endpoint' => getenv('OTEL_EXPORTER_OTLP_ENDPOINT') ?: 'http://127.0.0.1:4318',
         'protocol' => getenv('OTEL_EXPORTER_OTLP_PROTOCOL') ?: 'http/protobuf',
         'headers' => getenv('OTEL_EXPORTER_OTLP_HEADERS') ?: '',

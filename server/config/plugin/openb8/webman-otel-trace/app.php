@@ -17,11 +17,14 @@ return [
     ],
     'exporter' => [
         // none | stdout | otlp
-        'driver' => getenv('OTEL_TRACES_EXPORTER') ?: 'stdout',
+        'driver' => getenv('OTEL_TRACES_EXPORTER') ?: 'none',
         'endpoint' => getenv('OTEL_EXPORTER_OTLP_ENDPOINT') ?: 'http://127.0.0.1:4318',
         'protocol' => getenv('OTEL_EXPORTER_OTLP_PROTOCOL') ?: 'http/protobuf',
         'headers' => getenv('OTEL_EXPORTER_OTLP_HEADERS') ?: '',
         'timeout' => (int)(getenv('OTEL_EXPORTER_OTLP_TIMEOUT') ?: 10000),
+        'check_endpoint' => $bool('OTEL_EXPORTER_OTLP_CHECK_ENDPOINT', true),
+        'check_timeout' => (float)(getenv('OTEL_EXPORTER_OTLP_CHECK_TIMEOUT') ?: 0.2),
+        'disable_on_unreachable' => $bool('OTEL_EXPORTER_OTLP_DISABLE_ON_UNREACHABLE', true),
     ],
     'trace' => [
         'sample_rate' => (float)(getenv('OTEL_TRACES_SAMPLER_ARG') ?: 1.0),

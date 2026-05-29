@@ -43,7 +43,7 @@ class DemoQueue extends TraceQueueBuilder
 }
 ```
 
-本地调试默认把 span 输出到 stdout。生产建议配置：
+默认 `exporter.driver=none`，本地会生成 `traceparent`、`x-trace-id` 和日志 trace 字段，但不向外导出 span，也不往控制台刷 span。生产建议配置：
 
 ```php
 'exporter' => [
@@ -63,7 +63,7 @@ class DemoQueue extends TraceQueueBuilder
 ],
 ```
 
-不想在控制台输出 trace 时，可以把 `exporter.driver` 设置为 `otlp` 发到 Collector；如果想连本地 trace id 都一起关掉，再设置为 `none`。`thinkorm-log` 自己的 SQL/API 控制台输出不受这个配置控制，需要在 `config/plugin/guozhijian611/thinkorm-log/app.php` 里分别关闭 `console`。
+不想在控制台输出 trace 时，可以把 `exporter.driver` 设置为 `otlp` 发到 Collector，或者设置为 `none` 只生成本地 trace id、不向外导出。`none` 仍会在响应头写入 `traceparent` 和 `x-trace-id`；如果想完全关闭插件，需要把顶层 `enable` 设置为 `false`。`thinkorm-log` 自己的 SQL/API 控制台输出不受这个配置控制，需要在 `config/plugin/guozhijian611/thinkorm-log/app.php` 里分别关闭 `console`。
 
 `/metrics` 暴露 Prometheus 文本指标。默认 `metrics.storage=file` 会把 40 个 Webman worker 的计数聚合到 `runtime/otel-trace/metrics.json`，避免 Prometheus 只打到某个空闲 worker 时抓不到业务请求。
 
