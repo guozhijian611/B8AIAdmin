@@ -251,6 +251,7 @@ class TraceViewController
             . '<pre>' . $this->pretty([
                 'url' => $entry['url'] ?? null,
                 'span_id' => $entry['span_id'] ?? null,
+                'headers' => $entry['headers'] ?? null,
                 'request' => $entry['request'] ?? null,
                 'response' => $entry['response'] ?? null,
                 'exception' => $entry['exception'] ?? null,
