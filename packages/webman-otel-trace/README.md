@@ -53,7 +53,17 @@ class DemoQueue extends TraceQueueBuilder
 ],
 ```
 
-不想在控制台输出 trace 时，可以把 `exporter.driver` 设置为 `otlp` 发到 Collector，或者设置为 `none` 暂时关闭 trace 导出。`thinkorm-log` 自己的 SQL/API 控制台输出不受这个配置控制，需要在 `config/plugin/guozhijian611/thinkorm-log/app.php` 里分别关闭 `console`。
+如果本机没有启动 OpenTelemetry Collector 或 Jaeger，`otlp` 会连不上默认的 `http://127.0.0.1:4318/v1/traces`。插件默认会先检查端点，发现不可达时只记录一次告警，并临时关闭 trace 导出，避免 `Export retry limit exceeded` 刷屏；HTTP trace id、日志 trace 字段和 `/metrics` 仍然可用。需要强制导出时可以配置：
+
+```php
+'exporter' => [
+    'driver' => 'otlp',
+    'check_endpoint' => false,
+    'disable_on_unreachable' => false,
+],
+```
+
+不想在控制台输出 trace 时，可以把 `exporter.driver` 设置为 `otlp` 发到 Collector；如果想连本地 trace id 都一起关掉，再设置为 `none`。`thinkorm-log` 自己的 SQL/API 控制台输出不受这个配置控制，需要在 `config/plugin/guozhijian611/thinkorm-log/app.php` 里分别关闭 `console`。
 
 `/metrics` 暴露 Prometheus 文本指标。默认 `metrics.storage=file` 会把 40 个 Webman worker 的计数聚合到 `runtime/otel-trace/metrics.json`，避免 Prometheus 只打到某个空闲 worker 时抓不到业务请求。
 
