@@ -63,10 +63,11 @@ return [
         'enable' => $bool('OTEL_REQUEST_LOG', true),
         'console' => $bool('OTEL_REQUEST_LOG_CONSOLE', false),
         'file' => $bool('OTEL_REQUEST_LOG_FILE', true),
-        'include_headers' => false,
+        'include_headers' => $bool('OTEL_REQUEST_LOG_INCLUDE_HEADERS', false),
         'include_request_body' => true,
         'include_response_body' => true,
         'max_body_length' => 4096,
+        'mask_sensitive' => $bool('OTEL_REQUEST_LOG_MASK_SENSITIVE', true),
         'ignore_paths' => [
             '/metrics',
             $traceViewPath,

@@ -74,10 +74,14 @@ class DemoQueue extends TraceQueueBuilder
     'enable' => true,
     'console' => false,
     'file' => true,
+    'include_headers' => false,
     'include_response_body' => true,
     'max_body_length' => 4096,
+    'mask_sensitive' => true,
 ],
 ```
+
+`include_headers` 可以通过 `OTEL_REQUEST_LOG_INCLUDE_HEADERS=true` 临时打开。`mask_sensitive` 可以通过 `OTEL_REQUEST_LOG_MASK_SENSITIVE=false` 关闭脱敏，但只建议在本机短时间排查使用，关闭后 `Authorization`、`Cookie`、`token` 等字段会按原文写入日志。
 
 如果想把 `thinkorm-log` 的 SQL 文件日志能力合并到 trace 插件，可以开启 `sql_log`。它会通过 `think\Db::listen()` 记录 SQL，并附带当前请求的 `trace_id/span_id`，默认关闭是为了避免和现有 `thinkorm-log` 双份输出：
 

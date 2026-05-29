@@ -49,6 +49,7 @@ class RequestLogMiddleware implements MiddlewareInterface
             'include_response_body' => (bool)($config['include_response_body'] ?? true),
             'max_body_length' => max(256, (int)($config['max_body_length'] ?? 4096)),
             'ignore_paths' => (array)($config['ignore_paths'] ?? ['/metrics']),
+            'mask_sensitive' => (bool)($config['mask_sensitive'] ?? true),
             'sensitive_fields' => array_map('strtolower', (array)($config['sensitive_fields'] ?? [])),
         ];
     }
@@ -98,15 +99,21 @@ class RequestLogMiddleware implements MiddlewareInterface
         ];
 
         if ($config['include_headers']) {
-            $payload['headers'] = $this->sanitize($request->header() ?: [], $config['sensitive_fields']);
+            $payload['headers'] = $this->sanitize($request->header() ?: [], $config['sensitive_fields'], $config['mask_sensitive']);
         }
 
         if ($config['include_request_body']) {
-            $payload['request'] = $this->truncate($this->sanitize($request->all(), $config['sensitive_fields']), $config['max_body_length']);
+            $payload['request'] = $this->truncate(
+                $this->sanitize($request->all(), $config['sensitive_fields'], $config['mask_sensitive']),
+                $config['max_body_length']
+            );
         }
 
         if ($response && $config['include_response_body']) {
-            $payload['response'] = $this->truncate($this->decodeBody($response->rawBody()), $config['max_body_length']);
+            $payload['response'] = $this->truncate(
+                $this->sanitize($this->decodeBody($response->rawBody()), $config['sensitive_fields'], $config['mask_sensitive']),
+                $config['max_body_length']
+            );
         }
 
         if ($throwable) {
@@ -165,7 +172,7 @@ class RequestLogMiddleware implements MiddlewareInterface
     }
 
     /** @param array<int, string> $sensitiveFields */
-    private function sanitize(mixed $value, array $sensitiveFields): mixed
+    private function sanitize(mixed $value, array $sensitiveFields, bool $maskSensitive): mixed
     {
         if (!is_array($value)) {
             return is_string($value) ? $this->normalizeString($value) : $value;
@@ -174,11 +181,11 @@ class RequestLogMiddleware implements MiddlewareInterface
         $sanitized = [];
         foreach ($value as $key => $item) {
             $keyString = strtolower((string)$key);
-            if ($this->isSensitiveKey($keyString, $sensitiveFields)) {
+            if ($maskSensitive && $this->isSensitiveKey($keyString, $sensitiveFields)) {
                 $sanitized[$key] = '******';
                 continue;
             }
-            $sanitized[$key] = $this->sanitize($item, $sensitiveFields);
+            $sanitized[$key] = $this->sanitize($item, $sensitiveFields, $maskSensitive);
         }
 
         return $sanitized;
