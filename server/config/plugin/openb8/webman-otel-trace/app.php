@@ -84,7 +84,7 @@ return [
     ],
     'sql_log' => [
         // ThinkORM 底层 PDO 已经会产生 span；这里是给人看的 SQL 文件日志，默认关闭避免和 thinkorm-log 重复。
-        'enable' => $bool('OTEL_SQL_LOG', false),
+        'enable' => $bool('OTEL_SQL_LOG', true),
         'console' => $bool('OTEL_SQL_LOG_CONSOLE', false),
         'file' => $bool('OTEL_SQL_LOG_FILE', true),
         'ignore_sql' => [
