@@ -7,6 +7,8 @@ $bool = static function (string $name, bool $default): bool {
     return $value === false ? $default : filter_var($value, FILTER_VALIDATE_BOOLEAN);
 };
 
+$traceViewPath = getenv('OTEL_TRACE_VIEW_PATH') ?: '/__trace';
+
 return [
     'enable' => true,
     'service' => [
@@ -49,6 +51,14 @@ return [
         'storage' => getenv('OTEL_METRICS_STORAGE') ?: 'file',
         'file' => runtime_path() . '/otel-trace/metrics.json',
     ],
+    'trace_view' => [
+        // 仅在 config/app.php 的 debug=true 时注册，生产环境不会暴露日志查询页。
+        'enable' => $bool('OTEL_TRACE_VIEW', true),
+        'path' => $traceViewPath,
+        'max_files' => (int)(getenv('OTEL_TRACE_VIEW_MAX_FILES') ?: 5),
+        'max_lines' => (int)(getenv('OTEL_TRACE_VIEW_MAX_LINES') ?: 2000),
+        'default_limit' => (int)(getenv('OTEL_TRACE_VIEW_DEFAULT_LIMIT') ?: 50),
+    ],
     'request_log' => [
         'enable' => $bool('OTEL_REQUEST_LOG', true),
         'console' => $bool('OTEL_REQUEST_LOG_CONSOLE', false),
@@ -59,6 +69,7 @@ return [
         'max_body_length' => 4096,
         'ignore_paths' => [
             '/metrics',
+            $traceViewPath,
         ],
         'sensitive_fields' => [
             'authorization',

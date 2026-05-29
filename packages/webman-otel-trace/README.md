@@ -93,4 +93,18 @@ class DemoQueue extends TraceQueueBuilder
 
 日志会通过 Monolog processor 自动给默认日志通道补充 `trace_id` 和 `span_id`；插件自己的 request/sql 日志也会在 JSON 内容里直接写入这两个字段。
 
+调试模式下会额外注册一个简易查询页，默认地址是 `http://127.0.0.1:8787/__trace`。它只在 `config/app.php` 的 `debug=true` 时生效，来源是本地 `runtime/logs/otel-request-*.log` 和 `runtime/logs/otel-sql-*.log`。浏览器 F12 里可以在接口响应头复制 `x-trace-id`，或者直接复制完整 `traceparent`，粘到页面里查询同一次请求的 HTTP 日志和 SQL 文件日志：
+
+```php
+'trace_view' => [
+    'enable' => true,
+    'path' => '/__trace',
+    'max_files' => 5,
+    'max_lines' => 2000,
+    'default_limit' => 50,
+],
+```
+
+如果页面里查不到 SQL，但 PDO 自动埋点已经在 OTLP 后端里有 span，通常是因为本地 `sql_log.enable` 仍然关闭。需要在调试页里直接看 SQL 文件日志时，可以设置 `OTEL_SQL_LOG=true` 或开启 `sql_log.enable=true`。
+
 当前项目未启用 `ext-ffi`，插件默认会使用进程级 OpenTelemetry `ContextStorage`，避免 Webman fiber 下 PDO 自动埋点出现 `Access to not initialized OpenTelemetry context in fiber` 告警。若以后启用 `ext-ffi` 并设置 `OTEL_PHP_FIBERS_ENABLED=true`，可以把 `context.force_global_storage_without_ffi` 关掉。
