@@ -21,7 +21,9 @@ return [
             'logs',
             'logview',
             '/logs',
-            '/logview/'
+            '/logview/',
+            'trace',
+            '__trace'
         ]
     ]
 ];
