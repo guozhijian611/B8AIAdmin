@@ -83,16 +83,27 @@ class TraceViewController
                 continue;
             }
 
-            foreach (array_reverse(array_slice($lines, -$maxLines)) as $line) {
-                $entry = $this->parseLine($line, $type, $file);
+            $fileMtime = filemtime($file) ?: 0;
+            foreach (array_slice($lines, -$maxLines, null, true) as $lineIndex => $line) {
+                $entry = $this->parseLine($line, $type, $file, (int)$lineIndex + 1, $fileMtime);
                 if ($entry !== null) {
                     $entries[] = $entry;
                 }
             }
         }
 
-        usort($entries, static function (array $a, array $b): int {
-            return strcmp((string)($b['time'] ?? $b['_logged_at'] ?? ''), (string)($a['time'] ?? $a['_logged_at'] ?? ''));
+        usort($entries, function (array $a, array $b): int {
+            $timeCompare = $this->loggedTimestamp($b) <=> $this->loggedTimestamp($a);
+            if ($timeCompare !== 0) {
+                return $timeCompare;
+            }
+
+            $fileCompare = (int)($b['_file_mtime'] ?? 0) <=> (int)($a['_file_mtime'] ?? 0);
+            if ($fileCompare !== 0) {
+                return $fileCompare;
+            }
+
+            return (int)($b['_line_no'] ?? 0) <=> (int)($a['_line_no'] ?? 0);
         });
 
         return $entries;
@@ -110,7 +121,7 @@ class TraceViewController
     }
 
     /** @return array<string, mixed>|null */
-    private function parseLine(string $line, string $type, string $file): ?array
+    private function parseLine(string $line, string $type, string $file, int $lineNumber, int $fileMtime): ?array
     {
         if (preg_match('/^\[(?<logged_at>[^\]]+)\]\s+(?<channel>[^:]+):\s+(?<message>.*)$/', trim($line), $matches) !== 1) {
             return null;
@@ -128,6 +139,8 @@ class TraceViewController
 
         $payload['_type'] = $type;
         $payload['_file'] = basename($file);
+        $payload['_file_mtime'] = $fileMtime;
+        $payload['_line_no'] = $lineNumber;
         $payload['_logged_at'] = $matches['logged_at'];
 
         return $payload;
@@ -286,7 +299,22 @@ class TraceViewController
         }
 
         usort($events, function (array $a, array $b): int {
-            return $this->eventTimestamp($a) <=> $this->eventTimestamp($b);
+            $timeCompare = $this->timelineTimestamp($a) <=> $this->timelineTimestamp($b);
+            if ($timeCompare !== 0) {
+                return $timeCompare;
+            }
+
+            $typeCompare = $this->timelineTypeRank($a) <=> $this->timelineTypeRank($b);
+            if ($typeCompare !== 0) {
+                return $typeCompare;
+            }
+
+            $fileCompare = (int)($a['_file_mtime'] ?? 0) <=> (int)($b['_file_mtime'] ?? 0);
+            if ($fileCompare !== 0) {
+                return $fileCompare;
+            }
+
+            return (int)($a['_line_no'] ?? 0) <=> (int)($b['_line_no'] ?? 0);
         });
 
         $items = '';
@@ -326,12 +354,29 @@ class TraceViewController
     }
 
     /** @param array<string, mixed> $entry */
-    private function eventTimestamp(array $entry): int
+    private function loggedTimestamp(array $entry): int
     {
         $time = (string)($entry['time'] ?? $entry['_logged_at'] ?? '');
         $timestamp = strtotime($time);
 
         return $timestamp === false ? 0 : $timestamp;
+    }
+
+    /** @param array<string, mixed> $entry */
+    private function timelineTimestamp(array $entry): float
+    {
+        $timestamp = (float)$this->loggedTimestamp($entry);
+        if (($entry['_timeline_type'] ?? '') === 'http' && array_key_exists('duration_ms', $entry)) {
+            return $timestamp - ((float)$entry['duration_ms'] / 1000);
+        }
+
+        return $timestamp;
+    }
+
+    /** @param array<string, mixed> $entry */
+    private function timelineTypeRank(array $entry): int
+    {
+        return ($entry['_timeline_type'] ?? '') === 'http' ? 0 : 1;
     }
 
     /** @param array<string, mixed> $entry */
