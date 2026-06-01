@@ -184,6 +184,7 @@ class TraceViewController
             . $this->renderSearchForm($traceId, $path, $limit)
             . '<section class="summary"><strong>' . $traceLabel . '</strong><span>HTTP ' . count($requestEntries) . ' 条</span><span>SQL ' . count($sqlEntries) . ' 条</span></section>'
             . (!$requestLogEnabled ? '<p class="warn">request_log.file 当前关闭，页面无法持续读取请求日志。</p>' : '')
+            . '<section><h2>请求时间线</h2>' . $this->renderTimeline($requestEntries, $sqlEntries, $traceId) . '</section>'
             . '<section><h2>HTTP 请求</h2>' . $this->renderRequestTable($requestEntries, $traceId) . '</section>'
             . '<section><h2>SQL 日志</h2>' . $this->renderSqlTable($sqlEntries, $traceId, $sqlLogEnabled) . '</section>'
             . '</main></body></html>';
@@ -194,13 +195,14 @@ class TraceViewController
         return '<style>'
             . ':root{color-scheme:light;--bg:#f6f8fb;--panel:#fff;--text:#172033;--muted:#64748b;--line:#d9e1ec;--accent:#2563eb;--ok:#0f766e;--warn:#b45309;--bad:#b91c1c;}'
             . '*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;}'
-            . 'header{padding:24px 32px 16px;border-bottom:1px solid var(--line);background:var(--panel);}h1{margin:0 0 4px;font-size:24px;}h2{margin:0 0 12px;font-size:18px;}p{margin:0;color:var(--muted)}main{padding:20px 32px 40px;}'
-            . 'form{display:grid;grid-template-columns:minmax(220px,2fr) minmax(160px,1fr) 96px auto;gap:10px;align-items:end;margin-bottom:16px;}label{display:grid;gap:5px;color:var(--muted);font-size:12px;}input{height:36px;border:1px solid var(--line);border-radius:6px;padding:0 10px;background:#fff;color:var(--text);font:inherit;}button,a.button{height:36px;border:0;border-radius:6px;padding:0 14px;background:var(--accent);color:#fff;font:inherit;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;}'
+            . 'header{padding:26px 32px 18px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#fff 0%,#f9fbff 100%);}h1{margin:0 0 4px;font-size:26px;}h2{margin:0 0 12px;font-size:18px;}p{margin:0;color:var(--muted)}main{padding:20px 32px 40px;max-width:1440px;}'
+            . 'form{display:grid;grid-template-columns:minmax(220px,2fr) minmax(160px,1fr) 96px auto;gap:10px;align-items:end;margin-bottom:16px;padding:14px;border:1px solid var(--line);border-radius:8px;background:var(--panel);}label{display:grid;gap:5px;color:var(--muted);font-size:12px;}input{height:36px;border:1px solid var(--line);border-radius:6px;padding:0 10px;background:#fff;color:var(--text);font:inherit;}button,a.button{height:36px;border:0;border-radius:6px;padding:0 14px;background:var(--accent);color:#fff;font:inherit;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;}'
             . '.summary{display:flex;gap:14px;align-items:center;margin:0 0 18px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);}.summary span{color:var(--muted)}section{margin-top:20px;}'
+            . '.timeline{position:relative;margin:0;padding:2px 0 2px 18px;border-left:2px solid #c7d7ee;}.timeline-item{position:relative;margin:0 0 12px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:var(--panel);box-shadow:0 8px 22px rgba(15,23,42,.05);}.timeline-item:before{content:"";position:absolute;left:-25px;top:18px;width:12px;height:12px;border-radius:999px;background:var(--accent);box-shadow:0 0 0 4px #e7efff;}.timeline-item.sql:before{background:#7c3aed;box-shadow:0 0 0 4px #f0e8ff;}.timeline-item.bad:before{background:var(--bad);box-shadow:0 0 0 4px #fee2e2;}.timeline-head{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:8px;}.timeline-title{display:flex;gap:8px;align-items:center;min-width:0;}.timeline-meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap;color:var(--muted);font-size:12px;}.badge{display:inline-flex;align-items:center;height:22px;border-radius:999px;padding:0 8px;background:#e8f0ff;color:#1d4ed8;font-size:12px;font-weight:600;}.badge.sql{background:#f2e8ff;color:#6d28d9}.badge.ok{background:#dcfce7;color:#166534}.badge.warn{background:#fef3c7;color:#92400e}.badge.bad{background:#fee2e2;color:#991b1b}.timeline-main{display:flex;gap:10px;align-items:baseline;min-width:0;}.timeline-main code{font-size:13px;}.timeline-sub{color:var(--muted);font-size:12px;word-break:break-word;}'
             . 'table{width:100%;border-collapse:separate;border-spacing:0;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;}th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top;}th{background:#eef3f9;color:#475569;font-size:12px;font-weight:600;}tr:last-child td{border-bottom:0;}'
             . 'code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;word-break:break-all;}pre{margin:8px 0 0;padding:10px;border:1px solid var(--line);border-radius:6px;background:#f8fafc;white-space:pre-wrap;word-break:break-word;max-height:360px;overflow:auto;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}'
             . 'details{margin-top:8px;}summary{cursor:pointer;color:var(--accent);}.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}.empty{padding:18px;border:1px dashed var(--line);border-radius:8px;background:var(--panel);color:var(--muted);}'
-            . '@media (max-width:760px){header,main{padding-left:14px;padding-right:14px;}form{grid-template-columns:1fr;}table{font-size:12px;display:block;overflow:auto;}}'
+            . '@media (max-width:760px){header,main{padding-left:14px;padding-right:14px;}form{grid-template-columns:1fr;}.timeline-head,.timeline-main{align-items:flex-start;flex-direction:column;gap:6px;}table{font-size:12px;display:block;overflow:auto;}}'
             . '</style>';
     }
 
@@ -212,6 +214,118 @@ class TraceViewController
             . '<label>Limit<input name="limit" type="number" min="10" max="200" value="' . $limit . '"></label>'
             . '<button type="submit">查询</button>'
             . '</form>';
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $requestEntries
+     * @param array<int, array<string, mixed>> $sqlEntries
+     */
+    private function renderTimeline(array $requestEntries, array $sqlEntries, string $traceId): string
+    {
+        if ($requestEntries === [] && $sqlEntries === []) {
+            return $traceId === ''
+                ? '<div class="empty">暂无可展示的请求时间线。先访问一个接口，或者输入 trace_id 查询单次请求链路。</div>'
+                : '<div class="empty">没有找到这个 trace_id 对应的时间线事件。</div>';
+        }
+
+        $events = [];
+        foreach ($requestEntries as $entry) {
+            $entry['_timeline_type'] = 'http';
+            $events[] = $entry;
+        }
+        foreach ($sqlEntries as $entry) {
+            $entry['_timeline_type'] = 'sql';
+            $events[] = $entry;
+        }
+
+        usort($events, function (array $a, array $b): int {
+            return $this->eventTimestamp($b) <=> $this->eventTimestamp($a);
+        });
+
+        $items = '';
+        foreach ($events as $entry) {
+            $items .= $this->renderTimelineItem($entry);
+        }
+
+        return '<div class="timeline">' . $items . '</div>';
+    }
+
+    /** @param array<string, mixed> $entry */
+    private function renderTimelineItem(array $entry): string
+    {
+        $type = (string)($entry['_timeline_type'] ?? 'http');
+        $time = $this->e((string)($entry['time'] ?? $entry['_logged_at'] ?? ''));
+
+        if ($type === 'sql') {
+            return '<article class="timeline-item sql">'
+                . '<div class="timeline-head"><div class="timeline-title"><span class="badge sql">SQL</span><strong>' . $time . '</strong></div><div class="timeline-meta"><span>' . $this->durationLabel($entry) . '</span><code>' . $this->e((string)($entry['span_id'] ?? '')) . '</code></div></div>'
+                . '<div class="timeline-main"><code>' . $this->e($this->sqlSummary((string)($entry['sql'] ?? ''))) . '</code></div>'
+                . '<div class="timeline-sub">文件：' . $this->e((string)($entry['_file'] ?? '')) . '</div>'
+                . '</article>';
+        }
+
+        $statusCode = (int)($entry['status_code'] ?? 0);
+        $class = $this->statusClass($statusCode);
+        $method = $this->e((string)($entry['method'] ?? 'HTTP'));
+        $path = $this->e((string)($entry['path'] ?? ''));
+
+        return '<article class="timeline-item ' . $class . '">'
+            . '<div class="timeline-head"><div class="timeline-title"><span class="badge">HTTP</span><strong>' . $time . '</strong></div><div class="timeline-meta"><span class="badge ' . $class . '">' . $this->e((string)$statusCode) . '</span><span>' . $this->durationLabel($entry) . '</span></div></div>'
+            . '<div class="timeline-main"><strong>' . $method . '</strong><code>' . $path . '</code></div>'
+            . '<div class="timeline-sub">' . $this->httpSummary($entry) . '</div>'
+            . '</article>';
+    }
+
+    /** @param array<string, mixed> $entry */
+    private function eventTimestamp(array $entry): int
+    {
+        $time = (string)($entry['time'] ?? $entry['_logged_at'] ?? '');
+        $timestamp = strtotime($time);
+
+        return $timestamp === false ? 0 : $timestamp;
+    }
+
+    /** @param array<string, mixed> $entry */
+    private function durationLabel(array $entry): string
+    {
+        if (array_key_exists('duration_ms', $entry)) {
+            return $this->e((string)$entry['duration_ms']) . ' ms';
+        }
+
+        if (array_key_exists('runtime_seconds', $entry)) {
+            $milliseconds = round((float)$entry['runtime_seconds'] * 1000, 2);
+            return $this->e((string)$milliseconds) . ' ms';
+        }
+
+        return '耗时未知';
+    }
+
+    /** @param array<string, mixed> $entry */
+    private function httpSummary(array $entry): string
+    {
+        $parts = [];
+        $traceId = (string)($entry['trace_id'] ?? '');
+        if ($traceId !== '') {
+            $parts[] = 'Trace: <code>' . $this->e($traceId) . '</code>';
+        }
+        if (($entry['client_ip'] ?? '') !== '') {
+            $parts[] = 'IP: ' . $this->e((string)$entry['client_ip']);
+        }
+        if (array_key_exists('business_code', $entry) && $entry['business_code'] !== null && $entry['business_code'] !== '') {
+            $parts[] = '业务 code: <code>' . $this->e((string)$entry['business_code']) . '</code>';
+        }
+
+        return $parts === [] ? '暂无更多摘要信息' : implode(' · ', $parts);
+    }
+
+    private function sqlSummary(string $sql): string
+    {
+        $sql = trim(preg_replace('/\s+/', ' ', $sql) ?? $sql);
+        if (strlen($sql) <= 180) {
+            return $sql;
+        }
+
+        return substr($sql, 0, 180) . '...';
     }
 
     /** @param array<int, array<string, mixed>> $entries */
