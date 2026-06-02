@@ -223,6 +223,9 @@ class AdminerController extends BaseController
                 if (!preg_match('/;\s*path=/i', $value)) {
                     $value .= '; Path=/';
                 }
+                $normalized['Set-Cookie'] ??= [];
+                $normalized['Set-Cookie'][] = $value;
+                continue;
             }
 
             if (isset($normalized[$name])) {
