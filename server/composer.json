@@ -68,6 +68,12 @@
     },
     "minimum-stability": "dev",
     "prefer-stable": true,
+    "config": {
+        "allow-plugins": {
+            "php-http/discovery": true,
+            "tbachert/spi": true
+        }
+    },
     "repositories": [{
         "name": "openb8-webman-otel-trace",
         "type": "path",
