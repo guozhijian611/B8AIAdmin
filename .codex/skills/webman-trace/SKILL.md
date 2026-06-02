@@ -72,8 +72,8 @@ git diff --check
 cd server && php -l <changed-php-file>
 ```
 
-5. 数据库结构问题要用 `SHOW CREATE TABLE` 或 `information_schema` 复核；需要线上执行的 SQL 放到 `Database/patches/`，写成可重复执行。
-6. PHP 或配置改动后 reload Webman 再请求验证；纯 SQL patch 修复则先执行 patch，再重新请求触发接口。
+5. 数据库结构问题要用 `SHOW CREATE TABLE` 或 `information_schema` 复核；需要升级环境执行的数据库变更统一放到 `Database/migrations/`，写成可回滚的 Phinx 迁移。
+6. PHP 或配置改动后 reload Webman 再请求验证；数据库迁移修复则先执行 `php webman b8:migrate`，再重新请求触发接口。
 
 ## 输出建议
 
@@ -82,4 +82,4 @@ cd server && php -l <changed-php-file>
 - trace 对应的请求路径和异常摘要。
 - 根因文件/表结构。
 - 已做的修复和验证命令。
-- 是否执行了数据库 patch，生产环境是否还需要执行同名 patch。
+- 是否执行了数据库迁移，生产环境是否还需要执行同名迁移。

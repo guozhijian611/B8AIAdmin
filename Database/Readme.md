@@ -5,7 +5,6 @@
 - `b8aiadmin.sql`：全量初始安装 SQL，适合新环境第一次导入。
 - `migrations/`：Phinx 增量迁移，后续结构或初始化数据变更优先放这里。
 - `seeds/`：Phinx seed 目录，保留给测试数据或一次性初始化数据。
-- `patches/`：历史 SQL 补丁目录，保留溯源；新增变更不再优先放这里。
 - `phinx.php`：Phinx 配置，读取 `server/.env` 中的 `DB_*` 配置。
 
 ## 常用命令
@@ -57,6 +56,7 @@ vendor/bin/phinx rollback -c ../Database/phinx.php
 - `down()` 只回滚当前迁移创建的内容，不要删除用户原本已有的数据。
 - 涉及菜单或权限数据时，建议写入唯一 `remark` 标记，回滚时仅删除带该标记的数据。
 - 涉及已有表字段修复时，如果字段可能已经在基线库存在，需要记录本迁移是否实际添加过字段，避免回滚误删基线字段。
+- 不再新增独立 SQL patch；需要升级环境执行的数据库变更统一写成 Phinx 迁移。
 - 生产或测试环境执行迁移前，先备份数据库并执行 `php webman b8:migrate:status` 确认状态。
 
 ## 部署建议
