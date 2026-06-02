@@ -57,13 +57,13 @@
     },
     "scripts": {
         "post-package-install": [
-            "support\\Plugin::install"
+            "support\\ComposerScripts::install"
         ],
         "post-package-update": [
-            "support\\Plugin::install"
+            "support\\ComposerScripts::install"
         ],
         "pre-package-uninstall": [
-            "support\\Plugin::uninstall"
+            "support\\ComposerScripts::uninstall"
         ]
     },
     "minimum-stability": "dev",
