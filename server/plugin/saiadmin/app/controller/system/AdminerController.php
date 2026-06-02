@@ -67,8 +67,9 @@ class AdminerController extends BaseController
                 ->withHeader('Content-Type', 'text/html; charset=utf-8');
         }
 
-        $result = $this->runAdminer($request);
-        $response = response($result['body'], $result['status'])->withHeaders($result['headers']);
+        $result = $this->runAdminer($request, $ticket);
+        $response = response($result['body'], $result['status'])
+            ->withHeaders($this->appendTicketToRedirect($result['headers'], $ticket));
 
         if ($request->get('ticket')) {
             $response->cookie(self::TICKET_COOKIE, $ticket, self::TICKET_TTL, '/', '', false, true, 'Lax');
@@ -99,7 +100,7 @@ class AdminerController extends BaseController
         return true;
     }
 
-    private function runAdminer(Request $request): array
+    private function runAdminer(Request $request, string $ticket): array
     {
         $resourcePath = base_path() . '/plugin/saiadmin/resource/adminer';
         $runner = $resourcePath . '/runner.php';
@@ -116,6 +117,7 @@ class AdminerController extends BaseController
             'files' => $this->normalizeFiles($request->file()),
             'server' => $this->buildServer($request, $get),
             'database_config' => $this->databaseConfig(),
+            'adminer_session_id' => $this->adminerSessionId($ticket),
         ];
 
         $process = proc_open([PHP_BINARY, $runner], [
@@ -194,6 +196,37 @@ class AdminerController extends BaseController
             'password' => (string) ($config['password'] ?? env('DB_PASSWORD', '')),
             'database' => (string) ($config['database'] ?? env('DB_NAME', '')),
         ];
+    }
+
+    private function adminerSessionId(string $ticket): string
+    {
+        return 'adm' . substr(hash('sha256', $ticket), 0, 29);
+    }
+
+    private function appendTicketToRedirect(array $headers, string $ticket): array
+    {
+        foreach ($headers as $name => $value) {
+            if (strtolower((string) $name) !== 'location') {
+                continue;
+            }
+
+            if (is_array($value)) {
+                $headers[$name] = array_map(fn (string $location): string => $this->appendTicketToLocation($location, $ticket), $value);
+            } else {
+                $headers[$name] = $this->appendTicketToLocation((string) $value, $ticket);
+            }
+        }
+
+        return $headers;
+    }
+
+    private function appendTicketToLocation(string $location, string $ticket): string
+    {
+        if ($location === '' || str_contains($location, 'ticket=')) {
+            return $location;
+        }
+
+        return $location . (str_contains($location, '?') ? '&' : '?') . 'ticket=' . rawurlencode($ticket);
     }
 
     private function normalizeFiles(array|UploadFile|null $files): array

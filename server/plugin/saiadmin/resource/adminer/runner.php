@@ -43,6 +43,31 @@ namespace Adminer {
 }
 
 namespace {
+    function prepare_adminer_session(array $databaseConfig, string $sessionId): void
+    {
+        if ($sessionId === '') {
+            return;
+        }
+
+        $server = (string) ($databaseConfig['server'] ?? '127.0.0.1');
+        $username = (string) ($databaseConfig['username'] ?? 'root');
+        $password = (string) ($databaseConfig['password'] ?? '');
+        $database = (string) ($databaseConfig['database'] ?? '');
+
+        session_name('adminer_sid');
+        session_id($sessionId);
+        session_start();
+
+        $_SESSION['pwds']['server'][$server][$username] = $password;
+        if ($database !== '') {
+            $_SESSION['db']['server'][$server][$username][$database] = true;
+        }
+        $_SESSION['token'] ??= random_int(1, 1000000);
+
+        session_write_close();
+        $_COOKIE['adminer_sid'] = $sessionId;
+    }
+
     function adminer_object(): \Adminer\Adminer
     {
         return new class($GLOBALS['__saiadmin_database_config'] ?? []) extends \Adminer\Adminer {
@@ -113,13 +138,19 @@ namespace {
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
     });
 
+    $databaseConfig = $payload['database_config'] ?? [];
+    prepare_adminer_session($databaseConfig, (string) ($payload['adminer_session_id'] ?? ''));
+
     $_GET = $payload['get'] ?? [];
     $_POST = $payload['post'] ?? [];
     $_COOKIE = $payload['cookie'] ?? [];
+    if (!empty($payload['adminer_session_id'])) {
+        $_COOKIE['adminer_sid'] = (string) $payload['adminer_session_id'];
+    }
     $_FILES = $payload['files'] ?? [];
     $_SERVER = array_merge($_SERVER, $payload['server'] ?? []);
     $_REQUEST = array_merge($_GET, $_POST, $_COOKIE);
-    $GLOBALS['__saiadmin_database_config'] = $payload['database_config'] ?? [];
+    $GLOBALS['__saiadmin_database_config'] = $databaseConfig;
 
     chdir(__DIR__);
     include __DIR__ . '/adminer-5.4.2-mysql.php';
