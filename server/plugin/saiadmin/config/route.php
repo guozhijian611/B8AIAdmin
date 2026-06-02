@@ -101,6 +101,10 @@ Route::group('/core', function () {
     Route::post("/database-backup/download", [\plugin\saiadmin\app\controller\system\DatabaseBackupController::class, 'download']);
     Route::delete("/database-backup/delete", [\plugin\saiadmin\app\controller\system\DatabaseBackupController::class, 'delete']);
 
+    // Adminer 数据库管理
+    Route::get("/adminer/ticket", [\plugin\saiadmin\app\controller\system\AdminerController::class, 'ticket']);
+    Route::any("/adminer/proxy", [\plugin\saiadmin\app\controller\system\AdminerController::class, 'proxy']);
+
 });
 
 Route::group('/tool', function () {
