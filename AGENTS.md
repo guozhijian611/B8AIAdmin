@@ -25,6 +25,7 @@
 - 涉及 SaiAdmin/Webman、unibest、RabbitMQ、宝塔等任务时，先查看 `.codex/skills/` 中对应技能，再动手修改。
 - 新建业务应用默认使用 SaiAdmin 插件模式，在 `server/` 目录执行 `php webman sai:plugin <插件名>` 创建插件骨架，再在 `server/plugin/<插件名>/app/admin` 与 `server/plugin/<插件名>/app/api` 下继续开发。
 - `php webman sai:plugin <插件名>` 只创建基础插件目录、配置和示例 API，不会自动生成业务 Controller/Logic/Model/Validate；新增后台业务时必须通过 SaiCode 生成 CRUD 或手动补齐 Validate，并在控制器构造函数中注入 `$this->validate`，在 `save`、`update` 等写接口调用 `$this->validate('<scene>', $data)`。
+- 业务路由默认写在对应插件的 `server/plugin/<插件名>/config/route.php`；标准 CRUD 可用 `fastRoute('<业务路径>', Controller::class)` 注册，非标准动作必须显式补充 `Route::get/post/put/delete`。SaiCode 生成的后台 CRUD 默认使用 `/app/<插件名>/admin/<模块>/<控制器>/<动作>` 形式的 Webman 插件默认路由，不会自动修改 `config/route.php`；如目标插件关闭默认路由、需要稳定 `route:list` 可见性、或新增自定义动作，必须手动注册路由并让前端 API 与之保持一致。
 - SaiAdmin 数据权限不是默认自动启用：`plugin\saiadmin\basic\think\BaseLogic` 默认 `protected bool $scope = false`。涉及后台业务数据隔离时，必须确认业务表具备 `created_by` 等审计字段，并在对应 Logic 中显式开启 `protected bool $scope = true;`。
 - 后端新增或修改控制器方法时，应同步补充 APIDOC 注解，至少说明接口标题、路径、请求方法、参数和返回结构，保证 `/apidoc/openapi/<app-key>` 可用于 unibest 自动生成接口。
 - 数据库变更默认使用 Phinx：`composer install` 后缺少 `.env` 时会自动从 `.env.example` 复制；首次安装优先在 `server/` 目录执行 `php webman b8:install` 配置数据库、导入 `Database/b8aiadmin.sql` 基线并执行迁移；后续升级只新增 `Database/migrations/` 迁移，不再新增独立 SQL patch。
@@ -36,7 +37,7 @@
 - 日志、调试页和请求记录默认要脱敏 Bearer、Cookie、token、secret 等敏感信息；如需放开，只能做成显式调试开关。
 
 ## 验证要求
-- 后端 PHP 文件变更后，至少执行相关 `php -l`；路由或插件变更需结合 `php webman route:list`、相关命令帮助或运行时页面验证。
+- 后端 PHP 文件变更后，至少执行相关 `php -l`；路由或插件变更需结合 `php webman route:list`、相关命令帮助或运行时页面验证。SaiCode 生成 CRUD 后，如果依赖 Webman 插件默认路由，需用前端 API 中的 `/app/<插件名>/admin/...` 实际访问或运行时页面确认；如果改用显式路由，则必须在 `route:list` 中核对。
 - 管理端或移动端变更后，优先执行项目已有的类型检查、lint 或最小可行验证命令。
 - OpenAPI、数据库文档、数据库迁移或生成文件变更后，要用实际源头复核：`route.php`、控制器、`information_schema`、`SHOW CREATE TABLE`、`php webman b8:migrate:status`、`php webman b8:migrate --dry-run` 或生成器输出。
 - 如果某项验证无法执行，要在最终回复里说明原因和剩余风险。
