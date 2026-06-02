@@ -1,0 +1,4 @@
+interface:
+  display_name: "HG APIDOC"
+  short_description: "Webman/SaiAdmin APIDOC 注解规范"
+  default_prompt: "Use $hg-apidoc to add hg/apidoc annotations for Webman/SaiAdmin controllers."
