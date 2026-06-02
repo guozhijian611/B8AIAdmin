@@ -115,6 +115,7 @@ class AdminerController extends BaseController
             'cookie' => $request->cookie(),
             'files' => $this->normalizeFiles($request->file()),
             'server' => $this->buildServer($request, $get),
+            'database_config' => $this->databaseConfig(),
         ];
 
         $process = proc_open([PHP_BINARY, $runner], [
@@ -179,6 +180,20 @@ class AdminerController extends BaseController
             'REMOTE_ADDR' => $request->getRealIp(),
             'HTTP_ACCEPT_LANGUAGE' => 'zh-CN,zh;q=0.9,en;q=0.8',
         ]);
+    }
+
+    private function databaseConfig(): array
+    {
+        $config = config('database.connections.mysql', []);
+        $host = (string) ($config['host'] ?? env('DB_HOST', '127.0.0.1'));
+        $port = (string) ($config['port'] ?? env('DB_PORT', '3306'));
+
+        return [
+            'server' => $port !== '' && $port !== '3306' ? $host . ':' . $port : $host,
+            'username' => (string) ($config['username'] ?? env('DB_USER', 'root')),
+            'password' => (string) ($config['password'] ?? env('DB_PASSWORD', '')),
+            'database' => (string) ($config['database'] ?? env('DB_NAME', '')),
+        ];
     }
 
     private function normalizeFiles(array|UploadFile|null $files): array

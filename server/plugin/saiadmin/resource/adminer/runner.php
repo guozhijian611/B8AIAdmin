@@ -39,9 +39,63 @@ namespace Adminer {
         $line = null;
         return false;
     }
+
 }
 
 namespace {
+    function adminer_object(): \Adminer\Adminer
+    {
+        return new class($GLOBALS['__saiadmin_database_config'] ?? []) extends \Adminer\Adminer {
+            private array $databaseConfig;
+
+            public function __construct(array $databaseConfig)
+            {
+                $this->databaseConfig = $databaseConfig;
+            }
+
+            public function credentials(): array
+            {
+                return [
+                    $this->databaseConfig['server'] ?? '127.0.0.1',
+                    $this->databaseConfig['username'] ?? 'root',
+                    $this->databaseConfig['password'] ?? '',
+                ];
+            }
+
+            public function database(): string
+            {
+                return (string) ($_GET['db'] ?? $this->databaseConfig['database'] ?? '');
+            }
+
+            public function login($username, $password)
+            {
+                $expectedUsername = (string) ($this->databaseConfig['username'] ?? '');
+                $expectedPassword = (string) ($this->databaseConfig['password'] ?? '');
+
+                if ($username !== $expectedUsername) {
+                    return '仅允许使用后台 .env 配置的数据库账号登录';
+                }
+
+                if ($password !== '' && $password !== $expectedPassword) {
+                    return '数据库密码与后台 .env 配置不一致';
+                }
+
+                return true;
+            }
+
+            public function loginFormField($field, $label, $input)
+            {
+                return match ($field) {
+                    'server' => $label . '<input name="auth[server]" value="' . \Adminer\h((string) ($this->databaseConfig['server'] ?? '127.0.0.1')) . '" readonly>',
+                    'username' => $label . '<input name="auth[username]" id="username" value="' . \Adminer\h((string) ($this->databaseConfig['username'] ?? 'root')) . '" readonly autocomplete="username">',
+                    'password' => $label . '<input type="password" name="auth[password]" value="" placeholder="已从后台 .env 读取" autocomplete="off">',
+                    'db' => $label . '<input name="auth[db]" value="' . \Adminer\h((string) ($this->databaseConfig['database'] ?? '')) . '" readonly>',
+                    default => parent::loginFormField($field, $label, $input),
+                } . "\n";
+            }
+        };
+    }
+
     $payload = json_decode(stream_get_contents(STDIN), true) ?: [];
     $metaFile = (string) ($payload['meta_file'] ?? '');
 
@@ -65,6 +119,7 @@ namespace {
     $_FILES = $payload['files'] ?? [];
     $_SERVER = array_merge($_SERVER, $payload['server'] ?? []);
     $_REQUEST = array_merge($_GET, $_POST, $_COOKIE);
+    $GLOBALS['__saiadmin_database_config'] = $payload['database_config'] ?? [];
 
     chdir(__DIR__);
     include __DIR__ . '/adminer-5.4.2-mysql.php';
