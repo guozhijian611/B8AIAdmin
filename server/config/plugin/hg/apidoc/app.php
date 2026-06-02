@@ -9,27 +9,9 @@ return [
         // （必须）设置文档的应用/版本
         'apps'           => [
             [
-                // （必须）标题
-                'title'=>'SaiAdmin 后台核心接口',
-                // （必须）控制器目录地址
-                'path'=>'plugin\saiadmin\app\controller',
-                // （必须）唯一的key
-                'key'=>'saiadmin-admin',
-            ],
-            [
-                'title'=>'AI 插件后台接口',
-                'path'=>'plugin\saiai\app\admin\controller',
-                'key'=>'saiai-admin',
-            ],
-            [
                 'title'=>'AI 插件移动端接口',
                 'path'=>'plugin\saiai\app\api\controller',
                 'key'=>'saiai-api',
-            ],
-            [
-                'title'=>'会员插件后台接口',
-                'path'=>'plugin\saiuser\app\admin\controller',
-                'key'=>'saiuser-admin',
             ],
             [
                 'title'=>'会员插件移动端接口',
@@ -37,29 +19,9 @@ return [
                 'key'=>'saiuser-api',
             ],
             [
-                'title'=>'支付插件后台接口',
-                'path'=>'plugin\saipay\app\admin\controller',
-                'key'=>'saipay-admin',
-            ],
-            [
                 'title'=>'支付插件移动端接口',
                 'path'=>'plugin\saipay\app\api\controller',
                 'key'=>'saipay-api',
-            ],
-            [
-                'title'=>'短信插件后台接口',
-                'path'=>'plugin\saisms\app\admin\controller',
-                'key'=>'saisms-admin',
-            ],
-            [
-                'title'=>'插件市场接口',
-                'path'=>'plugin\saipackage\app\controller',
-                'key'=>'saipackage-admin',
-            ],
-            [
-                'title'=>'代码生成接口',
-                'path'=>'plugin\saicode\app\controller',
-                'key'=>'saicode-admin',
             ]
         ],
         // （必须）指定通用注释定义的文件地址

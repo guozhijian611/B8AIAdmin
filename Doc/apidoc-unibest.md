@@ -38,20 +38,13 @@ php start.php reload
 
 ## APIDOC 扫描范围
 
-当前 `server/config/plugin/hg/apidoc/app.php` 已配置多个 app key：
+当前 `server/config/plugin/hg/apidoc/app.php` 默认只配置移动端相关 app key：
 
 | app key | 说明 | 控制器目录 |
 | --- | --- | --- |
-| `saiadmin-admin` | SaiAdmin 后台核心接口 | `plugin\saiadmin\app\controller` |
-| `saiai-admin` | AI 插件后台接口 | `plugin\saiai\app\admin\controller` |
 | `saiai-api` | AI 插件移动端接口 | `plugin\saiai\app\api\controller` |
-| `saiuser-admin` | 会员插件后台接口 | `plugin\saiuser\app\admin\controller` |
 | `saiuser-api` | 会员插件移动端接口 | `plugin\saiuser\app\api\controller` |
-| `saipay-admin` | 支付插件后台接口 | `plugin\saipay\app\admin\controller` |
 | `saipay-api` | 支付插件移动端接口 | `plugin\saipay\app\api\controller` |
-| `saisms-admin` | 短信插件后台接口 | `plugin\saisms\app\admin\controller` |
-| `saipackage-admin` | 插件市场接口 | `plugin\saipackage\app\controller` |
-| `saicode-admin` | 代码生成接口 | `plugin\saicode\app\controller` |
 
 ## Swagger/OpenAPI 导出地址
 
