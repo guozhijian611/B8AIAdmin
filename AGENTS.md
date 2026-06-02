@@ -1,7 +1,39 @@
 # B8AIadmin 开发框架项目规范
-1.总是使用中文回复用户
-2.每一次进行功能变更之后都要进行中文 commit，需要符合git规范。
+
+## 基本要求
+- 始终使用中文回复用户。
+- 每一次进行功能变更、文档变更或规范变更之后，都要提交中文 Git commit，commit message 需符合 Conventional Commits 规范。
+- 开始改动前先查看 `git status --short`，不要覆盖或回退用户已有改动。
+- 提交前只暂存本次任务相关文件，避免把无关改动带入 commit。
 
 ## 项目技术栈
-- php83,mysql80,node24,pnpm,uniapp,unibest,saiadmin,webman
-- 部署环境 宝塔面板
+- 后端：PHP 8.3、Webman、SaiAdmin、ThinkORM、MySQL 8.0。
+- 管理端：Node 24、pnpm、Vue 3、Art Design Pro、Element Plus。
+- 移动端：uni-app、unibest、pnpm。
+- 部署环境：宝塔面板。
+
+## 目录边界
+- `server/`：Webman/SaiAdmin 后端，Composer 命令和 PHP 校验默认在此目录执行。
+- `saiadmin-artd/`：SaiAdmin 管理端前端，pnpm 命令默认在此目录执行。
+- `uniapp/`：uni-app/unibest 移动端，pnpm 命令默认在此目录执行。
+- `packages/`：本仓库维护的扩展包或插件源码，修改后需确认是否通过 `server/vendor` 软链或 Composer 安装进入运行时。
+- `.codex/skills/`：本项目沉淀的开发技能和参考手册；涉及对应技术时优先读取相关 `SKILL.md`。
+- `Doc/`、`OpenAPI/`、`Database/`：项目文档、接口文档和数据库资料，更新时以实际路由、控制器、数据库结构或安装 SQL 为准。
+
+## 开发工作流
+- 先确认真实运行入口：Webman 插件以 `server/config/plugin/...`、`server/plugin/...`、`server/vendor/...` 和路由配置为准，不能只看复制来的参考目录。
+- 涉及 SaiAdmin/Webman、unibest、RabbitMQ、宝塔等任务时，先查看 `.codex/skills/` 中对应技能，再动手修改。
+- 对不确定的生产部署路径、数据库覆盖、安装 SQL、构建发布、队列消费、升级命令等高风险事项，必须先询问用户确认。
+- Webman 是常驻进程，修改 PHP、路由、插件配置后，验证前需要考虑 reload/restart。
+- 日志、调试页和请求记录默认要脱敏 Bearer、Cookie、token、secret 等敏感信息；如需放开，只能做成显式调试开关。
+
+## 验证要求
+- 后端 PHP 文件变更后，至少执行相关 `php -l`；路由或插件变更需结合 `php webman route:list`、相关命令帮助或运行时页面验证。
+- 管理端或移动端变更后，优先执行项目已有的类型检查、lint 或最小可行验证命令。
+- OpenAPI、数据库文档或生成文件变更后，要用实际源头复核：`route.php`、控制器、`information_schema`、`SHOW CREATE TABLE` 或生成器输出。
+- 如果某项验证无法执行，要在最终回复里说明原因和剩余风险。
+
+## Git 规范
+- Commit 使用中文 Conventional Commits，例如：`feat: 增加短信宝网关支持`、`docs: 更新项目协作规范`。
+- 提交前执行 `git diff --check`。
+- 如果工作区存在无关改动，只提交本次任务文件，并在回复中说明已保持隔离。
