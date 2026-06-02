@@ -60,6 +60,12 @@
         }
     },
     "scripts": {
+        "post-install-cmd": [
+            "support\\ComposerScripts::postInstall"
+        ],
+        "post-update-cmd": [
+            "support\\ComposerScripts::postInstall"
+        ],
         "post-package-install": [
             "support\\ComposerScripts::install"
         ],

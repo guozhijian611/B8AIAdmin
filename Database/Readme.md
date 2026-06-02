@@ -12,6 +12,9 @@
 所有命令默认在 `server/` 目录执行。
 
 ```bash
+# 首次安装向导：配置 .env、创建数据库、导入基线 SQL 并执行迁移
+php webman b8:install
+
 # 查看迁移状态
 php webman b8:migrate:status
 
@@ -42,11 +45,20 @@ vendor/bin/phinx rollback -c ../Database/phinx.php
 
 ## 新环境初始化流程
 
-1. 创建数据库并配置 `server/.env`。
-2. 导入 `Database/b8aiadmin.sql`。
-3. 在 `server/` 目录执行 `php webman b8:migrate`。
+1. 在 `server/` 目录执行 `composer install`。如果 `.env` 不存在，会自动从 `.env.example` 复制。
+2. 执行 `php webman b8:install`，按提示配置数据库。
+3. 安装向导会在目标库不存在时询问是否创建，空库会导入 `Database/b8aiadmin.sql`，然后执行 `php webman b8:migrate`。
 
 `b8aiadmin.sql` 是基线，Phinx 只负责基线之后的增量变更。
+
+如需手动安装，也可以按下面顺序执行：
+
+```bash
+cp server/.env.example server/.env
+# 编辑 server/.env 的 DB_* 配置
+mysql -u root -p b8aiadmin < Database/b8aiadmin.sql
+cd server && php webman b8:migrate
+```
 
 ## 迁移编写规范
 

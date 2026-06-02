@@ -26,9 +26,9 @@
 - 新建业务应用默认使用 SaiAdmin 插件模式，在 `server/` 目录执行 `php webman sai:plugin <插件名>` 创建插件骨架，再在 `server/plugin/<插件名>/app/admin` 与 `server/plugin/<插件名>/app/api` 下继续开发。
 - SaiAdmin 数据权限不是默认自动启用：`plugin\saiadmin\basic\think\BaseLogic` 默认 `protected bool $scope = false`。涉及后台业务数据隔离时，必须确认业务表具备 `created_by` 等审计字段，并在对应 Logic 中显式开启 `protected bool $scope = true;`。
 - 后端新增或修改控制器方法时，应同步补充 APIDOC 注解，至少说明接口标题、路径、请求方法、参数和返回结构，保证 `/apidoc/openapi/<app-key>` 可用于 unibest 自动生成接口。
-- 数据库变更默认使用 Phinx：首次安装先导入 `Database/b8aiadmin.sql` 作为基线，再在 `server/` 目录执行 `php webman b8:migrate`；后续升级只新增 `Database/migrations/` 迁移，不再新增独立 SQL patch。
+- 数据库变更默认使用 Phinx：`composer install` 后缺少 `.env` 时会自动从 `.env.example` 复制；首次安装优先在 `server/` 目录执行 `php webman b8:install` 配置数据库、导入 `Database/b8aiadmin.sql` 基线并执行迁移；后续升级只新增 `Database/migrations/` 迁移，不再新增独立 SQL patch。
 - 新增迁移必须支持回滚或明确说明不可逆原因；涉及菜单、权限、初始化数据时要写成幂等逻辑，并避免回滚误删用户原有数据。
-- 数据库迁移常用命令：`php webman b8:migrate:status`、`php webman b8:migrate --dry-run`、`php webman b8:migrate`、`php webman b8:migrate:rollback`、`php webman b8:migrate:create <Name>`。
+- 数据库迁移常用命令：`php webman b8:install`、`php webman b8:migrate:status`、`php webman b8:migrate --dry-run`、`php webman b8:migrate`、`php webman b8:migrate:rollback`、`php webman b8:migrate:create <Name>`。
 - 对不确定的生产部署路径、数据库覆盖、安装 SQL、构建发布、队列消费、升级命令等高风险事项，必须先询问用户确认。
 - 生产部署中自动执行数据库迁移必须通过显式开关启用，默认关闭；执行前需确认数据库备份、目标环境和回滚窗口。
 - Webman 是常驻进程，修改 PHP、路由、插件配置后，验证前需要考虑 reload/restart。
