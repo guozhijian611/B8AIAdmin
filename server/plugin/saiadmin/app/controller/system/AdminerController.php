@@ -38,6 +38,10 @@ class AdminerController extends BaseController
     #[Permission('Adminer 数据库管理', 'core:adminer:ticket')]
     public function ticket(Request $request): Response
     {
+        if (!$this->isAdminerEnabled()) {
+            return $this->fail('Adminer 数据库管理未启用');
+        }
+
         $ticket = bin2hex(random_bytes(32));
 
         Cache::set(self::CACHE_PREFIX . $ticket, [
@@ -61,6 +65,11 @@ class AdminerController extends BaseController
     #[Apidoc\Query('ticket', type: 'string', require: false, desc: '短时访问票据，首次打开时使用')]
     public function proxy(Request $request): Response
     {
+        if (!$this->isAdminerEnabled()) {
+            return response('<h1>403 Forbidden</h1><p>Adminer 数据库管理未启用。</p>', 403)
+                ->withHeader('Content-Type', 'text/html; charset=utf-8');
+        }
+
         $ticket = (string) ($request->get('ticket') ?: $request->cookie(self::TICKET_COOKIE, ''));
         if (!$this->validateTicket($ticket, $request)) {
             return response('<h1>403 Forbidden</h1><p>Adminer 访问票据无效或已过期，请从后台菜单重新打开。</p>', 403)
@@ -98,6 +107,11 @@ class AdminerController extends BaseController
 
         Cache::set($key, $payload, self::TICKET_TTL);
         return true;
+    }
+
+    private function isAdminerEnabled(): bool
+    {
+        return in_array(strtolower((string) env('ADMINER_ENABLED', 'false')), ['1', 'true', 'on', 'yes'], true);
     }
 
     private function runAdminer(Request $request, string $ticket): array
