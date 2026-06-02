@@ -24,6 +24,7 @@
 - 先确认真实运行入口：Webman 插件以 `server/config/plugin/...`、`server/plugin/...`、`server/vendor/...` 和路由配置为准，不能只看复制来的参考目录。
 - 涉及 SaiAdmin/Webman、unibest、RabbitMQ、宝塔等任务时，先查看 `.codex/skills/` 中对应技能，再动手修改。
 - 新建业务应用默认使用 SaiAdmin 插件模式，在 `server/` 目录执行 `php webman sai:plugin <插件名>` 创建插件骨架，再在 `server/plugin/<插件名>/app/admin` 与 `server/plugin/<插件名>/app/api` 下继续开发。
+- `php webman sai:plugin <插件名>` 只创建基础插件目录、配置和示例 API，不会自动生成业务 Controller/Logic/Model/Validate；新增后台业务时必须通过 SaiCode 生成 CRUD 或手动补齐 Validate，并在控制器构造函数中注入 `$this->validate`，在 `save`、`update` 等写接口调用 `$this->validate('<scene>', $data)`。
 - SaiAdmin 数据权限不是默认自动启用：`plugin\saiadmin\basic\think\BaseLogic` 默认 `protected bool $scope = false`。涉及后台业务数据隔离时，必须确认业务表具备 `created_by` 等审计字段，并在对应 Logic 中显式开启 `protected bool $scope = true;`。
 - 后端新增或修改控制器方法时，应同步补充 APIDOC 注解，至少说明接口标题、路径、请求方法、参数和返回结构，保证 `/apidoc/openapi/<app-key>` 可用于 unibest 自动生成接口。
 - 数据库变更默认使用 Phinx：`composer install` 后缺少 `.env` 时会自动从 `.env.example` 复制；首次安装优先在 `server/` 目录执行 `php webman b8:install` 配置数据库、导入 `Database/b8aiadmin.sql` 基线并执行迁移；后续升级只新增 `Database/migrations/` 迁移，不再新增独立 SQL patch。
