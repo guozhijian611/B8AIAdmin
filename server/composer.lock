@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "72055d005ff569b6692a87b704b9c22a",
+    "content-hash": "4734f54976298b4e3417501beec7e397",
     "packages": [
         {
             "name": "brick/math",
@@ -11166,6 +11166,58 @@
                 "source": "https://github.com/yansongda/supports"
             },
             "time": "2025-01-08T08:55:20+00:00"
+        },
+        {
+            "name": "zjkal/mysql-helper",
+            "version": "v1.0.9",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/zjkal/mysql-helper.git",
+                "reference": "9cfe762ec8d74e0a886562ccb59f2e2ac34b0918"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/zjkal/mysql-helper/zipball/9cfe762ec8d74e0a886562ccb59f2e2ac34b0918",
+                "reference": "9cfe762ec8d74e0a886562ccb59f2e2ac34b0918",
+                "shasum": ""
+            },
+            "require": {
+                "ext-mysqli": "*",
+                "php": ">=7.1"
+            },
+            "require-dev": {
+                "phpunit/phpunit": "@stable"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "zjkal\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "zjkal",
+                    "email": "zjkal@qq.com"
+                }
+            ],
+            "description": "一个便捷的MySQL导入导出的助手类库。 a mysql import and export helper library.",
+            "keywords": [
+                "export",
+                "helper",
+                "import",
+                "mysql",
+                "php",
+                "zjkal"
+            ],
+            "support": {
+                "issues": "https://github.com/zjkal/mysql-helper/issues",
+                "source": "https://github.com/zjkal/mysql-helper/tree/v1.0.9"
+            },
+            "time": "2024-12-05T11:51:10+00:00"
         },
         {
             "name": "zoujingli/ip2region",

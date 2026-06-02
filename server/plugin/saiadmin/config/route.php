@@ -94,6 +94,13 @@ Route::group('/core', function () {
     Route::post("/database/optimize", [\plugin\saiadmin\app\controller\system\DataBaseController::class, 'optimize']);
     Route::post("/database/fragment", [\plugin\saiadmin\app\controller\system\DataBaseController::class, 'fragment']);
 
+    // 数据库导入导出
+    Route::get("/database-backup/index", [\plugin\saiadmin\app\controller\system\DatabaseBackupController::class, 'index']);
+    Route::post("/database-backup/export", [\plugin\saiadmin\app\controller\system\DatabaseBackupController::class, 'export']);
+    Route::post("/database-backup/import", [\plugin\saiadmin\app\controller\system\DatabaseBackupController::class, 'import']);
+    Route::post("/database-backup/download", [\plugin\saiadmin\app\controller\system\DatabaseBackupController::class, 'download']);
+    Route::delete("/database-backup/delete", [\plugin\saiadmin\app\controller\system\DatabaseBackupController::class, 'delete']);
+
 });
 
 Route::group('/tool', function () {
