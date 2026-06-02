@@ -27,6 +27,10 @@
   },
   "scripts": {
     "openapi": "openapi-ts",
+    "openapi:saiuser": "openapi-ts -u saiuser-api",
+    "openapi:saiai": "openapi-ts -u saiai-api",
+    "openapi:saipay": "openapi-ts -u saipay-api",
+    "openapi:mobile": "pnpm openapi:saiuser && pnpm openapi:saiai && pnpm openapi:saipay",
     "init-husky": "git init && husky",
     "init-baseFiles": "node ./scripts/create-base-files.js",
     "prepare": "pnpm init-husky & pnpm init-baseFiles",

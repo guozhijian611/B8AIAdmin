@@ -42,7 +42,9 @@
         "guozhijian611/thinkorm-log": "dev-main",
         "webman/redis-queue": "^2.1",
         "workbunny/webman-rabbitmq": "^3.0",
-        "openb8/webman-otel-trace": "dev-main"
+        "openb8/webman-otel-trace": "dev-main",
+        "hg/apidoc": "^5.3",
+        "hg/apidoc-export": "^1.0"
     },
     "suggest": {
         "ext-event": "For better performance. "

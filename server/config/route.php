@@ -14,8 +14,4 @@
 
 use Webman\Route;
 
-
-
-
-
-
+Route::get('/apidoc/openapi/{appKey}', [app\controller\ApidocOpenapiController::class, 'show']);
