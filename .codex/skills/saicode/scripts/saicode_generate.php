@@ -9,7 +9,9 @@
  *   php saicode_generate.php load --table=表名 [--source=mysql]            — 装载数据表
  *   php saicode_generate.php config --id=表ID --namespace=xx --package=xx  — 配置生成选项
  *   php saicode_generate.php columns --id=表ID                             — 查看/修改字段配置
+ *   php saicode_generate.php sync --id=表ID                                — 同步数据库字段到已装载记录
  *   php saicode_generate.php preview --id=表ID                             — 预览生成的代码
+ *   php saicode_generate.php zip --ids=1,2 [--output=code.zip]             — 生成 ZIP 下载包
  *   php saicode_generate.php generate --id=表ID                            — 生成代码到模块
  *   php saicode_generate.php all --table=表名 --namespace=xx --package=xx  — 一键全流程
  * 
@@ -45,7 +47,7 @@ switch ($command) {
         cmdMenus($args);
         break;
     case 'load':
-        cmdLoad($args);
+        exit(cmdLoad($args) > 0 ? 0 : 1);
         break;
     case 'config':
         cmdConfig($args);
@@ -56,8 +58,14 @@ switch ($command) {
     case 'relation':
         cmdRelation($args);
         break;
+    case 'sync':
+        cmdSync($args);
+        break;
     case 'preview':
         cmdPreview($args);
+        break;
+    case 'zip':
+        cmdZip($args);
         break;
     case 'generate':
         cmdGenerate($args);
@@ -167,11 +175,11 @@ function cmdLoad(array $args): int
 
     if (empty($tableName)) {
         fwrite(STDERR, "错误: 缺少 --table 参数\n");
-        return 1;
+        return 0;
     }
 
     // 检查表是否已装载
-    $existing = Table::where('table_name', $tableName)->findOrEmpty();
+    $existing = Table::where('table_name', $tableName)->where('source', $source)->findOrEmpty();
     if (!$existing->isEmpty()) {
         echo "表 {$tableName} 已存在 (ID: {$existing->id})，跳过装载\n";
         return (int)$existing->id;
@@ -187,7 +195,7 @@ function cmdLoad(array $args): int
     }
     if (empty($list)) {
         fwrite(STDERR, "错误: 数据表 {$tableName} 不存在于数据源 {$source}\n");
-        return 1;
+        return 0;
     }
     $tableInfo = [
         'name' => $list[0]['Name'],
@@ -222,19 +230,24 @@ function cmdConfig(array $args): void
 
     $updateData = [];
     $configFields = [
+        'table_comment'  => '表描述',
+        'class_name'     => '实体类名',
+        'business_name'  => '业务名称',
+        'source'         => '数据源',
         'namespace'      => '应用名称',
         'package_name'   => '功能模块',
         'template'       => '应用类型(app/plugin)',
+        'stub'           => '模型类型(think/eloquent)',
         'tpl_category'   => '模板类型(single/tree)',
         'generate_menus' => '生成功能',
         'generate_path'  => '前端项目目录',
         'belong_menu_id' => '上级菜单ID',
         'menu_name'      => '菜单名称',
-        'business_name'  => '业务名称',
-        'component_type' => '组件类型(1=弹窗/2=抽屉/3=标签页)',
+        'component_type' => '组件类型(1=弹窗/2=抽屉)',
         'form_width'     => '表单弹窗宽度',
         'is_full'        => '是否全屏(1=否/2=是)',
         'span'           => '表单栅格宽度(1-24)',
+        'remark'         => '备注',
     ];
 
     // 处理 package 缩写参数
@@ -252,18 +265,41 @@ function cmdConfig(array $args): void
         }
     }
 
+    $treeFields = [
+        'tree_id' => '树主ID',
+        'tree_parent_id' => '树父ID',
+        'tree_name' => '树名称字段',
+    ];
+    $options = $table->options ?: [];
+    foreach ($treeFields as $field => $label) {
+        if (isset($args[$field]) && $args[$field] !== '') {
+            $options[$field] = $args[$field];
+        }
+    }
+    if ($options !== ($table->options ?: [])) {
+        $updateData['options'] = json_encode($options, JSON_UNESCAPED_UNICODE);
+    }
+
     if (empty($updateData)) {
         echo "当前配置:\n";
         foreach ($configFields as $field => $label) {
             echo "  {$label} ({$field}): " . ($table->$field ?? '-') . "\n";
         }
+        if (!empty($options)) {
+            echo "  扩展配置 (options): " . json_encode($options, JSON_UNESCAPED_UNICODE) . "\n";
+        }
         echo "\n使用 --字段名=值 修改配置\n";
+        echo "树表配置示例: --tpl_category=tree --tree_id=id --tree_parent_id=parent_id --tree_name=name\n";
         return;
     }
 
     Table::where('id', $id)->update($updateData);
     echo "✅ 配置已更新:\n";
     foreach ($updateData as $field => $value) {
+        if ($field === 'options') {
+            echo "  扩展配置 (options): {$value}\n";
+            continue;
+        }
         $label = $configFields[$field] ?? $field;
         echo "  {$label}: {$value}\n";
     }
@@ -289,6 +325,45 @@ function cmdPreview(array $args): void
         echo str_repeat('=', 60) . "\n";
         echo $item['code'] . "\n";
     }
+}
+
+/**
+ * 生成 ZIP 下载包。
+ */
+function cmdZip(array $args): void
+{
+    $ids = $args['ids'] ?? $args['id'] ?? '';
+    if (empty($ids)) {
+        fwrite(STDERR, "错误: 缺少 --ids 或 --id 参数\n");
+        exit(1);
+    }
+
+    $idsArr = array_values(array_filter(array_map('trim', explode(',', (string)$ids))));
+    if (empty($idsArr)) {
+        fwrite(STDERR, "错误: --ids 不能为空\n");
+        exit(1);
+    }
+
+    $logic = new TableLogic();
+    $result = $logic->generate($idsArr);
+    $zipPath = $result['download'] ?? '';
+    if (empty($zipPath) || !is_file($zipPath)) {
+        fwrite(STDERR, "错误: ZIP 文件生成失败\n");
+        exit(1);
+    }
+
+    $output = $args['output'] ?? '';
+    if (!empty($output)) {
+        $target = resolveOutputPath($output);
+        if (!is_dir(dirname($target))) {
+            mkdir(dirname($target), 0777, true);
+        }
+        copy($zipPath, $target);
+        echo "✅ ZIP 已生成: {$target}\n";
+        return;
+    }
+
+    echo "✅ ZIP 已生成: {$zipPath}\n";
 }
 
 /**
@@ -326,7 +401,7 @@ function cmdColumns(array $args): void
         foreach (explode(',', $setParts[1]) as $pair) {
             $kv = explode('=', $pair, 2);
             if (count($kv) === 2) {
-                $attrs[$kv[0]] = $kv[1];
+                $attrs[$kv[0]] = normalizeColumnValue($kv[0], $kv[1]);
             }
         }
         $col = Column::where('table_id', $id)->where('column_name', $colName)->findOrEmpty();
@@ -336,6 +411,47 @@ function cmdColumns(array $args): void
         }
         Column::where('id', $col->id)->update($attrs);
         echo "✅ 字段 {$colName} 已更新: " . json_encode($attrs, JSON_UNESCAPED_UNICODE) . "\n";
+        return;
+    }
+
+    // 如果字段配置值本身是 JSON，使用 --set-json 避免普通 --set 被逗号拆分。
+    // 格式: --set-json=column_name:options={"height":400}
+    if (isset($args['set-json'])) {
+        $setParts = explode(':', $args['set-json'], 2);
+        if (count($setParts) !== 2) {
+            fwrite(STDERR, "错误: --set-json 格式为 字段名:属性=JSON\n");
+            fwrite(STDERR, "示例: --set-json=content:options='{\"height\":400}'\n");
+            exit(1);
+        }
+
+        $colName = $setParts[0];
+        $kv = explode('=', $setParts[1], 2);
+        if (count($kv) !== 2) {
+            fwrite(STDERR, "错误: --set-json 格式为 字段名:属性=JSON\n");
+            exit(1);
+        }
+
+        [$attr, $json] = $kv;
+        if (!in_array($attr, ['options', 'query_options'], true)) {
+            fwrite(STDERR, "错误: --set-json 仅支持 options 或 query_options\n");
+            exit(1);
+        }
+
+        $decoded = json_decode($json, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            fwrite(STDERR, "错误: JSON 解析失败 - " . json_last_error_msg() . "\n");
+            exit(1);
+        }
+
+        $col = Column::where('table_id', $id)->where('column_name', $colName)->findOrEmpty();
+        if ($col->isEmpty()) {
+            fwrite(STDERR, "错误: 未找到字段 {$colName}\n");
+            exit(1);
+        }
+
+        $attrs = [$attr => json_encode($decoded, JSON_UNESCAPED_UNICODE | JSON_NUMERIC_CHECK)];
+        Column::where('id', $col->id)->update($attrs);
+        echo "✅ 字段 {$colName} 已更新: " . json_encode([$attr => $decoded], JSON_UNESCAPED_UNICODE) . "\n";
         return;
     }
 
@@ -363,8 +479,27 @@ function cmdColumns(array $args): void
             . str_pad($yn($c['is_required']), 5)
             . ($c['query_type'] ?? '-') . "\n";
     }
-    echo "\n可修改属性: view_type, dict_type, is_insert(1/2), is_edit(1/2), is_list(1/2), is_query(1/2), is_required(1/2), query_type\n";
+    echo "\n可修改属性: column_comment, column_width, default_value, view_type, dict_type, table_field, span, list_sort, form_sort, query_component, query_dict, query_span, query_sort, is_insert(1/2), is_edit(1/2), is_list(1/2), is_query(1/2), is_required(1/2), is_sort(1/2), query_type\n";
     echo "修改示例: --set=status:view_type=select,dict_type=data_status\n";
+    echo "JSON 修改示例: --set-json=cover:options='{\"multiple\":false,\"limit\":1}'\n";
+}
+
+/**
+ * 同步数据库字段信息。
+ */
+function cmdSync(array $args): void
+{
+    $id = $args['id'] ?? '';
+    if (empty($id)) {
+        fwrite(STDERR, "错误: 缺少 --id 参数\n");
+        exit(1);
+    }
+
+    $logic = new TableLogic();
+    $logic->sync($id);
+
+    echo "✅ 字段同步完成 (table_id={$id})\n";
+    echo "提示: 同步会重读数据库字段，字段类型未变化的手动配置会尽量保留\n";
 }
 
 /**
@@ -685,6 +820,38 @@ function parseArgs(array $argv): array
     return $result;
 }
 
+function normalizeColumnValue(string $field, string $value): mixed
+{
+    if (in_array($field, [
+        'column_width',
+        'is_pk',
+        'is_required',
+        'is_insert',
+        'is_edit',
+        'is_list',
+        'is_query',
+        'is_sort',
+        'list_sort',
+        'span',
+        'form_sort',
+        'query_span',
+        'query_sort',
+    ], true)) {
+        return is_numeric($value) ? (int)$value : $value;
+    }
+
+    return $value;
+}
+
+function resolveOutputPath(string $path): string
+{
+    if (str_starts_with($path, DIRECTORY_SEPARATOR)) {
+        return $path;
+    }
+
+    return getcwd() . DIRECTORY_SEPARATOR . $path;
+}
+
 function printUsage(): void
 {
     echo <<<USAGE
@@ -700,10 +867,13 @@ SaiCode CLI 代码生成脚本
   config  --id=表ID                 查看/修改生成配置
   columns --id=表ID                 查看已装载表的字段配置
   columns --id=表ID --set=字段:k=v  修改字段属性
+  columns --id=表ID --set-json=字段:options=JSON
   relation --id=表ID                查看关联配置
   relation --id=表ID --add ...      添加模型关联
   relation --id=表ID --del=名称     删除模型关联
+  sync    --id=表ID                 同步数据库字段到已装载记录
   preview --id=表ID                 预览生成的代码
+  zip     --ids=1,2                 生成 ZIP 下载包
   generate --id=表ID                生成代码到模块(文件+菜单)
   rollback --id=表ID                撤回生成(删除文件+菜单)
   rollback --id=表ID --clean        撤回并清理 saicode 记录
@@ -711,16 +881,20 @@ SaiCode CLI 代码生成脚本
 
 通用选项:
   --source=mysql                    数据源名称 (默认: mysql)
-  --namespace=saiadmin              应用名称
+  --namespace=saiuser               应用名称
   --package=system                  功能模块分组
   --template=plugin                 应用类型: app 或 plugin (默认: app)
   --generate_path=saiadmin-artd     前端项目目录名 (默认: saiadmin-artd)
   --belong_menu_id=80               上级菜单ID (默认: 80)
   --generate_menus=index,save,...   生成的功能列表
   --tpl_category=single             模板类型: single 或 tree
-  --component_type=1                组件类型: 1=弹窗 2=抽屉 3=标签页
+  --tree_id=id                      树表主ID字段
+  --tree_parent_id=parent_id        树表父ID字段
+  --tree_name=name                  树表名称字段
+  --component_type=1                组件类型: 1=弹窗 2=抽屉
   --form_width=600                  表单弹窗宽度(px)
   --menu_name=菜单名                菜单显示名称(默认用表注释)
+  --output=code.zip                 zip 命令输出路径
 
 示例:
   # 先查看菜单树，确定上级菜单ID
@@ -735,6 +909,9 @@ SaiCode CLI 代码生成脚本
   php saicode_generate.php config --id=1 --namespace=saiuser --package=member --template=plugin
   php saicode_generate.php columns --id=1
   php saicode_generate.php columns --id=1 --set=status:view_type=select,dict_type=data_status
+  php saicode_generate.php columns --id=1 --set-json=cover:options='{"multiple":false,"limit":1}'
+  php saicode_generate.php sync --id=1
+  php saicode_generate.php zip --ids=1 --output=runtime/saicode-member.zip
   php saicode_generate.php relation --id=1 --add --type=belongsTo --name=level --model=MemberLevel --localKey=member_level_id --foreignKey=id
   php saicode_generate.php generate --id=1
 
