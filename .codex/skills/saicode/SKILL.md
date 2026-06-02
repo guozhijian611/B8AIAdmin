@@ -7,6 +7,141 @@ description: SaiAdmin 低代码生成插件使用指南，覆盖 Web 端装载�
 
 SaiCode 是 SaiAdmin 的 Web 端低代码生成插件，主要入口在管理后台页面，CLI 脚本只是给 Agent 做批量、复现和自动化辅助。处理 SaiCode 任务时，优先以真实 Web 端流程和插件运行时代码为准，不要只根据脚本推断能力。
 
+## 需求到 CRUD 的自动全流程
+
+当用户只输入“我想做一个 XXX 管理”这类业务想法时，不能直接调用 SaiCode。SaiCode 的前提是数据库表已经存在，因此自动全流程必须按下面顺序推进：
+
+```
+需求澄清 -> 表结构方案 -> Phinx 建表迁移 -> dry-run -> migrate -> SaiCode 装载表 -> Web/CLI 配置 -> 预览 -> 生成到项目 -> 验证
+```
+
+高风险边界：
+
+- 可以自动整理表结构方案、生成迁移文件、运行 `php -l`、运行 `php webman b8:migrate:status` 和 `php webman b8:migrate --dry-run`。
+- 真正执行 `php webman b8:migrate`、覆盖已有表、生产库迁移、生成到项目文件前，必须确认目标环境、数据库备份和用户意图。
+- 用户没有指定插件名、菜单归属、是否需要数据权限、是否需要移动端 API 时，先根据项目上下文推断；推断风险高时问用户。
+
+### 1. 从需求拆表
+
+先把自然语言需求整理为一份表结构方案，至少包含：
+
+| 项目 | 说明 |
+| --- | --- |
+| 业务实体 | 例如反馈、工单、分类、标签、订单 |
+| 表名 | 小写蛇形，避免和 `sa_system_*`、`saicode_*`、`sa_tool_*` 冲突 |
+| 表注释 | 中文业务名称，用于 SaiCode 菜单和页面理解 |
+| 字段 | 字段名、类型、是否必填、默认值、注释 |
+| 关系 | 一对多、多对多、外键字段、关联显示字段 |
+| 权限 | 是否需要 `created_by` 数据权限 |
+| 索引 | 外键、状态、时间、唯一约束 |
+| SaiCode 目标 | `namespace`、`package_name`、`business_name`、上级菜单 |
+
+默认建表约定参考 `Database/Readme.md` 的「需求驱动建表约定」和 `Doc/database-schema-standard.md` 的全局约定。
+
+### 2. 建表默认规则
+
+常规后台 CRUD 表默认包含：
+
+| 字段 | 规则 |
+| --- | --- |
+| `id` | `int unsigned auto_increment` 主键 |
+| `created_by` | `int DEFAULT NULL`，用于审计和“仅本人”数据权限 |
+| `updated_by` | `int DEFAULT NULL` |
+| `create_time` | `datetime DEFAULT NULL` |
+| `update_time` | `datetime DEFAULT NULL` |
+| `delete_time` | `datetime DEFAULT NULL`，软删除 |
+
+字段命名要服务 SaiCode 推断：
+
+- 名称/标题字段用 `name`、`title`、`*_name`，方便自动设置 `like` 搜索。
+- 图片字段包含 `image`，文件字段包含 `file` 或 `attach`，方便自动设置上传组件。
+- `status` 默认 `tinyint unsigned NOT NULL DEFAULT 1`，注释写清 `1正常 2停用` 等枚举。
+- `is_*` 字段默认 `tinyint unsigned NOT NULL DEFAULT 2`，约定 `1是 2否`。
+- `sort` 默认 `int unsigned NOT NULL DEFAULT 100`。
+- 金额用 `decimal`，不要用 float。
+- 外键字段用 `<entity>_id`，并在 SaiCode 关联配置中配合 `table_field` 显示关联名称。
+
+可例外的表：
+
+- 纯关联表可以只保留 `id`、两侧外键和必要唯一索引，不一定需要软删除。
+- 日志/流水表通常不更新，不一定需要 `updated_by`，但要明确归属字段和时间字段。
+- 外部同步镜像表按第三方数据结构建模，但必须在说明中标注来源和同步策略。
+
+### 3. 表规格 JSON
+
+Agent 可先生成一份 JSON 表规格，再由脚本生成 Phinx 迁移。示例：
+
+```
+.codex/skills/saicode/templates/table_spec.example.json
+```
+
+核心字段：
+
+| 字段 | 说明 |
+| --- | --- |
+| `table` | 表名，小写蛇形 |
+| `comment` | 表注释 |
+| `class` | 迁移类名，可省略 |
+| `audit` | 是否自动补 `created_by`、`updated_by`、`create_time`、`update_time`，默认 true |
+| `soft_delete` | 是否自动补 `delete_time`，默认 true |
+| `fields` | 业务字段数组 |
+| `indexes` | 索引数组 |
+
+字段类型使用 Phinx 类型或常见别名：`string`/`varchar`、`text`、`integer`/`int`、`tinyint`、`biginteger`/`bigint`、`decimal`、`datetime`、`date`、`boolean`。
+
+### 4. 生成 Phinx 迁移
+
+脚本位置：
+
+```
+.codex/skills/saicode/scripts/create_table_migration.php
+```
+
+预览迁移内容：
+
+```bash
+php .codex/skills/saicode/scripts/create_table_migration.php \
+  --spec=.codex/skills/saicode/templates/table_spec.example.json \
+  --dry-run
+```
+
+生成迁移文件：
+
+```bash
+php .codex/skills/saicode/scripts/create_table_migration.php \
+  --spec=/path/to/table-spec.json
+```
+
+脚本会写入 `Database/migrations/`，生成的迁移具备：
+
+- 表存在时 `up()` 自动跳过。
+- 新建成功后写入 `phinx_migration_meta` 标记。
+- `down()` 只在确认该迁移实际创建过表时删除，避免误删已有表。
+
+迁移验证：
+
+```bash
+cd server
+php webman b8:migrate:status
+php webman b8:migrate --dry-run
+```
+
+确认后再执行：
+
+```bash
+php webman b8:migrate
+```
+
+### 5. 迁移后进入 SaiCode
+
+表创建完成后才进入 SaiCode：
+
+1. 用 Web 端「装载」或 CLI `load --table=<table>` 装载表。
+2. 配置 `template`、`namespace`、`package_name`、`business_name`、`belong_menu_id`。
+3. 根据表设计配置字段、表单、搜索、关联。
+4. 先 `preview` 或 ZIP，确认生成代码。
+5. 再生成到项目并执行后端/前端验证。
+
 ## 真实入口
 
 后端插件目录：
@@ -493,14 +628,15 @@ php ../.codex/skills/saicode/scripts/saicode_generate.php rollback --id=1 --clea
 
 1. 用户要的是 Web 端配置、脚本自动化、模板改造，还是生成某个业务 CRUD。
 2. 先查 `git status --short`，隔离用户已有改动。
-3. 如果生成到插件，确认插件目录已存在；新插件先用 `php webman sai:plugin <name>`。
-4. 确认目标表已存在，字段具备主键；涉及数据权限时确认 `created_by` 等审计字段。
-5. 用 Web 端或 `menus` 命令确认 `belong_menu_id`，不要猜。
-6. 生成前先预览或 ZIP；只有确认 debug、路径、菜单归属后才生成到项目。
-7. 生成后跑 PHP 语法检查；必要时 reload Webman。
-8. 检查前端 API 路径和菜单组件路径是否匹配。
-9. 如修改模板或脚本，验证脚本帮助、PHP 语法和至少一个非破坏性命令。
-10. 本仓库规范要求功能/文档/规范变更后提交中文 Conventional Commit。
+3. 如果用户只有自然语言需求，先拆实体、字段、索引和权限边界，并生成 Phinx 建表迁移；不要跳过数据库建表阶段直接进 SaiCode。
+4. 如果生成到插件，确认插件目录已存在；新插件先用 `php webman sai:plugin <name>`。
+5. 确认目标表已存在，字段具备主键；涉及数据权限时确认 `created_by` 等审计字段。
+6. 用 Web 端或 `menus` 命令确认 `belong_menu_id`，不要猜。
+7. 生成前先预览或 ZIP；只有确认 debug、路径、菜单归属后才生成到项目。
+8. 生成后跑 PHP 语法检查；必要时 reload Webman。
+9. 检查前端 API 路径和菜单组件路径是否匹配。
+10. 如修改模板或脚本，验证脚本帮助、PHP 语法和至少一个非破坏性命令。
+11. 本仓库规范要求功能/文档/规范变更后提交中文 Conventional Commit。
 
 ## 常见坑
 

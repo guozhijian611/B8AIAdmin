@@ -71,6 +71,79 @@ cd server && php webman b8:migrate
 - 不再新增独立 SQL patch；需要升级环境执行的数据库变更统一写成 Phinx 迁移。
 - 生产或测试环境执行迁移前，先备份数据库并执行 `php webman b8:migrate:status` 确认状态。
 
+## 需求驱动建表约定
+
+当用户只提供业务想法或自然语言需求时，先产出表结构方案，再创建迁移。不要直接进入 SaiCode 生成。
+
+### 1. 表命名
+
+- 业务表统一使用小写蛇形命名。
+- 插件业务表建议带插件或业务前缀，例如 `demo_feedback`、`saiuser_member_tag`。
+- 不要新建与 `sa_system_*`、`saicode_*`、`sa_tool_*` 等框架元数据冲突的表名。
+- 多对多关系表建议使用两个主体名组合，例如 `demo_post_tag`，并保留独立 `id` 主键。
+
+### 2. 必备字段
+
+常规后台 CRUD 表默认包含：
+
+| 字段 | 建议类型 | 说明 |
+| --- | --- | --- |
+| `id` | `int unsigned auto_increment` | 主键 |
+| `created_by` | `int DEFAULT NULL` | 创建者，数据权限和审计使用 |
+| `updated_by` | `int DEFAULT NULL` | 更新者 |
+| `create_time` | `datetime DEFAULT NULL` | 创建时间 |
+| `update_time` | `datetime DEFAULT NULL` | 更新时间 |
+| `delete_time` | `datetime DEFAULT NULL` | 软删除 |
+
+如果是纯关联表、日志表、导入临时表或外部同步镜像表，可以省略审计/软删除字段，但需要在迁移或最终说明中写明原因。
+
+### 3. 字段语义
+
+- `status` 默认使用 `tinyint unsigned NOT NULL DEFAULT 1`，注释写清枚举，例如 `状态：1正常 2停用`。
+- `is_*` 是否类字段默认使用 `tinyint unsigned NOT NULL DEFAULT 2`，约定 `1是 2否`。
+- `sort` 默认使用 `int unsigned NOT NULL DEFAULT 100`。
+- 金额使用 `decimal(10,2)` 或按业务明确精度，不用浮点保存金额。
+- 图片字段优先命名为 `image` / `cover_image` / `avatar`，文件字段优先命名为 `file` / `attachment`，便于 SaiCode 推断上传控件。
+- 标题、名称字段优先使用 `title` / `name` / `*_name`，便于 SaiCode 推断模糊搜索。
+- 外键字段使用 `<主体>_id`，例如 `category_id`、`member_id`。
+- 敏感字段如手机号、邮箱、token、secret、password_hash 必须在注释和代码中体现脱敏或安全约束。
+
+### 4. 索引和唯一约束
+
+- 高频筛选字段需要索引：`status`、`created_by`、`create_time`、`delete_time`、外键字段。
+- 唯一业务编号、手机号、邮箱、第三方 openid 等需要唯一索引时，必须确认是否允许软删除后重复。
+- 组合唯一索引要按业务唯一性声明，例如同一会员同一标签只允许一条：`member_id + tag_id`。
+
+### 5. 自动化脚手架
+
+可先把需求整理成表规格 JSON，再生成 Phinx 迁移：
+
+```bash
+php .codex/skills/saicode/scripts/create_table_migration.php \
+  --spec=.codex/skills/saicode/templates/table_spec.example.json \
+  --dry-run
+```
+
+生成真实迁移文件：
+
+```bash
+php .codex/skills/saicode/scripts/create_table_migration.php \
+  --spec=/path/to/table.json
+```
+
+该脚本只生成迁移，不执行数据库变更。生成后仍需在 `server/` 目录执行：
+
+```bash
+php webman b8:migrate:status
+php webman b8:migrate --dry-run
+```
+
+确认无误后再执行：
+
+```bash
+php webman b8:migrate
+```
+
 ## 部署建议
 
 数据库迁移属于高风险操作，不建议随 Webman 进程启动自动执行。部署脚本如需自动迁移，应使用显式开关：
