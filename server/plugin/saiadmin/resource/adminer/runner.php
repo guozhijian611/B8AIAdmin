@@ -40,6 +40,11 @@ namespace Adminer {
         return false;
     }
 
+    function session_start(array $options = []): bool
+    {
+        return @\session_start($options);
+    }
+
 }
 
 namespace {
