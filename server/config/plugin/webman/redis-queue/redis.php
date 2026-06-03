@@ -1,13 +1,13 @@
 <?php
 return [
     'default' => [
-        'host' => 'redis://127.0.0.1:6379',
+        'host' => 'redis://' . env('REDIS_HOST', '127.0.0.1') . ':' . env('REDIS_PORT', 6379),
         'options' => [
-            'auth' => null,
-            'db' => 0,
-            'prefix' => '',
-            'max_attempts'  => 5,
-            'retry_seconds' => 5,
+            'auth' => env('REDIS_PASSWORD', ''),
+            'db' => (int) env('REDIS_DB', 0),
+            'prefix' => env('REDIS_QUEUE_PREFIX', ''),
+            'max_attempts'  => (int) env('REDIS_QUEUE_MAX_ATTEMPTS', 5),
+            'retry_seconds' => (int) env('REDIS_QUEUE_RETRY_SECONDS', 5),
         ],
         // Connection pool, supports only Swoole or Swow drivers.
         'pool' => [
