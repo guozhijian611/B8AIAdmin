@@ -9,6 +9,7 @@ namespace plugin\saiadmin\process\queue;
 use Bunny\Message as BunnyMessage;
 use plugin\saiadmin\app\model\tool\QueueConfig;
 use plugin\saiadmin\app\service\queue\QueueExecutorService;
+use plugin\saiadmin\app\service\queue\QueueProcessConfigService;
 use plugin\saiadmin\exception\ApiException;
 use Workbunny\WebmanRabbitMQ\Builders\QueueBuilder;
 use Workbunny\WebmanRabbitMQ\Connection\Channel;
@@ -26,6 +27,8 @@ class RabbitmqQueueConsumer extends QueueBuilder
 
     public function __construct(int $configId)
     {
+        QueueProcessConfigService::initializeOpenTelemetryContextStorage();
+
         $this->configId = $configId;
         $config = QueueConfig::findOrEmpty($configId);
         if ($config->isEmpty() || $config->driver !== 'rabbitmq') {

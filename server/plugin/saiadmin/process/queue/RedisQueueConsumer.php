@@ -8,6 +8,7 @@ namespace plugin\saiadmin\process\queue;
 
 use plugin\saiadmin\app\model\tool\QueueConfig;
 use plugin\saiadmin\app\service\queue\QueueExecutorService;
+use plugin\saiadmin\app\service\queue\QueueProcessConfigService;
 use support\Context;
 use Webman\RedisQueue\Client;
 
@@ -22,6 +23,8 @@ class RedisQueueConsumer
 
     public function onWorkerStart(): void
     {
+        QueueProcessConfigService::initializeOpenTelemetryContextStorage();
+
         $config = QueueConfig::findOrEmpty($this->configId);
         if ($config->isEmpty() || (int) $config->status !== 1 || $config->driver !== 'redis') {
             echo "Redis queue config {$this->configId} not available" . PHP_EOL;

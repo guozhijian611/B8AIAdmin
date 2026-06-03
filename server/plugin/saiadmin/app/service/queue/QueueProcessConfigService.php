@@ -35,6 +35,7 @@ class QueueProcessConfigService
     private static function build(string $driver, string $handler): array
     {
         try {
+            self::initializeOpenTelemetryContextStorage();
             self::initializeThinkOrm();
             $rows = Db::table('sa_tool_queue_config')
                 ->where('driver', $driver)
@@ -63,6 +64,29 @@ class QueueProcessConfigService
         }
 
         return $processes;
+    }
+
+    public static function initializeOpenTelemetryContextStorage(): void
+    {
+        if (!config('plugin.openb8.webman-otel-trace.app.context.force_global_storage_without_ffi', true)) {
+            return;
+        }
+
+        if (extension_loaded('ffi')) {
+            return;
+        }
+
+        if (!class_exists(\OpenTelemetry\Context\Context::class)
+            || !class_exists(\OpenTelemetry\Context\ContextStorage::class)
+        ) {
+            return;
+        }
+
+        try {
+            \OpenTelemetry\Context\Context::setStorage(new \OpenTelemetry\Context\ContextStorage());
+        } catch (\Throwable) {
+            // OpenTelemetry is optional; queue process generation must not fail because of tracing setup.
+        }
     }
 
     private static function initializeThinkOrm(): void
