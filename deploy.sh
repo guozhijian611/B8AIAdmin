@@ -43,6 +43,7 @@ H5_PUBLIC_BASE="${H5_PUBLIC_BASE:-/h5/}"
 DRY_RUN="${DRY_RUN:-}"
 FIX_PERMS="${FIX_PERMS:-1}"
 RESTART_WEBMAN="${RESTART_WEBMAN:-1}"
+CHECK_WEBMAN_DISABLED_FUNCTIONS="${CHECK_WEBMAN_DISABLED_FUNCTIONS:-1}"
 if [[ -t 0 ]]; then
   INTERACTIVE="${INTERACTIVE:-1}"
 else
@@ -159,6 +160,7 @@ echo "uniapp H5 基础路径：${H5_PUBLIC_BASE}"
 echo "预览模式：${DRY_RUN}"
 echo "修复权限：${FIX_PERMS}"
 echo "重启 Webman：${RESTART_WEBMAN}"
+echo "检查 Webman 禁用函数：${CHECK_WEBMAN_DISABLED_FUNCTIONS}"
 echo "远程禁用 OpenTelemetry 自动埋点：${REMOTE_OTEL_DISABLED_INSTRUMENTATIONS}"
 echo "OpenTelemetry 提醒：服务端 PHP 如需上报链路或指标，需要安装并启用 opentelemetry 扩展。"
 echo "同步 storage：增量同步 ${SERVER_DIR}/public/storage -> ${REMOTE_STORAGE_DIR}（不删除远程已有文件）"
@@ -181,6 +183,23 @@ require_command rsync
 
 if [[ "$SYNC_DB" == "1" && "$DRY_RUN" != "1" ]]; then
   require_command mysqldump
+fi
+
+if [[ "$CHECK_WEBMAN_DISABLED_FUNCTIONS" == "1" ]]; then
+  if [[ "$DRY_RUN" == "1" ]]; then
+    log "预览模式：跳过远程 Webman 禁用函数检查"
+    echo "将执行：ssh ${REMOTE} \"${REMOTE_ENV} curl -Ss https://www.workerman.net/webman/check | php\""
+  else
+    log "检查远程 PHP 禁用函数"
+    echo "参考：https://www.workerman.net/doc/webman/others/disable-function-check.html"
+    if ! ssh "${SSH_OPTS[@]}" "$REMOTE" "${REMOTE_ENV} curl -Ss https://www.workerman.net/webman/check | php"; then
+      echo "远程 PHP 禁用函数检查失败。请按 Webman 文档解除禁用后再部署：" >&2
+      echo "https://www.workerman.net/doc/webman/others/disable-function-check.html" >&2
+      exit 1
+    fi
+  fi
+else
+  log "跳过 Webman 禁用函数检查"
 fi
 
 if [[ "$BUILD_ADMIN" == "1" ]]; then
