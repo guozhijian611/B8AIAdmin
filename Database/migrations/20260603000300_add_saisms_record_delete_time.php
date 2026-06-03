@@ -74,8 +74,8 @@ final class AddSaismsRecordDeleteTime extends AbstractMigration
         }
 
         $this->table(self::META_TABLE, ['id' => false, 'primary_key' => ['migration', 'meta_key']])
-            ->addColumn('migration', 'string', ['limit' => 191])
-            ->addColumn('meta_key', 'string', ['limit' => 191])
+            ->addColumn('migration', 'string', ['limit' => 191, 'null' => false])
+            ->addColumn('meta_key', 'string', ['limit' => 191, 'null' => false])
             ->addColumn('meta_value', 'string', ['limit' => 191, 'null' => true])
             ->addColumn('created_at', 'datetime')
             ->create();
