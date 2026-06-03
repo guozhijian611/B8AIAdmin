@@ -108,13 +108,32 @@ cd server && php webman b8:migrate
 - 外键字段使用 `<主体>_id`，例如 `category_id`、`member_id`。
 - 敏感字段如手机号、邮箱、token、secret、password_hash 必须在注释和代码中体现脱敏或安全约束。
 
-### 4. 索引和唯一约束
+### 4. 数据字典
+
+自然语言需求中出现固定可选项时，先判断是否需要数据字典：
+
+- 通用启停状态复用 `data_status`。
+- 是否类字段复用 `yes_or_no`。
+- 性别、附件类型、支付方式等已有通用字典优先复用现有编码。
+- 业务专属枚举必须新建字典，例如 `feedback_priority`、`ticket_type`、`order_source`。
+- `status` 如果表达业务流程状态，例如待审核、已通过、已拒绝，不应复用 `data_status`，应新建业务状态字典。
+
+字典落库使用 `sa_system_dict_type` 和 `sa_system_dict_data`：
+
+| 表 | 说明 |
+| --- | --- |
+| `sa_system_dict_type` | 字典类型，核心字段为 `name`、`code`、`status` |
+| `sa_system_dict_data` | 字典项，核心字段为 `type_id`、`label`、`value`、`color`、`code`、`sort`、`status` |
+
+表规格 JSON 中用顶层 `dicts` 声明需要新建的字典，用字段级 `dict` 引用字典编码。迁移脚手架会幂等插入字典类型和字典项，回滚时只删除本迁移创建的字典记录。
+
+### 5. 索引和唯一约束
 
 - 高频筛选字段需要索引：`status`、`created_by`、`create_time`、`delete_time`、外键字段。
 - 唯一业务编号、手机号、邮箱、第三方 openid 等需要唯一索引时，必须确认是否允许软删除后重复。
 - 组合唯一索引要按业务唯一性声明，例如同一会员同一标签只允许一条：`member_id + tag_id`。
 
-### 5. 自动化脚手架
+### 6. 自动化脚手架
 
 可先把需求整理成表规格 JSON，再生成 Phinx 迁移：
 
@@ -142,6 +161,15 @@ php webman b8:migrate --dry-run
 
 ```bash
 php webman b8:migrate
+```
+
+如果表规格中字段配置了 `dict`，表装载到 SaiCode 后继续应用字段字典配置：
+
+```bash
+cd server
+php ../.codex/skills/saicode/scripts/saicode_generate.php apply-spec \
+  --id=<saicode_table_id> \
+  --spec=../.codex/skills/saicode/templates/table_spec.example.json
 ```
 
 ## 部署建议

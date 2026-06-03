@@ -31,6 +31,7 @@ SaiCode 是 SaiAdmin 的 Web 端低代码生成插件，主要入口在管理后
 | 表名 | 小写蛇形，避免和 `sa_system_*`、`saicode_*`、`sa_tool_*` 冲突 |
 | 表注释 | 中文业务名称，用于 SaiCode 菜单和页面理解 |
 | 字段 | 字段名、类型、是否必填、默认值、注释 |
+| 字典 | 固定枚举、业务类型、状态流转、来源渠道等是否复用或新建数据字典 |
 | 关系 | 一对多、多对多、外键字段、关联显示字段 |
 | 权限 | 是否需要 `created_by` 数据权限 |
 | 索引 | 外键、状态、时间、唯一约束 |
@@ -57,6 +58,7 @@ SaiCode 是 SaiAdmin 的 Web 端低代码生成插件，主要入口在管理后
 - 图片字段包含 `image`，文件字段包含 `file` 或 `attach`，方便自动设置上传组件。
 - `status` 默认 `tinyint unsigned NOT NULL DEFAULT 1`，注释写清 `1正常 2停用` 等枚举。
 - `is_*` 字段默认 `tinyint unsigned NOT NULL DEFAULT 2`，约定 `1是 2否`。
+- 固定选项字段必须优先走数据字典：通用状态复用 `data_status`，是否类复用 `yes_or_no`，业务枚举新建 `<业务>_<字段>` 字典。
 - `sort` 默认 `int unsigned NOT NULL DEFAULT 100`。
 - 金额用 `decimal`，不要用 float。
 - 外键字段用 `<entity>_id`，并在 SaiCode 关联配置中配合 `table_field` 显示关联名称。
@@ -86,8 +88,17 @@ Agent 可先生成一份 JSON 表规格，再由脚本生成 Phinx 迁移。示�
 | `soft_delete` | 是否自动补 `delete_time`，默认 true |
 | `fields` | 业务字段数组 |
 | `indexes` | 索引数组 |
+| `dicts` | 需要新建的业务数据字典；字段用 `dict` 引用字典编码 |
 
 字段类型使用 Phinx 类型或常见别名：`string`/`varchar`、`text`、`integer`/`int`、`tinyint`、`biginteger`/`bigint`、`decimal`、`datetime`、`date`、`boolean`。
+
+字典规则：
+
+- 需求中出现固定可选项时，该建字典就建字典，不要只写字段注释。
+- `status` 只有“正常/停用”含义时复用 `data_status`；如果是“待审核/已通过/已拒绝”等业务状态，要新建业务字典。
+- `is_*` 是否类字段复用 `yes_or_no`，除非选项不是“是/否”。
+- 新字典写入 `dicts`，迁移会幂等插入 `sa_system_dict_type` 和 `sa_system_dict_data`。
+- 业务字段写 `dict`、必要时写 `view_type`，迁移后用 `apply-spec` 把 `dict_type`、`query_dict`、`view_type`、`query_component` 应用到 SaiCode 字段配置。
 
 ### 4. 生成 Phinx 迁移
 
@@ -115,8 +126,9 @@ php .codex/skills/saicode/scripts/create_table_migration.php \
 脚本会写入 `Database/migrations/`，生成的迁移具备：
 
 - 表存在时 `up()` 自动跳过。
+- `dicts` 存在时幂等创建数据字典类型和字典项。
 - 新建成功后写入 `phinx_migration_meta` 标记。
-- `down()` 只在确认该迁移实际创建过表时删除，避免误删已有表。
+- `down()` 只回滚由该迁移创建的表和字典项，避免误删已有表或已有字典。
 
 迁移验证：
 
@@ -138,9 +150,10 @@ php webman b8:migrate
 
 1. 用 Web 端「装载」或 CLI `load --table=<table>` 装载表。
 2. 配置 `template`、`namespace`、`package_name`、`business_name`、`belong_menu_id`。
-3. 根据表设计配置字段、表单、搜索、关联。
-4. 先 `preview` 或 ZIP，确认生成代码。
-5. 再生成到项目并执行后端/前端验证。
+3. 如果表规格里有字段 `dict`，执行 `apply-spec --id=<id> --spec=<table-spec.json>` 应用字典字段配置。
+4. 根据表设计继续配置字段、表单、搜索、关联。
+5. 先 `preview` 或 ZIP，确认生成代码。
+6. 再生成到项目并执行后端/前端验证。
 
 ## 真实入口
 
@@ -517,6 +530,7 @@ SERVER_DIR=/path/to/project/server php .codex/skills/saicode/scripts/saicode_gen
 | `columns --id=ID` | 查看字段配置 |
 | `columns --id=ID --set=字段:属性=值,属性=值` | 修改普通字段属性 |
 | `columns --id=ID --set-json=字段:options=JSON` | 修改 `options` / `query_options` |
+| `apply-spec --id=ID --spec=JSON` | 按表规格应用字段字典配置 |
 | `relation --id=ID` | 查看关联配置 |
 | `relation --id=ID --add ...` | 添加关联 |
 | `relation --id=ID --del=名称` | 删除关联 |
@@ -571,6 +585,9 @@ php ../.codex/skills/saicode/scripts/saicode_generate.php config \
 
 # 4. 查看和微调字段
 php ../.codex/skills/saicode/scripts/saicode_generate.php columns --id=1
+php ../.codex/skills/saicode/scripts/saicode_generate.php apply-spec \
+  --id=1 \
+  --spec=../.codex/skills/saicode/templates/table_spec.example.json
 php ../.codex/skills/saicode/scripts/saicode_generate.php columns \
   --id=1 \
   --set=status:view_type=radio,dict_type=data_status,is_query=2,query_type=eq
@@ -628,7 +645,7 @@ php ../.codex/skills/saicode/scripts/saicode_generate.php rollback --id=1 --clea
 
 1. 用户要的是 Web 端配置、脚本自动化、模板改造，还是生成某个业务 CRUD。
 2. 先查 `git status --short`，隔离用户已有改动。
-3. 如果用户只有自然语言需求，先拆实体、字段、索引和权限边界，并生成 Phinx 建表迁移；不要跳过数据库建表阶段直接进 SaiCode。
+3. 如果用户只有自然语言需求，先拆实体、字段、字典、索引和权限边界，并生成 Phinx 建表迁移；不要跳过数据库建表阶段直接进 SaiCode。
 4. 如果生成到插件，确认插件目录已存在；新插件先用 `php webman sai:plugin <name>`。
 5. 确认目标表已存在，字段具备主键；涉及数据权限时确认 `created_by` 等审计字段。
 6. 用 Web 端或 `menus` 命令确认 `belong_menu_id`，不要猜。

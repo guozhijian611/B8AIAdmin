@@ -32,7 +32,18 @@
       "type": "tinyint",
       "null": false,
       "default": 1,
-      "comment": "状态：1待处理 2已处理"
+      "comment": "状态：1正常 2停用",
+      "dict": "data_status",
+      "view_type": "radio"
+    },
+    {
+      "name": "priority",
+      "type": "tinyint",
+      "null": false,
+      "default": 2,
+      "comment": "优先级：1高 2中 3低",
+      "dict": "feedback_priority",
+      "view_type": "radio"
     },
     {
       "name": "sort",
@@ -56,8 +67,42 @@
       "name": "idx_status"
     },
     {
+      "columns": ["priority"],
+      "name": "idx_priority"
+    },
+    {
       "columns": ["create_time"],
       "name": "idx_create_time"
+    }
+  ],
+  "dicts": [
+    {
+      "code": "feedback_priority",
+      "name": "反馈优先级",
+      "remark": "用户反馈业务优先级",
+      "items": [
+        {
+          "label": "高",
+          "value": "1",
+          "color": "#ff4d4f",
+          "sort": 100,
+          "remark": "需要优先处理"
+        },
+        {
+          "label": "中",
+          "value": "2",
+          "color": "#f9901f",
+          "sort": 90,
+          "remark": "正常处理"
+        },
+        {
+          "label": "低",
+          "value": "3",
+          "color": "#909399",
+          "sort": 80,
+          "remark": "低优先级"
+        }
+      ]
     }
   ]
 }

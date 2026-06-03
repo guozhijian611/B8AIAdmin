@@ -93,6 +93,7 @@ function buildMigration(array $spec, array $args): array
     $softDelete = array_key_exists('soft_delete', $spec) ? (bool) $spec['soft_delete'] : true;
     $fields = normalizeFields($fields, $audit, $softDelete);
     $indexes = normalizeIndexes($spec['indexes'] ?? []);
+    $dicts = normalizeDicts($spec['dicts'] ?? []);
 
     $metaKey = 'created_table:' . $tableName;
     $migrationName = $timestamp . '_' . snake($className);
@@ -111,14 +112,16 @@ function buildMigration(array $spec, array $args): array
     $lines[] = '    private const MIGRATION = ' . phpValue($migrationName) . ';';
     $lines[] = '    private const TABLE = ' . phpValue($tableName) . ';';
     $lines[] = '    private const META_KEY = ' . phpValue($metaKey) . ';';
+    $lines[] = '    private const DICTS = ' . renderArray($dicts, 4) . ';';
     $lines[] = '';
     $lines[] = '    public function up(): void';
     $lines[] = '    {';
+    $lines[] = '        $this->ensureMetaTable();';
+    $lines[] = '        $this->upsertDictionaries();';
+    $lines[] = '';
     $lines[] = '        if ($this->hasTable(self::TABLE)) {';
     $lines[] = '            return;';
     $lines[] = '        }';
-    $lines[] = '';
-    $lines[] = '        $this->ensureMetaTable();';
     $lines[] = '';
     $lines[] = '        $table = $this->table(self::TABLE, [';
     $lines[] = "            'id' => false,";
@@ -143,11 +146,7 @@ function buildMigration(array $spec, array $args): array
 
     $lines[] = '        $table->create();';
     $lines[] = '';
-    $lines[] = '        $this->execute(';
-    $lines[] = '            "INSERT INTO `" . self::META_TABLE . "` (`migration`, `meta_key`, `meta_value`, `created_at`)';
-    $lines[] = "            VALUES ('\" . self::MIGRATION . \"', '\" . self::META_KEY . \"', '1', NOW())";
-    $lines[] = '            ON DUPLICATE KEY UPDATE `meta_value` = VALUES(`meta_value`)"';
-    $lines[] = '        );';
+    $lines[] = '        $this->markMeta(self::META_KEY);';
     $lines[] = '    }';
     $lines[] = '';
     $lines[] = '    public function down(): void';
@@ -156,26 +155,12 @@ function buildMigration(array $spec, array $args): array
     $lines[] = '            return;';
     $lines[] = '        }';
     $lines[] = '';
-    $lines[] = '        $exists = $this->fetchRow(';
-    $lines[] = '            "SELECT 1 FROM `" . self::META_TABLE . "`';
-    $lines[] = "            WHERE `migration` = '\" . self::MIGRATION . \"'";
-    $lines[] = "              AND `meta_key` = '\" . self::META_KEY . \"'";
-    $lines[] = '            LIMIT 1"';
-    $lines[] = '        );';
-    $lines[] = '';
-    $lines[] = '        if (!$exists) {';
-    $lines[] = '            return;';
-    $lines[] = '        }';
-    $lines[] = '';
-    $lines[] = '        if ($this->hasTable(self::TABLE)) {';
+    $lines[] = '        if ($this->hasMeta(self::META_KEY) && $this->hasTable(self::TABLE)) {';
     $lines[] = '            $this->table(self::TABLE)->drop()->save();';
+    $lines[] = '            $this->deleteMeta(self::META_KEY);';
     $lines[] = '        }';
     $lines[] = '';
-    $lines[] = '        $this->execute(';
-    $lines[] = '            "DELETE FROM `" . self::META_TABLE . "`';
-    $lines[] = "            WHERE `migration` = '\" . self::MIGRATION . \"'";
-    $lines[] = "              AND `meta_key` = '\" . self::META_KEY . \"'\"";
-    $lines[] = '        );';
+    $lines[] = '        $this->rollbackDictionaries();';
     $lines[] = '';
     $lines[] = '        $remaining = $this->fetchRow("SELECT 1 FROM `" . self::META_TABLE . "` LIMIT 1");';
     $lines[] = '        if (!$remaining) {';
@@ -195,6 +180,123 @@ function buildMigration(array $spec, array $args): array
     $lines[] = "            ->addColumn('meta_value', 'string', ['limit' => 191, 'null' => true])";
     $lines[] = "            ->addColumn('created_at', 'datetime')";
     $lines[] = '            ->create();';
+    $lines[] = '    }';
+    $lines[] = '';
+    $lines[] = '    private function upsertDictionaries(): void';
+    $lines[] = '    {';
+    $lines[] = '        foreach (self::DICTS as $dict) {';
+    $lines[] = "            \$code = (string) \$dict['code'];";
+    $lines[] = "            \$type = \$this->findDictType(\$code);";
+    $lines[] = '            if (!$type) {';
+    $lines[] = '                $this->execute(';
+    $lines[] = '                    "INSERT INTO `sa_system_dict_type` (`name`, `code`, `status`, `remark`, `created_by`, `updated_by`, `create_time`, `update_time`, `delete_time`) VALUES ("';
+    $lines[] = "                    . \$this->sqlString((string) \$dict['name']) . ', '";
+    $lines[] = '                    . $this->sqlString($code) . ", 1, "';
+    $lines[] = "                    . \$this->sqlString((string) (\$dict['remark'] ?? '')) . ', 1, 1, NOW(), NOW(), NULL)'";
+    $lines[] = '                );';
+    $lines[] = '                $this->markMeta("created_dict_type:{$code}");';
+    $lines[] = '                $type = $this->findDictType($code);';
+    $lines[] = '            }';
+    $lines[] = '';
+    $lines[] = '            if (!$type) {';
+    $lines[] = '                continue;';
+    $lines[] = '            }';
+    $lines[] = '';
+    $lines[] = "            foreach (\$dict['items'] as \$item) {";
+    $lines[] = "                \$value = (string) \$item['value'];";
+    $lines[] = '                if ($this->findDictData($code, $value)) {';
+    $lines[] = '                    continue;';
+    $lines[] = '                }';
+    $lines[] = '';
+    $lines[] = '                $this->execute(';
+    $lines[] = '                    "INSERT INTO `sa_system_dict_data` (`type_id`, `label`, `value`, `color`, `code`, `sort`, `status`, `remark`, `created_by`, `updated_by`, `create_time`, `update_time`, `delete_time`) VALUES ("';
+    $lines[] = "                    . (int) \$type['id'] . ', '";
+    $lines[] = "                    . \$this->sqlString((string) \$item['label']) . ', '";
+    $lines[] = '                    . $this->sqlString($value) . ", "';
+    $lines[] = "                    . \$this->sqlString((string) (\$item['color'] ?? '')) . ', '";
+    $lines[] = '                    . $this->sqlString($code) . ", "';
+    $lines[] = "                    . (int) (\$item['sort'] ?? 100) . ', '";
+    $lines[] = "                    . (int) (\$item['status'] ?? 1) . ', '";
+    $lines[] = "                    . \$this->sqlString((string) (\$item['remark'] ?? '')) . ', 1, 1, NOW(), NOW(), NULL)'";
+    $lines[] = '                );';
+    $lines[] = '                $this->markMeta("created_dict_data:{$code}:{$value}");';
+    $lines[] = '            }';
+    $lines[] = '        }';
+    $lines[] = '    }';
+    $lines[] = '';
+    $lines[] = '    private function rollbackDictionaries(): void';
+    $lines[] = '    {';
+    $lines[] = '        foreach (array_reverse(self::DICTS) as $dict) {';
+    $lines[] = "            \$code = (string) \$dict['code'];";
+    $lines[] = "            foreach (array_reverse(\$dict['items']) as \$item) {";
+    $lines[] = "                \$value = (string) \$item['value'];";
+    $lines[] = '                $metaKey = "created_dict_data:{$code}:{$value}";';
+    $lines[] = '                if (!$this->hasMeta($metaKey)) {';
+    $lines[] = '                    continue;';
+    $lines[] = '                }';
+    $lines[] = '                $this->execute(';
+    $lines[] = '                    "DELETE FROM `sa_system_dict_data` WHERE `code` = " . $this->sqlString($code)';
+    $lines[] = '                    . " AND `value` = " . $this->sqlString($value)';
+    $lines[] = '                );';
+    $lines[] = '                $this->deleteMeta($metaKey);';
+    $lines[] = '            }';
+    $lines[] = '';
+    $lines[] = '            $typeMetaKey = "created_dict_type:{$code}";';
+    $lines[] = '            if ($this->hasMeta($typeMetaKey)) {';
+    $lines[] = '                $this->execute("DELETE FROM `sa_system_dict_data` WHERE `code` = " . $this->sqlString($code));';
+    $lines[] = '                $this->execute("DELETE FROM `sa_system_dict_type` WHERE `code` = " . $this->sqlString($code));';
+    $lines[] = '                $this->deleteMeta($typeMetaKey);';
+    $lines[] = '            }';
+    $lines[] = '        }';
+    $lines[] = '    }';
+    $lines[] = '';
+    $lines[] = '    private function findDictType(string $code): array|false';
+    $lines[] = '    {';
+    $lines[] = '        return $this->fetchRow(';
+    $lines[] = '            "SELECT `id` FROM `sa_system_dict_type` WHERE `code` = " . $this->sqlString($code)';
+    $lines[] = '            . " AND `delete_time` IS NULL LIMIT 1"';
+    $lines[] = '        );';
+    $lines[] = '    }';
+    $lines[] = '';
+    $lines[] = '    private function findDictData(string $code, string $value): array|false';
+    $lines[] = '    {';
+    $lines[] = '        return $this->fetchRow(';
+    $lines[] = '            "SELECT `id` FROM `sa_system_dict_data` WHERE `code` = " . $this->sqlString($code)';
+    $lines[] = '            . " AND `value` = " . $this->sqlString($value)';
+    $lines[] = '            . " AND `delete_time` IS NULL LIMIT 1"';
+    $lines[] = '        );';
+    $lines[] = '    }';
+    $lines[] = '';
+    $lines[] = '    private function markMeta(string $key): void';
+    $lines[] = '    {';
+    $lines[] = '        $this->execute(';
+    $lines[] = '            "INSERT INTO `" . self::META_TABLE . "` (`migration`, `meta_key`, `meta_value`, `created_at`) VALUES ("';
+    $lines[] = '            . $this->sqlString(self::MIGRATION) . ", "';
+    $lines[] = '            . $this->sqlString($key) . ", " . $this->sqlString("1") . ", NOW())"';
+    $lines[] = '            . " ON DUPLICATE KEY UPDATE `meta_value` = VALUES(`meta_value`)"';
+    $lines[] = '        );';
+    $lines[] = '    }';
+    $lines[] = '';
+    $lines[] = '    private function hasMeta(string $key): bool';
+    $lines[] = '    {';
+    $lines[] = '        return (bool) $this->fetchRow(';
+    $lines[] = '            "SELECT 1 FROM `" . self::META_TABLE . "` WHERE `migration` = " . $this->sqlString(self::MIGRATION)';
+    $lines[] = '            . " AND `meta_key` = " . $this->sqlString($key)';
+    $lines[] = '            . " LIMIT 1"';
+    $lines[] = '        );';
+    $lines[] = '    }';
+    $lines[] = '';
+    $lines[] = '    private function deleteMeta(string $key): void';
+    $lines[] = '    {';
+    $lines[] = '        $this->execute(';
+    $lines[] = '            "DELETE FROM `" . self::META_TABLE . "` WHERE `migration` = " . $this->sqlString(self::MIGRATION)';
+    $lines[] = '            . " AND `meta_key` = " . $this->sqlString($key)';
+    $lines[] = '        );';
+    $lines[] = '    }';
+    $lines[] = '';
+    $lines[] = '    private function sqlString(mixed $value): string';
+    $lines[] = '    {';
+    $lines[] = '        return "\'" . str_replace("\'", "\'\'", (string) $value) . "\'";';
     $lines[] = '    }';
     $lines[] = '}';
     $lines[] = '';
@@ -256,6 +358,10 @@ function normalizeField(array $field): array
 {
     $name = requireString($field, 'name');
     $type = strtolower((string) ($field['type'] ?? inferType($name)));
+
+    if (!empty($field['dict'])) {
+        assertSafeIdentifier((string) $field['dict'], 'field dict');
+    }
 
     if (str_starts_with($name, 'is_') && !array_key_exists('default', $field)) {
         $field['default'] = 2;
@@ -344,6 +450,75 @@ function normalizeIndexes(mixed $indexes): array
         }
 
         $result[] = $normalized;
+    }
+
+    return $result;
+}
+
+function normalizeDicts(mixed $dicts): array
+{
+    if ($dicts === null) {
+        return [];
+    }
+
+    if (!is_array($dicts)) {
+        throwRuntime('dicts 必须是数组');
+    }
+
+    $result = [];
+    $seen = [];
+    foreach ($dicts as $dict) {
+        if (!is_array($dict)) {
+            throwRuntime('dicts 中每一项都必须是对象');
+        }
+
+        $code = requireString($dict, 'code');
+        assertSafeIdentifier($code, 'dict code');
+        if (isset($seen[$code])) {
+            throwRuntime("字典编码重复: {$code}");
+        }
+        $seen[$code] = true;
+
+        $items = $dict['items'] ?? [];
+        if (!is_array($items) || empty($items)) {
+            throwRuntime("字典 {$code} 的 items 必须是非空数组");
+        }
+
+        $normalizedItems = [];
+        $seenValues = [];
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                throwRuntime("字典 {$code} 的 items 每一项都必须是对象");
+            }
+            if (!isset($item['label']) || !is_string($item['label']) || trim($item['label']) === '') {
+                throwRuntime("字典 {$code} 的 item.label 不能为空");
+            }
+            if (!array_key_exists('value', $item) || trim((string) $item['value']) === '') {
+                throwRuntime("字典 {$code} 的 item.value 不能为空");
+            }
+
+            $value = (string) $item['value'];
+            if (isset($seenValues[$value])) {
+                throwRuntime("字典 {$code} 的 value 重复: {$value}");
+            }
+            $seenValues[$value] = true;
+
+            $normalizedItems[] = [
+                'label' => trim($item['label']),
+                'value' => $value,
+                'color' => (string) ($item['color'] ?? ''),
+                'sort' => isset($item['sort']) ? (int) $item['sort'] : 100,
+                'status' => isset($item['status']) ? (int) $item['status'] : 1,
+                'remark' => (string) ($item['remark'] ?? ''),
+            ];
+        }
+
+        $result[] = [
+            'code' => $code,
+            'name' => trim((string) ($dict['name'] ?? $code)),
+            'remark' => (string) ($dict['remark'] ?? ''),
+            'items' => $normalizedItems,
+        ];
     }
 
     return $result;

@@ -9,6 +9,7 @@
  *   php saicode_generate.php load --table=表名 [--source=mysql]            — 装载数据表
  *   php saicode_generate.php config --id=表ID --namespace=xx --package=xx  — 配置生成选项
  *   php saicode_generate.php columns --id=表ID                             — 查看/修改字段配置
+ *   php saicode_generate.php apply-spec --id=表ID --spec=table.json        — 根据表规格应用字段字典配置
  *   php saicode_generate.php sync --id=表ID                                — 同步数据库字段到已装载记录
  *   php saicode_generate.php preview --id=表ID                             — 预览生成的代码
  *   php saicode_generate.php zip --ids=1,2 [--output=code.zip]             — 生成 ZIP 下载包
@@ -54,6 +55,9 @@ switch ($command) {
         break;
     case 'columns':
         cmdColumns($args);
+        break;
+    case 'apply-spec':
+        cmdApplySpec($args);
         break;
     case 'relation':
         cmdRelation($args);
@@ -485,6 +489,103 @@ function cmdColumns(array $args): void
 }
 
 /**
+ * 根据表规格 JSON 应用字段字典配置。
+ */
+function cmdApplySpec(array $args): void
+{
+    $id = $args['id'] ?? '';
+    $specPath = $args['spec'] ?? '';
+    if (empty($id)) {
+        fwrite(STDERR, "错误: 缺少 --id 参数 (saicode_table 的 ID)\n");
+        exit(1);
+    }
+    if (empty($specPath)) {
+        fwrite(STDERR, "错误: 缺少 --spec 参数\n");
+        exit(1);
+    }
+
+    $table = Table::findOrEmpty($id);
+    if ($table->isEmpty()) {
+        fwrite(STDERR, "错误: 未找到 ID={$id} 的表记录\n");
+        exit(1);
+    }
+
+    $specFile = resolveOutputPath((string)$specPath);
+    if (!is_file($specFile)) {
+        fwrite(STDERR, "错误: 表规格文件不存在: {$specFile}\n");
+        exit(1);
+    }
+
+    $spec = json_decode((string)file_get_contents($specFile), true);
+    if (!is_array($spec)) {
+        fwrite(STDERR, "错误: JSON 解析失败 - " . json_last_error_msg() . "\n");
+        exit(1);
+    }
+
+    $fields = $spec['fields'] ?? [];
+    if (!is_array($fields)) {
+        fwrite(STDERR, "错误: fields 必须是数组\n");
+        exit(1);
+    }
+
+    $dictItemCount = [];
+    foreach (($spec['dicts'] ?? []) as $dict) {
+        if (!is_array($dict) || empty($dict['code'])) {
+            continue;
+        }
+        $dictItemCount[(string)$dict['code']] = is_array($dict['items'] ?? null) ? count($dict['items']) : 0;
+    }
+
+    $updated = 0;
+    $skipped = [];
+    foreach ($fields as $field) {
+        if (!is_array($field) || empty($field['name']) || empty($field['dict'])) {
+            continue;
+        }
+
+        $columnName = (string)$field['name'];
+        $dictCode = (string)$field['dict'];
+        $column = Column::where('table_id', $id)->where('column_name', $columnName)->findOrEmpty();
+        if ($column->isEmpty()) {
+            $skipped[] = "{$columnName}(字段不存在)";
+            continue;
+        }
+
+        $viewType = (string)($field['view_type'] ?? inferDictViewType($dictCode, $dictItemCount[$dictCode] ?? 0));
+        $queryComponent = (string)($field['query_component'] ?? ($viewType === 'radio' ? 'radio' : 'saSelect'));
+        $isQuery = array_key_exists('query', $field) ? ((bool)$field['query'] ? 2 : 1) : 2;
+
+        $attrs = [
+            'view_type' => $viewType,
+            'dict_type' => $dictCode,
+            'query_component' => $queryComponent,
+            'query_dict' => (string)($field['query_dict'] ?? $dictCode),
+            'query_type' => (string)($field['query_type'] ?? 'eq'),
+            'is_query' => $isQuery,
+        ];
+
+        if (isset($field['span'])) {
+            $attrs['span'] = (int)$field['span'];
+        }
+        if (array_key_exists('required', $field)) {
+            $attrs['is_required'] = (bool)$field['required'] ? 2 : 1;
+        } elseif (array_key_exists('null', $field) && $field['null'] === false) {
+            $attrs['is_required'] = 2;
+        }
+
+        Column::where('id', $column->id)->update($attrs);
+        $updated++;
+        echo "已应用字段字典: {$columnName} -> {$dictCode} ({$viewType})\n";
+    }
+
+    echo "完成: 更新 {$updated} 个字段";
+    if (!empty($skipped)) {
+        echo "，跳过 " . implode(', ', $skipped);
+    }
+    echo "\n";
+}
+
+/**
  * 同步数据库字段信息。
  */
 function cmdSync(array $args): void
@@ -843,6 +944,15 @@ function normalizeColumnValue(string $field, string $value): mixed
     return $value;
 }
 
+function inferDictViewType(string $dictCode, int $itemCount): string
+{
+    if ($dictCode === 'yes_or_no' || $itemCount > 0 && $itemCount <= 3) {
+        return 'radio';
+    }
+
+    return 'saSelect';
+}
+
 function resolveOutputPath(string $path): string
 {
     if (str_starts_with($path, DIRECTORY_SEPARATOR)) {
@@ -868,6 +978,7 @@ SaiCode CLI 代码生成脚本
   columns --id=表ID                 查看已装载表的字段配置
   columns --id=表ID --set=字段:k=v  修改字段属性
   columns --id=表ID --set-json=字段:options=JSON
+  apply-spec --id=表ID --spec=JSON  根据表规格应用字段字典配置
   relation --id=表ID                查看关联配置
   relation --id=表ID --add ...      添加模型关联
   relation --id=表ID --del=名称     删除模型关联
@@ -910,6 +1021,7 @@ SaiCode CLI 代码生成脚本
   php saicode_generate.php columns --id=1
   php saicode_generate.php columns --id=1 --set=status:view_type=select,dict_type=data_status
   php saicode_generate.php columns --id=1 --set-json=cover:options='{"multiple":false,"limit":1}'
+  php saicode_generate.php apply-spec --id=1 --spec=../.codex/skills/saicode/templates/table_spec.example.json
   php saicode_generate.php sync --id=1
   php saicode_generate.php zip --ids=1 --output=runtime/saicode-member.zip
   php saicode_generate.php relation --id=1 --add --type=belongsTo --name=level --model=MemberLevel --localKey=member_level_id --foreignKey=id
