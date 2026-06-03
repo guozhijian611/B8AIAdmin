@@ -604,7 +604,7 @@ CREATE TABLE `sa_system_user`  (
 -- ----------------------------
 -- Records of sa_system_user
 -- ----------------------------
-INSERT INTO `sa_system_user` VALUES (1, 'admin', '$2y$10$wnixh48uDnaW/6D9EygDd.OHJK0vQY/4nHaTjMKBCVDBP2NiTatqS', '祭道之上', '2', 'https://image.saithink.top/saiadmin/avatar.jpg', 'saiadmin@admin.com', '15888888888', 'SaiAdmin是兼具设计美学与高效开发的后台系统!', 'statistics', 1, 1, 1, NULL, NULL, NULL, 1, 1, '2026-01-01 00:00:00', '2026-01-01 00:00:00', NULL);
+INSERT INTO `sa_system_user` VALUES (1, 'admin', '$2y$10$wnixh48uDnaW/6D9EygDd.OHJK0vQY/4nHaTjMKBCVDBP2NiTatqS', '祭道之上', '2', 'https://ui-avatars.com/api/?name=b8Admin', 'saiadmin@admin.com', '15888888888', 'SaiAdmin是兼具设计美学与高效开发的后台系统!', 'statistics', 1, 1, 1, NULL, NULL, NULL, 1, 1, '2026-01-01 00:00:00', '2026-01-01 00:00:00', NULL);
 
 -- ----------------------------
 -- Table structure for sa_system_user_post
