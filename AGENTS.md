@@ -28,6 +28,7 @@
 - 业务路由默认写在对应插件的 `server/plugin/<插件名>/config/route.php`；标准 CRUD 可用 `fastRoute('<业务路径>', Controller::class)` 注册，非标准动作必须显式补充 `Route::get/post/put/delete`。SaiCode 生成的后台 CRUD 默认使用 `/app/<插件名>/admin/<模块>/<控制器>/<动作>` 形式的 Webman 插件默认路由，不会自动修改 `config/route.php`；如目标插件关闭默认路由、需要稳定 `route:list` 可见性、或新增自定义动作，必须手动注册路由并让前端 API 与之保持一致。
 - SaiAdmin 数据权限不是默认自动启用：`plugin\saiadmin\basic\think\BaseLogic` 默认 `protected bool $scope = false`。涉及后台业务数据隔离时，必须确认业务表具备 `created_by` 等审计字段，并在对应 Logic 中显式开启 `protected bool $scope = true;`。
 - 后端新增或修改控制器方法时，应同步补充 APIDOC 注解，至少说明接口标题、路径、请求方法、参数和返回结构，保证 `/apidoc/openapi/<app-key>` 可用于 unibest 自动生成接口。
+- B8 新业务 API 响应优先使用 `server/app/functions.php` 中的 `ok()`、`fail()` 辅助方法，不再直接手写 `json(['code' => ...])`；底层通过 `b8_json_response()` 保持 `{code,message,data}` 业务响应格式，并在 trace 插件有有效上下文时自动追加 `trace_id`。不要为了新业务响应规范去修改 SaiAdmin 核心 `OpenController`。
 - 数据库变更默认使用 Phinx：`composer install` 后缺少 `.env` 时会自动从 `.env.example` 复制；首次安装优先在 `server/` 目录执行 `php webman b8:install` 配置数据库、导入 `Database/b8aiadmin.sql` 基线并执行迁移；后续升级只新增 `Database/migrations/` 迁移，不再新增独立 SQL patch。
 - 新增迁移必须支持回滚或明确说明不可逆原因；涉及菜单、权限、初始化数据时要写成幂等逻辑，并避免回滚误删用户原有数据。
 - 数据库迁移常用命令：`php webman b8:install`、`php webman b8:migrate:status`、`php webman b8:migrate --dry-run`、`php webman b8:migrate`、`php webman b8:migrate:rollback`、`php webman b8:migrate:create <Name>`。
