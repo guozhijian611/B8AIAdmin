@@ -146,6 +146,10 @@ Route::group('/tool', function () {
     Route::post("/queueMessage/cancel", [\plugin\saiadmin\app\controller\tool\QueueMessageController::class, 'cancel']);
     Route::post("/queueMessage/clearPublished", [\plugin\saiadmin\app\controller\tool\QueueMessageController::class, 'clearPublished']);
     Route::get("/queueMessage/stats", [\plugin\saiadmin\app\controller\tool\QueueMessageController::class, 'stats']);
+
+    // 队列运行状态
+    Route::get("/queueRuntime/index", [\plugin\saiadmin\app\controller\tool\QueueRuntimeController::class, 'index']);
+    Route::post("/queueRuntime/purge", [\plugin\saiadmin\app\controller\tool\QueueRuntimeController::class, 'purge']);
 });
 
 Route::disableDefaultRoute('saiadmin');

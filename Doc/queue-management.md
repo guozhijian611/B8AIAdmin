@@ -1,15 +1,16 @@
 # 队列管理使用说明
 
-本文档说明 B8AIadmin 后台“工具 / 队列配置”、“工具 / 队列任务”和“工具 / 队列消息”的设计、配置、投递、消费、部署和排错方式。当前队列管理同时支持 Redis 队列与 RabbitMQ 队列，并区分内部任务与外部消息两种用途。
+本文档说明 B8AIadmin 后台“工具 / 队列运行”、“工具 / 队列配置”、“工具 / 队列任务”和“工具 / 队列消息”的设计、配置、投递、消费、部署和排错方式。当前队列管理同时支持 Redis 队列与 RabbitMQ 队列，并区分内部任务与外部消息两种用途。
 
 ## 一、功能入口
 
-队列管理由迁移 `Database/migrations/20260603000600_add_queue_management.php` 初始化；外部消息模式由 `Database/migrations/20260604000100_add_queue_external_message.php` 增加；默认外部消息队列由 `Database/migrations/20260604000200_seed_external_queue_configs.php` 写入。
+队列管理由迁移 `Database/migrations/20260603000600_add_queue_management.php` 初始化；外部消息模式由 `Database/migrations/20260604000100_add_queue_external_message.php` 增加；默认外部消息队列由 `Database/migrations/20260604000200_seed_external_queue_configs.php` 写入；实时队列运行页由 `Database/migrations/20260604000300_add_queue_runtime_menu.php` 加入菜单。
 
 后台菜单位于：
 
 ```text
 工具
+├── 队列运行
 ├── 队列配置
 ├── 队列任务
 └── 队列消息
@@ -19,6 +20,7 @@
 
 | 模块 | 路由前缀 | 说明 |
 | --- | --- | --- |
+| 队列运行 | `/tool/queueRuntime` | 查看 Redis/RabbitMQ broker 实时积压、未确认、消费者数量，并清空队列待消费消息。 |
 | 队列配置 | `/tool/queueConfig` | 管理 Redis/RabbitMQ 队列配置。 |
 | 队列任务 | `/tool/queueTask` | 查看任务、重试、取消、删除、清理已完成任务和查看统计。 |
 | 队列消息 | `/tool/queueMessage` | 发布给第三方消费的外部消息，并查看发布记录。 |
@@ -27,6 +29,7 @@
 
 | 页面 | 文件 |
 | --- | --- |
+| 队列运行 | `saiadmin-artd/src/views/tool/queue/runtime/index.vue` |
 | 队列配置 | `saiadmin-artd/src/views/tool/queue/config/index.vue` |
 | 队列任务 | `saiadmin-artd/src/views/tool/queue/task/index.vue` |
 | 队列消息 | `saiadmin-artd/src/views/tool/queue/message/index.vue` |
@@ -35,6 +38,7 @@
 
 | 控制器 | 文件 |
 | --- | --- |
+| 队列运行 | `server/plugin/saiadmin/app/controller/tool/QueueRuntimeController.php` |
 | 队列配置 | `server/plugin/saiadmin/app/controller/tool/QueueConfigController.php` |
 | 队列任务 | `server/plugin/saiadmin/app/controller/tool/QueueTaskController.php` |
 | 队列消息 | `server/plugin/saiadmin/app/controller/tool/QueueMessageController.php` |
@@ -270,12 +274,14 @@ Redis 消费者位于：
 server/plugin/saiadmin/process/queue/RedisQueueConsumer.php
 ```
 
-后台统计中 Redis 支持读取 broker 侧等待数：
+后台“队列运行”页支持读取 Redis broker 侧等待数和延迟数：
 
 | 指标 | Redis key |
 | --- | --- |
-| waiting | `{redis-queue}-waiting<queue_name>` |
-| delayed_total | `{redis-queue}-delayed` |
+| 待消费 | `{redis-queue}-waiting<queue_name>` |
+| 延迟 | `{redis-queue}-delayed` 中匹配 `queue = <queue_name>` 的消息 |
+
+清空 Redis 实时队列时，会删除对应 waiting key，并从 delayed zset 中移除该队列的延迟消息。
 
 测试投递示例：
 
@@ -309,8 +315,16 @@ RABBITMQ_PASSWORD = admin
 RABBITMQ_DEBUG = false
 RABBITMQ_TIMEOUT = 10
 RABBITMQ_RESTART_INTERVAL = 5
+RABBITMQ_MANAGEMENT_SCHEME = http
+RABBITMQ_MANAGEMENT_HOST = 127.0.0.1
+RABBITMQ_MANAGEMENT_PORT = 15672
+RABBITMQ_MANAGEMENT_USERNAME = admin
+RABBITMQ_MANAGEMENT_PASSWORD = admin
+RABBITMQ_MANAGEMENT_TIMEOUT = 3
 WEBMAN_EVENT_LOOP = Workerman\Events\Fiber
 ```
+
+后台“队列运行”页读取 RabbitMQ 实时积压依赖 RabbitMQ Management API。需要 RabbitMQ 服务端启用 `rabbitmq_management` 插件，并允许后台服务访问 `15672` 或实际管理端口。页面读取 `/api/queues/{vhost}/{queue}` 获取 `messages_ready`、`messages_unacknowledged` 和 `consumers`，清空队列使用 `/api/queues/{vhost}/{queue}/contents`。
 
 RabbitMQ 消费者依赖 Workerman 协程事件循环。项目默认使用 `Workerman\Events\Fiber`，并已通过 Composer 引入 `revolt/event-loop` 作为 Fiber 事件循环依赖。也可以在 `.env` 中通过 `WEBMAN_EVENT_LOOP` 覆盖为其他支持协程的事件循环，例如：
 
@@ -531,7 +545,21 @@ rabbitmq_publish(
 
 外部消息函数只会查找 `message_mode = external_message` 且已启用的配置。
 
-## 八、任务管理操作
+## 八、运行状态操作
+
+后台“队列运行”支持：
+
+| 操作 | 说明 |
+| --- | --- |
+| 查看列表 | 按配置名称、驱动、用途、队列名、状态筛选队列配置，并展示 broker 实时指标。 |
+| 实时指标 | Redis 显示待消费和延迟数；RabbitMQ 显示待消费、未确认和消费者数量。 |
+| 数据库记录 | 同时显示后台记录中的待处理、处理中和失败数量，便于区分“系统记录”和“真实 broker 积压”。 |
+| 清空队列 | 清空 Redis waiting/delayed 或 RabbitMQ ready 消息。该操作不会删除配置，也不会删除后台历史记录。 |
+| 删除配置 | 复用队列配置删除能力，软删除 `sa_tool_queue_config` 配置记录。 |
+
+注意：清空真实队列会删除尚未被消费者处理的消息。生产环境执行前必须确认队列用途、三方消费者状态和回滚方案。
+
+## 九、任务管理操作
 
 后台“队列任务”支持：
 
@@ -543,7 +571,7 @@ rabbitmq_publish(
 | 取消 | 将待消费或失败任务标记为已取消。消费中和已完成任务不能取消。 |
 | 删除 | 软删除任务记录。 |
 | 清理已完成 | 按配置或全局清理已完成任务。 |
-| 统计 | 查看各状态数量和每个队列的任务数量。Redis 额外显示 broker waiting/delayed。 |
+| 统计 | 查看各状态数量和每个队列的任务数量。实时 broker 指标以“队列运行”页为准。 |
 
 任务状态：
 
@@ -555,7 +583,7 @@ rabbitmq_publish(
 | `3` | 消费失败 |
 | `4` | 已取消 |
 
-## 九、消息管理操作
+## 十、消息管理操作
 
 后台“队列消息”支持：
 
@@ -579,7 +607,7 @@ rabbitmq_publish(
 | `3` | 发布失败 |
 | `4` | 已取消 |
 
-## 十、部署和升级
+## 十一、部署和升级
 
 ### 1. 数据库迁移
 
@@ -621,7 +649,7 @@ php start.php reload
 
 如果修改了 `.env`，常驻进程必须重启或 reload 才能读取新值。
 
-## 十一、验证命令
+## 十二、验证命令
 
 ### 后端语法
 
@@ -673,7 +701,7 @@ cd saiadmin-artd
 pnpm -s exec vue-tsc --noEmit
 ```
 
-## 十二、常见问题
+## 十三、常见问题
 
 ### 1. 后台看不到菜单
 
@@ -735,11 +763,12 @@ Webman 是常驻进程，配置修改后需要 reload/restart。RabbitMQ broker 
 - 对外部接口调用做好超时、重试和日志。
 - 对敏感参数不要写入明文日志或 `response`。
 
-## 十三、当前边界
+## 十四、当前边界
 
 - 内部任务的 Redis/RabbitMQ 消息只保存任务 ID。
 - 外部消息会把完整事件 JSON 投递给 Redis/RabbitMQ。
-- Redis 支持后台展示 broker waiting/delayed 数量；RabbitMQ 当前后台不直接读取 broker 管理接口。
+- Redis 支持后台展示 broker 待消费/延迟数量，并支持清空对应队列积压。
+- RabbitMQ 支持通过 Management API 展示 broker 待消费/未确认/消费者数量，并支持清空 ready 消息；不在后台直接删除 queue、exchange 或 binding。
 - RabbitMQ 默认配置为禁用，需要配置环境变量、启用后台队列配置并 reload Webman 后使用。
 - RabbitMQ 复杂拓扑可以通过多条配置和 `arguments` 表达，超出后台表单能力的场景建议增加专用 Builder 或扩展配置字段。
 - 生产环境启用新队列前，应先确认 Redis/RabbitMQ 服务、权限、vhost、延迟插件、死信拓扑和 Webman 进程重载窗口。
