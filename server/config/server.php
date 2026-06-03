@@ -13,7 +13,7 @@
  */
 
 return [
-    'event_loop' => '',
+    'event_loop' => env('WEBMAN_EVENT_LOOP', ''),
     'stop_timeout' => 2,
     'pid_file' => runtime_path() . '/webman.pid',
     'status_file' => runtime_path() . '/webman.status',

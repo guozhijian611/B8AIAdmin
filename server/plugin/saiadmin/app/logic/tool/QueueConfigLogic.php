@@ -24,12 +24,16 @@ class QueueConfigLogic extends BaseLogic
 
     public function add(array $data): mixed
     {
-        return parent::add($this->normalizeData($data));
+        $data = $this->normalizeData($data);
+        $this->assertQueueNameAvailable($data);
+        return parent::add($data);
     }
 
     public function edit($id, array $data): mixed
     {
-        return parent::edit($id, $this->normalizeData($data));
+        $data = $this->normalizeData($data);
+        $this->assertQueueNameAvailable($data, (int) $id);
+        return parent::edit($id, $data);
     }
 
     public function changeStatus(int $id, int $status): bool
@@ -37,6 +41,11 @@ class QueueConfigLogic extends BaseLogic
         $model = $this->model->findOrEmpty($id);
         if ($model->isEmpty()) {
             throw new ApiException('队列配置不存在');
+        }
+        if ($status === 1) {
+            $data = $model->toArray();
+            $data['status'] = 1;
+            $this->assertQueueNameAvailable($data, $id);
         }
         return (bool) $model->save(['status' => $status]);
     }
@@ -106,5 +115,38 @@ class QueueConfigLogic extends BaseLogic
     private function normalizeMessageMode(string $messageMode): string
     {
         return $messageMode === 'external_message' ? 'external_message' : 'internal_job';
+    }
+
+    private function assertQueueNameAvailable(array $data, int $excludeId = 0): void
+    {
+        if ((int) ($data['status'] ?? 1) !== 1) {
+            return;
+        }
+
+        $driver = (string) ($data['driver'] ?? 'redis');
+        $connection = (string) ($data['connection'] ?? 'default');
+        $queueName = trim((string) ($data['queue_name'] ?? ''));
+        if ($queueName === '') {
+            return;
+        }
+
+        $query = $this->model
+            ->where('driver', $driver)
+            ->where('connection', $connection)
+            ->where('queue_name', $queueName)
+            ->where('status', 1)
+            ->whereNull('delete_time');
+
+        if ($excludeId > 0) {
+            $query->where('id', '<>', $excludeId);
+        }
+
+        $exists = $query->findOrEmpty();
+        if (!$exists->isEmpty()) {
+            throw new ApiException(sprintf(
+                '同一连接下已存在启用队列配置：%s。内部任务和外部消息不能共用同一个队列名。',
+                $queueName
+            ));
+        }
     }
 }

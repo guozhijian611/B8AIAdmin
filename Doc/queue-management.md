@@ -4,7 +4,7 @@
 
 ## 一、功能入口
 
-队列管理由迁移 `Database/migrations/20260603000600_add_queue_management.php` 初始化。
+队列管理由迁移 `Database/migrations/20260603000600_add_queue_management.php` 初始化；外部消息模式由 `Database/migrations/20260604000100_add_queue_external_message.php` 增加；默认外部消息队列由 `Database/migrations/20260604000200_seed_external_queue_configs.php` 写入。
 
 后台菜单位于：
 
@@ -66,7 +66,7 @@
 | `arguments` | RabbitMQ 扩展参数 JSON，会合并到队列声明参数。 |
 | `status` | `1` 启用，`2` 禁用。 |
 
-迁移默认写入 4 条配置：
+迁移默认写入内部任务和外部消息配置：
 
 | 名称 | 驱动 | 队列 | 默认状态 |
 | --- | --- | --- | --- |
@@ -74,6 +74,10 @@
 | Redis慢速队列 | `redis` | `slow_queue` | 启用 |
 | RabbitMQ快速队列 | `rabbitmq` | `fast_queue` | 禁用 |
 | RabbitMQ慢速队列 | `rabbitmq` | `slow_queue` | 禁用 |
+| Redis外部消息队列 | `redis` | `external_queue` | 启用 |
+| RabbitMQ外部消息队列 | `rabbitmq` | `external_queue` | 禁用 |
+
+注意：同一驱动、同一连接下，启用配置不能共用同一个队列名称。尤其不要让外部消息队列使用内部任务的 `fast_queue`、`slow_queue`，否则外部完整 JSON 可能被内部消费者取走并跳过。
 
 ### 2. 队列用途
 
@@ -305,7 +309,16 @@ RABBITMQ_PASSWORD = admin
 RABBITMQ_DEBUG = false
 RABBITMQ_TIMEOUT = 10
 RABBITMQ_RESTART_INTERVAL = 5
+WEBMAN_EVENT_LOOP = ''
 ```
+
+RabbitMQ 消费者依赖 Workerman 协程事件循环。启用 RabbitMQ 消费进程前，需要把 `WEBMAN_EVENT_LOOP` 设置为支持协程的事件循环，例如：
+
+```env
+WEBMAN_EVENT_LOOP = Workerman\Events\Fiber
+```
+
+如果未配置该项，即使后台 RabbitMQ 队列配置为启用，也不会生成 RabbitMQ 消费者进程，避免出现 `Not in fiber context` 后反复重启。
 
 RabbitMQ 动态消费者位于：
 
@@ -492,7 +505,7 @@ redis_publish(
     array $payload,
     array $headers = [],
     int $delay = 0,
-    string $queueName = 'fast_queue',
+    string $queueName = 'external_queue',
     string $connection = 'default',
     string $messageKey = '',
     string $source = 'saiadmin'
@@ -507,7 +520,7 @@ rabbitmq_publish(
     array $payload,
     array $headers = [],
     int $delay = 0,
-    string $queueName = 'fast_queue',
+    string $queueName = 'external_queue',
     string $connection = 'default',
     string $messageKey = '',
     string $source = 'saiadmin'
@@ -581,6 +594,8 @@ php webman b8:migrate
 
 ```text
 20260603000600_add_queue_management.php
+20260604000100_add_queue_external_message.php
+20260604000200_seed_external_queue_configs.php
 ```
 
 ### 2. 环境变量
@@ -589,6 +604,7 @@ php webman b8:migrate
 
 - Redis 环境变量已配置。
 - RabbitMQ 环境变量已配置。
+- RabbitMQ 消费者所需的 `WEBMAN_EVENT_LOOP` 已配置。
 - RabbitMQ 用户、vhost、权限正确。
 - 如果使用 x-delay，RabbitMQ 已启用 `rabbitmq_delayed_message_exchange`。
 
@@ -620,7 +636,7 @@ php -l config/plugin/workbunny/webman-rabbitmq/connections.php
 
 ```bash
 cd server
-php webman route:list | rg "queueConfig|queueTask"
+php webman route:list | rg "queueConfig|queueTask|queueMessage"
 ```
 
 外部消息路由：
@@ -634,7 +650,7 @@ php webman route:list | rg "queueMessage"
 
 ```bash
 cd server
-php webman b8:migrate:status | rg "20260603000600|AddQueueManagement"
+php webman b8:migrate:status | rg "20260603000600|20260604000100|20260604000200|AddQueue"
 ```
 
 ### RabbitMQ 插件命令
@@ -687,21 +703,27 @@ pnpm -s exec vue-tsc --noEmit
 
 Webman 是常驻进程，配置修改后需要 reload/restart。RabbitMQ broker 中已存在的 exchange/queue 如果参数不同，可能还需要在 RabbitMQ 管理台处理旧拓扑。
 
-### 6. 任务失败后没有自动重试
+### 6. RabbitMQ 消费者一直重启
+
+如果 `server/runtime/logs/workerman.log` 出现 `Not in fiber context`，说明 Workbunny RabbitMQ 运行在非协程事件循环下。设置 `WEBMAN_EVENT_LOOP = Workerman\Events\Fiber` 并 restart Webman 后再启用 RabbitMQ 消费者。
+
+### 7. 任务失败后没有自动重试
 
 当前实现会记录失败状态和 `err_num`，后台支持人工重试。`max_attempts` 和 `retry_delay_seconds` 已保存在配置表中，但自动按次数重试需要后续扩展调度逻辑。
 
-### 7. 三方程序拿不到内部任务数据
+### 8. 三方程序拿不到内部任务数据
 
 内部任务模式发给 broker 的消息只有任务 ID，业务参数存储在 `sa_tool_queue.request`。三方程序不应该消费内部任务队列。
 
-如果需要三方程序消费，必须使用外部消息模式，并通过 `queue_publish()`、`redis_publish()` 或 `rabbitmq_publish()` 发布完整业务 payload。
+如果需要三方程序消费，必须使用外部消息模式，并通过 `queue_publish()`、`redis_publish()` 或 `rabbitmq_publish()` 发布完整业务 payload。默认 Redis 外部消息队列是 `external_queue`。
 
-### 8. 外部消息配置为什么没有消费者进程
+### 9. 外部消息配置为什么没有消费者进程
 
 这是刻意设计。外部消息由第三方程序消费，本系统只负责发布和记录。如果本系统也启动消费者，会抢走第三方消息。
 
-### 9. 业务方法应该怎么写
+如果后台“发布消息”的队列配置下拉为空，通常是还没有启用 `message_mode = external_message` 的队列配置。执行最新迁移后会默认启用 `Redis外部消息队列`；RabbitMQ 外部消息队列默认禁用，需要配置 RabbitMQ 后手动启用。
+
+### 10. 业务方法应该怎么写
 
 队列任务可能重复消费，业务方法应满足：
 

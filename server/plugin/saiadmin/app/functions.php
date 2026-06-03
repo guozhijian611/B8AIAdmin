@@ -226,7 +226,7 @@ if (!function_exists('redis_publish')) {
         array $payload,
         array $headers = [],
         int $delay = 0,
-        string $queueName = 'fast_queue',
+        string $queueName = 'external_queue',
         string $connection = 'default',
         string $messageKey = '',
         string $source = 'saiadmin'
@@ -253,7 +253,7 @@ if (!function_exists('rabbitmq_publish')) {
         array $payload,
         array $headers = [],
         int $delay = 0,
-        string $queueName = 'fast_queue',
+        string $queueName = 'external_queue',
         string $connection = 'default',
         string $messageKey = '',
         string $source = 'saiadmin'
