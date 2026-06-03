@@ -41,11 +41,11 @@ if (!function_exists('b8_json_response')) {
     }
 }
 
-if (!function_exists('b8_success')) {
+if (!function_exists('ok')) {
     /**
      * 成功 JSON 响应，兼容 SaiAdmin success($data, $msg) 的调用语义。
      */
-    function b8_success(array|string $data = [], string $msg = 'success', int $option = JSON_UNESCAPED_UNICODE): Response
+    function ok(array|string $data = [], string $msg = 'success', int $option = JSON_UNESCAPED_UNICODE): Response
     {
         if (is_string($data)) {
             $msg = $data;
@@ -55,11 +55,11 @@ if (!function_exists('b8_success')) {
     }
 }
 
-if (!function_exists('b8_fail')) {
+if (!function_exists('fail')) {
     /**
      * 失败 JSON 响应，HTTP 状态仍保持 200，业务状态通过 code 表示。
      */
-    function b8_fail(string $msg = 'fail', int $code = 400, int $option = JSON_UNESCAPED_UNICODE): Response
+    function fail(string $msg = 'fail', int $code = 400, int $option = JSON_UNESCAPED_UNICODE): Response
     {
         return b8_json_response(['code' => $code, 'message' => $msg], $option);
     }
