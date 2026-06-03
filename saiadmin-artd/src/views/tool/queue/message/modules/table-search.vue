@@ -8,8 +8,15 @@
     @search="handleSearch"
   >
     <el-col v-bind="setSpan(6)">
-      <el-form-item label="配置名称" prop="name">
-        <el-input v-model="formData.name" placeholder="请输入配置名称" clearable />
+      <el-form-item label="队列配置" prop="config_id">
+        <el-select v-model="formData.config_id" placeholder="请选择配置" clearable filterable>
+          <el-option
+            v-for="item in configOptions"
+            :key="item.id"
+            :label="`${item.name} / ${item.queue_name}`"
+            :value="item.id"
+          />
+        </el-select>
       </el-form-item>
     </el-col>
     <el-col v-bind="setSpan(6)">
@@ -21,21 +28,19 @@
       </el-form-item>
     </el-col>
     <el-col v-bind="setSpan(6)">
-      <el-form-item label="用途" prop="message_mode">
-        <el-select v-model="formData.message_mode" placeholder="请选择用途" clearable>
-          <el-option label="内部任务" value="internal_job" />
-          <el-option label="外部消息" value="external_message" />
+      <el-form-item label="状态" prop="status">
+        <el-select v-model="formData.status" placeholder="请选择状态" clearable>
+          <el-option label="待发布" :value="0" />
+          <el-option label="发布中" :value="1" />
+          <el-option label="已发布" :value="2" />
+          <el-option label="发布失败" :value="3" />
+          <el-option label="已取消" :value="4" />
         </el-select>
       </el-form-item>
     </el-col>
     <el-col v-bind="setSpan(6)">
-      <el-form-item label="队列名" prop="queue_name">
-        <el-input v-model="formData.queue_name" placeholder="请输入队列名" clearable />
-      </el-form-item>
-    </el-col>
-    <el-col v-bind="setSpan(6)">
-      <el-form-item label="状态" prop="status">
-        <sa-select v-model="formData.status" dict="data_status" clearable />
+      <el-form-item label="事件名称" prop="event_name">
+        <el-input v-model="formData.event_name" placeholder="请输入事件名称" clearable />
       </el-form-item>
     </el-col>
   </sa-search-bar>
@@ -44,9 +49,12 @@
 <script setup lang="ts">
   interface Props {
     modelValue: Record<string, any>
+    configOptions: Record<string, any>[]
   }
 
-  const props = defineProps<Props>()
+  const props = withDefaults(defineProps<Props>(), {
+    configOptions: () => []
+  })
   const emit = defineEmits(['update:modelValue', 'search', 'reset'])
   const searchBarRef = ref()
 

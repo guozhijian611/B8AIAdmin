@@ -190,3 +190,83 @@ if (!function_exists('rabbitmq_send')) {
         return queue_send((int) $config->id, $class, $method, $arguments, $delay, 'rabbitmq');
     }
 }
+
+if (!function_exists('queue_publish')) {
+    /**
+     * 投递外部消息，消息体会直接发送完整 JSON 给第三方消费者
+     */
+    function queue_publish(
+        int $configId,
+        string $eventName,
+        array $payload,
+        array $headers = [],
+        int $delay = 0,
+        string $messageKey = '',
+        string $source = 'saiadmin'
+    ): bool {
+        (new \plugin\saiadmin\app\service\queue\QueueMessagePublisherService())->publish(
+            $configId,
+            $eventName,
+            $payload,
+            $headers,
+            $delay,
+            $messageKey,
+            $source
+        );
+        return true;
+    }
+}
+
+if (!function_exists('redis_publish')) {
+    /**
+     * 按 Redis 队列名称投递外部消息
+     */
+    function redis_publish(
+        string $eventName,
+        array $payload,
+        array $headers = [],
+        int $delay = 0,
+        string $queueName = 'fast_queue',
+        string $connection = 'default',
+        string $messageKey = '',
+        string $source = 'saiadmin'
+    ): bool {
+        $config = \plugin\saiadmin\app\model\tool\QueueConfig::where('driver', 'redis')
+            ->where('message_mode', 'external_message')
+            ->where('connection', $connection)
+            ->where('queue_name', $queueName)
+            ->where('status', 1)
+            ->findOrEmpty();
+        if ($config->isEmpty()) {
+            throw new \plugin\saiadmin\exception\ApiException('Redis外部消息队列配置不存在或未启用');
+        }
+        return queue_publish((int) $config->id, $eventName, $payload, $headers, $delay, $messageKey, $source);
+    }
+}
+
+if (!function_exists('rabbitmq_publish')) {
+    /**
+     * 按 RabbitMQ 队列名称投递外部消息
+     */
+    function rabbitmq_publish(
+        string $eventName,
+        array $payload,
+        array $headers = [],
+        int $delay = 0,
+        string $queueName = 'fast_queue',
+        string $connection = 'default',
+        string $messageKey = '',
+        string $source = 'saiadmin'
+    ): bool {
+        $config = \plugin\saiadmin\app\model\tool\QueueConfig::where('driver', 'rabbitmq')
+            ->where('message_mode', 'external_message')
+            ->where('connection', $connection)
+            ->where('queue_name', $queueName)
+            ->where('status', 1)
+            ->findOrEmpty();
+        if ($config->isEmpty()) {
+            throw new \plugin\saiadmin\exception\ApiException('RabbitMQ外部消息队列配置不存在或未启用');
+        }
+        return queue_publish((int) $config->id, $eventName, $payload, $headers, $delay, $messageKey, $source);
+    }
+}

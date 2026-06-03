@@ -30,6 +30,11 @@
             {{ row.driver === 'redis' ? 'Redis' : 'RabbitMQ' }}
           </ElTag>
         </template>
+        <template #message_mode="{ row }">
+          <ElTag :type="row.message_mode === 'external_message' ? 'primary' : 'info'">
+            {{ row.message_mode === 'external_message' ? '外部消息' : '内部任务' }}
+          </ElTag>
+        </template>
         <template #rabbit="{ row }">
           <span v-if="row.driver === 'rabbitmq'">
             {{ row.exchange_type }} / {{ row.exchange_name || '-' }} / {{ row.routing_key || '-' }}
@@ -82,6 +87,7 @@
   const searchForm = ref({
     name: undefined,
     driver: undefined,
+    message_mode: undefined,
     queue_name: undefined,
     status: undefined
   })
@@ -111,6 +117,7 @@
         { prop: 'id', label: '编号', width: 90, align: 'center', sortable: true },
         { prop: 'name', label: '配置名称', minWidth: 140 },
         { prop: 'driver', label: '驱动', width: 110, useSlot: true },
+        { prop: 'message_mode', label: '用途', width: 110, useSlot: true },
         { prop: 'connection', label: '连接名', width: 110 },
         { prop: 'queue_name', label: '队列名称', minWidth: 150 },
         { prop: 'rabbit', label: 'RabbitMQ', minWidth: 260, useSlot: true },

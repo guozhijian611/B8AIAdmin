@@ -29,6 +29,9 @@ class QueueRuntimeService
         $configs = QueueConfig::whereNull('delete_time')->order('sort', 'desc')->select()->toArray();
         $queueStats = [];
         foreach ($configs as $config) {
+            if (($config['message_mode'] ?? 'internal_job') !== 'internal_job') {
+                continue;
+            }
             $queueStats[] = [
                 'id' => $config['id'],
                 'name' => $config['name'],

@@ -46,6 +46,11 @@ class QueueConfig extends BaseModel
         $query->where('driver', $value);
     }
 
+    public function searchMessageModeAttr($query, $value): void
+    {
+        $query->where('message_mode', $value);
+    }
+
     public function searchConnectionAttr($query, $value): void
     {
         $query->where('connection', $value);

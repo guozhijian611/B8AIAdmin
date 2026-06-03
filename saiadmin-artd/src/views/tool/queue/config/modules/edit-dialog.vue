@@ -23,6 +23,14 @@
           </el-form-item>
         </el-col>
         <el-col :span="12">
+          <el-form-item label="队列用途" prop="message_mode">
+            <el-select v-model="formData.message_mode" placeholder="请选择用途">
+              <el-option label="内部任务" value="internal_job" />
+              <el-option label="外部消息" value="external_message" />
+            </el-select>
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
           <el-form-item label="连接名" prop="connection">
             <el-input v-model="formData.connection" placeholder="default" />
           </el-form-item>
@@ -97,12 +105,12 @@
       </template>
 
       <el-row :gutter="16">
-        <el-col :span="12">
+        <el-col v-if="formData.message_mode === 'internal_job'" :span="12">
           <el-form-item label="消费者进程数" prop="consumer_count">
             <el-input-number v-model="formData.consumer_count" :min="1" controls-position="right" />
           </el-form-item>
         </el-col>
-        <el-col :span="12">
+        <el-col v-if="formData.message_mode === 'internal_job'" :span="12">
           <el-form-item label="最大重试次数" prop="max_attempts">
             <el-input-number v-model="formData.max_attempts" :min="1" controls-position="right" />
           </el-form-item>
@@ -162,6 +170,7 @@
     id: undefined as number | undefined,
     name: '',
     driver: 'redis',
+    message_mode: 'internal_job',
     connection: 'default',
     queue_name: '',
     exchange_name: '',
@@ -185,6 +194,7 @@
   const rules = reactive<FormRules>({
     name: [{ required: true, message: '配置名称不能为空', trigger: 'blur' }],
     driver: [{ required: true, message: '驱动不能为空', trigger: 'change' }],
+    message_mode: [{ required: true, message: '队列用途不能为空', trigger: 'change' }],
     connection: [{ required: true, message: '连接名不能为空', trigger: 'blur' }],
     queue_name: [{ required: true, message: '队列名称不能为空', trigger: 'blur' }]
   })
@@ -204,6 +214,17 @@
         formData.routing_key = ''
         formData.is_delayed = 2
         formData.delay_mode = 'none'
+      }
+    }
+  )
+
+  watch(
+    () => formData.message_mode,
+    (mode) => {
+      if (mode === 'external_message') {
+        formData.consumer_count = 0
+      } else if (formData.consumer_count < 1) {
+        formData.consumer_count = 1
       }
     }
   )

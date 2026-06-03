@@ -1,6 +1,6 @@
 # 队列管理使用说明
 
-本文档说明 B8AIadmin 后台“工具 / 队列配置”和“工具 / 队列任务”的设计、配置、投递、消费、部署和排错方式。当前队列管理同时支持 Redis 队列与 RabbitMQ 队列，任务统一记录在数据库中，后台可查看任务状态并执行重试、取消、删除和清理。
+本文档说明 B8AIadmin 后台“工具 / 队列配置”、“工具 / 队列任务”和“工具 / 队列消息”的设计、配置、投递、消费、部署和排错方式。当前队列管理同时支持 Redis 队列与 RabbitMQ 队列，并区分内部任务与外部消息两种用途。
 
 ## 一、功能入口
 
@@ -11,7 +11,8 @@
 ```text
 工具
 ├── 队列配置
-└── 队列任务
+├── 队列任务
+└── 队列消息
 ```
 
 后端路由位于 `server/plugin/saiadmin/config/route.php`：
@@ -20,6 +21,7 @@
 | --- | --- | --- |
 | 队列配置 | `/tool/queueConfig` | 管理 Redis/RabbitMQ 队列配置。 |
 | 队列任务 | `/tool/queueTask` | 查看任务、重试、取消、删除、清理已完成任务和查看统计。 |
+| 队列消息 | `/tool/queueMessage` | 发布给第三方消费的外部消息，并查看发布记录。 |
 
 前端页面位于：
 
@@ -27,6 +29,7 @@
 | --- | --- |
 | 队列配置 | `saiadmin-artd/src/views/tool/queue/config/index.vue` |
 | 队列任务 | `saiadmin-artd/src/views/tool/queue/task/index.vue` |
+| 队列消息 | `saiadmin-artd/src/views/tool/queue/message/index.vue` |
 
 后端控制器位于：
 
@@ -34,6 +37,7 @@
 | --- | --- |
 | 队列配置 | `server/plugin/saiadmin/app/controller/tool/QueueConfigController.php` |
 | 队列任务 | `server/plugin/saiadmin/app/controller/tool/QueueTaskController.php` |
+| 队列消息 | `server/plugin/saiadmin/app/controller/tool/QueueMessageController.php` |
 
 ## 二、核心表结构
 
@@ -45,6 +49,7 @@
 | --- | --- |
 | `name` | 配置名称，后台展示使用。 |
 | `driver` | 队列驱动：`redis` 或 `rabbitmq`。 |
+| `message_mode` | 队列用途：`internal_job` 内部任务，`external_message` 外部消息。 |
 | `connection` | 连接名，默认 `default`。Redis 对应 `server/config/redis.php`，RabbitMQ 对应 `server/config/plugin/workbunny/webman-rabbitmq/connections.php`。 |
 | `queue_name` | 队列名称。 |
 | `exchange_name` | RabbitMQ 交换机名称，Redis 不使用。 |
@@ -55,7 +60,7 @@
 | `dead_letter_exchange` | 死信交换机。 |
 | `dead_letter_routing_key` | 死信路由键。 |
 | `prefetch_count` | RabbitMQ QOS 预取数量。慢任务建议设置为 `1`。 |
-| `consumer_count` | 消费者进程数量。 |
+| `consumer_count` | 消费者进程数量。仅内部任务配置会生成本系统消费者。 |
 | `max_attempts` | 最大重试次数配置字段。当前失败任务不会自动按次数重投，主要用于后续扩展和人工判断。 |
 | `retry_delay_seconds` | 重试间隔秒数配置字段。当前 `ttl_dlx` 模式会用于队列 TTL 参数。 |
 | `arguments` | RabbitMQ 扩展参数 JSON，会合并到队列声明参数。 |
@@ -70,7 +75,18 @@
 | RabbitMQ快速队列 | `rabbitmq` | `fast_queue` | 禁用 |
 | RabbitMQ慢速队列 | `rabbitmq` | `slow_queue` | 禁用 |
 
-### 2. `sa_tool_queue`
+### 2. 队列用途
+
+队列配置必须先区分用途：
+
+| 用途 | 值 | broker 消息内容 | 是否由本系统消费 | 适用场景 |
+| --- | --- | --- | --- | --- |
+| 内部任务 | `internal_job` | `{"id": 任务ID}` | 是 | 本系统异步执行 PHP 类方法。 |
+| 外部消息 | `external_message` | 完整事件 JSON | 否 | 第三方系统直接消费订单、用户、通知等业务事件。 |
+
+只有 `internal_job` 会生成 `RedisQueueConsumer` 或 `RabbitmqQueueConsumer` 消费者进程。`external_message` 只负责发布消息，本系统不会抢消费。
+
+### 3. `sa_tool_queue`
 
 队列任务表。每次投递都会先写入该表，再向 Redis 或 RabbitMQ 发送只包含任务 ID 的消息。
 
@@ -91,11 +107,34 @@
 | `err_num` | 失败次数。 |
 | `source` | 来源，例如 `saiadmin`、`redis`、`rabbitmq`、`codex-test`。 |
 
+### 4. `sa_tool_queue_message`
+
+队列外部消息表。每次外部消息发布都会写入该表，并把完整事件 JSON 投递给 Redis 或 RabbitMQ。
+
+| 字段 | 说明 |
+| --- | --- |
+| `config_id` | 对应 `sa_tool_queue_config.id`，要求配置用途为 `external_message`。 |
+| `message_id` | 系统生成的消息唯一编号。 |
+| `driver` | 消息使用的驱动。 |
+| `connections` | 连接名。 |
+| `name` | 队列名称。 |
+| `exchange_name` | RabbitMQ 交换机名称。 |
+| `routing_key` | RabbitMQ 路由键。 |
+| `event_name` | 事件名称，例如 `order.paid`。 |
+| `message_key` | 业务消息键，例如 `order_123`。 |
+| `payload` | 原始业务载荷 JSON。 |
+| `headers` | 业务消息头 JSON。 |
+| `content_type` | 内容类型，默认 `application/json`。 |
+| `delay` | 延迟秒数。 |
+| `response` | 发布结果或异常信息。 |
+| `status` | `0` 待发布，`1` 发布中，`2` 已发布，`3` 发布失败，`4` 已取消。 |
+| `publish_time` | 发布时间。 |
+
 ## 三、运行流程
 
 ### 1. 投递流程
 
-统一入口是 `server/plugin/saiadmin/app/service/queue/QueuePublisherService.php`。
+内部任务统一入口是 `server/plugin/saiadmin/app/service/queue/QueuePublisherService.php`。
 
 投递时会先校验：
 
@@ -110,7 +149,30 @@
 | Redis | `['id' => <任务ID>]` |
 | RabbitMQ | `{"id": <任务ID>}` |
 
-也就是说，真正的业务参数不直接放进 Redis/RabbitMQ 消息体，而是存入数据库任务表。这样后台可以完整审计任务、重试任务和查看执行结果。
+也就是说，内部任务的业务参数不直接放进 Redis/RabbitMQ 消息体，而是存入数据库任务表。这样后台可以完整审计任务、重试任务和查看执行结果。
+
+外部消息统一入口是 `server/plugin/saiadmin/app/service/queue/QueueMessagePublisherService.php`。
+
+外部消息会发送完整 JSON，例如：
+
+```json
+{
+  "event": "order.paid",
+  "message_id": "0f3c4c2a7c1c4e2e9d9e0f5f6a7b8c9d",
+  "message_key": "order_123",
+  "data": {
+    "order_id": 123,
+    "amount": "99.00"
+  },
+  "headers": {
+    "trace_id": "trace-001"
+  },
+  "source": "saiadmin",
+  "timestamp": "2026-06-04T00:00:00+08:00"
+}
+```
+
+第三方程序直接消费这份 JSON，不需要访问 B8AIadmin 的 MySQL，也不需要理解 PHP 类和方法。
 
 ### 2. 消费流程
 
@@ -150,6 +212,7 @@ server/config/plugin/workbunny/webman-rabbitmq/process.php
 只有满足以下条件的配置会生成消费者进程：
 
 - `status = 1`
+- `message_mode = internal_job`
 - `delete_time IS NULL`
 - `driver` 与入口匹配
 
@@ -193,7 +256,9 @@ REDIS_PASSWORD = ''
 REDIS_DB = 0
 ```
 
-Redis 投递使用 `Webman\RedisQueue\Redis::connection($connection)->send($queueName, ['id' => $id], $delay)`。
+内部任务 Redis 投递使用 `Webman\RedisQueue\Redis::connection($connection)->send($queueName, ['id' => $id], $delay)`。
+
+外部消息 Redis 投递会把完整事件 JSON 放入 webman/redis-queue 的 `data` 字段。Redis 原始列表消息仍会有 webman/redis-queue 外层包装，第三方如果直接读 Redis list，需要从 `{redis-queue}-waiting<queue_name>` 中解析外层 JSON，再读取 `data`。
 
 Redis 消费者位于：
 
@@ -311,7 +376,7 @@ publish($builder, json_encode(['id' => $taskId], JSON_UNESCAPED_UNICODE), $routi
 server/plugin/saiadmin/app/functions.php
 ```
 
-### 1. 按配置 ID 投递
+### 1. 按配置 ID 投递内部任务
 
 ```php
 queue_send(
@@ -337,7 +402,7 @@ queue_send(
 );
 ```
 
-### 2. 投递到 Redis 队列
+### 2. 投递内部任务到 Redis 队列
 
 ```php
 redis_send(
@@ -363,7 +428,7 @@ redis_send(
 );
 ```
 
-### 3. 投递到 RabbitMQ 队列
+### 3. 投递内部任务到 RabbitMQ 队列
 
 ```php
 rabbitmq_send(
@@ -391,6 +456,66 @@ rabbitmq_send(
 
 注意：`rabbitmq_send()` 只会查找已启用的 RabbitMQ 队列配置。默认 RabbitMQ 配置是禁用状态，使用前需要在后台启用并 reload Webman。
 
+### 4. 按配置 ID 发布外部消息
+
+```php
+queue_publish(
+    int $configId,
+    string $eventName,
+    array $payload,
+    array $headers = [],
+    int $delay = 0,
+    string $messageKey = '',
+    string $source = 'saiadmin'
+): bool
+```
+
+示例：
+
+```php
+queue_publish(
+    5,
+    'order.paid',
+    ['order_id' => 123, 'amount' => '99.00'],
+    ['trace_id' => 'trace-001'],
+    0,
+    'order_123',
+    'order-service'
+);
+```
+
+### 5. 发布外部消息到 Redis 队列
+
+```php
+redis_publish(
+    string $eventName,
+    array $payload,
+    array $headers = [],
+    int $delay = 0,
+    string $queueName = 'fast_queue',
+    string $connection = 'default',
+    string $messageKey = '',
+    string $source = 'saiadmin'
+): bool
+```
+
+### 6. 发布外部消息到 RabbitMQ 队列
+
+```php
+rabbitmq_publish(
+    string $eventName,
+    array $payload,
+    array $headers = [],
+    int $delay = 0,
+    string $queueName = 'fast_queue',
+    string $connection = 'default',
+    string $messageKey = '',
+    string $source = 'saiadmin'
+): bool
+```
+
+外部消息函数只会查找 `message_mode = external_message` 且已启用的配置。
+
 ## 八、任务管理操作
 
 后台“队列任务”支持：
@@ -415,7 +540,31 @@ rabbitmq_send(
 | `3` | 消费失败 |
 | `4` | 已取消 |
 
-## 九、部署和升级
+## 九、消息管理操作
+
+后台“队列消息”支持：
+
+| 操作 | 说明 |
+| --- | --- |
+| 发布消息 | 选择外部消息队列配置，填写事件名称、业务键、延迟秒数、payload 和 headers。 |
+| 查看列表 | 按配置、驱动、状态、事件名称等筛选外部消息发布记录。 |
+| 查看详情 | 查看 payload、headers、发布结果、消息编号和发布时间。 |
+| 重试 | 对待发布、失败或已取消消息重新发布。 |
+| 取消 | 将待发布或失败消息标记为已取消。 |
+| 删除 | 软删除消息记录。 |
+| 清理已发布 | 按配置或全局清理已发布消息。 |
+
+消息状态：
+
+| 值 | 状态 |
+| --- | --- |
+| `0` | 待发布 |
+| `1` | 发布中 |
+| `2` | 已发布 |
+| `3` | 发布失败 |
+| `4` | 已取消 |
+
+## 十、部署和升级
 
 ### 1. 数据库迁移
 
@@ -454,7 +603,7 @@ php start.php reload
 
 如果修改了 `.env`，常驻进程必须重启或 reload 才能读取新值。
 
-## 十、验证命令
+## 十一、验证命令
 
 ### 后端语法
 
@@ -463,6 +612,7 @@ cd server
 php -l plugin/saiadmin/app/service/queue/QueuePublisherService.php
 php -l plugin/saiadmin/process/queue/RedisQueueConsumer.php
 php -l plugin/saiadmin/process/queue/RabbitmqQueueConsumer.php
+php -l plugin/saiadmin/app/service/queue/QueueMessagePublisherService.php
 php -l config/plugin/workbunny/webman-rabbitmq/connections.php
 ```
 
@@ -471,6 +621,13 @@ php -l config/plugin/workbunny/webman-rabbitmq/connections.php
 ```bash
 cd server
 php webman route:list | rg "queueConfig|queueTask"
+```
+
+外部消息路由：
+
+```bash
+cd server
+php webman route:list | rg "queueMessage"
 ```
 
 ### 迁移状态
@@ -498,7 +655,7 @@ cd saiadmin-artd
 pnpm -s exec vue-tsc --noEmit
 ```
 
-## 十一、常见问题
+## 十二、常见问题
 
 ### 1. 后台看不到菜单
 
@@ -534,7 +691,17 @@ Webman 是常驻进程，配置修改后需要 reload/restart。RabbitMQ broker 
 
 当前实现会记录失败状态和 `err_num`，后台支持人工重试。`max_attempts` 和 `retry_delay_seconds` 已保存在配置表中，但自动按次数重试需要后续扩展调度逻辑。
 
-### 7. 业务方法应该怎么写
+### 7. 三方程序拿不到内部任务数据
+
+内部任务模式发给 broker 的消息只有任务 ID，业务参数存储在 `sa_tool_queue.request`。三方程序不应该消费内部任务队列。
+
+如果需要三方程序消费，必须使用外部消息模式，并通过 `queue_publish()`、`redis_publish()` 或 `rabbitmq_publish()` 发布完整业务 payload。
+
+### 8. 外部消息配置为什么没有消费者进程
+
+这是刻意设计。外部消息由第三方程序消费，本系统只负责发布和记录。如果本系统也启动消费者，会抢走第三方消息。
+
+### 9. 业务方法应该怎么写
 
 队列任务可能重复消费，业务方法应满足：
 
@@ -544,9 +711,10 @@ Webman 是常驻进程，配置修改后需要 reload/restart。RabbitMQ broker 
 - 对外部接口调用做好超时、重试和日志。
 - 对敏感参数不要写入明文日志或 `response`。
 
-## 十二、当前边界
+## 十三、当前边界
 
-- 队列配置和任务记录在数据库中，Redis/RabbitMQ 消息只保存任务 ID。
+- 内部任务的 Redis/RabbitMQ 消息只保存任务 ID。
+- 外部消息会把完整事件 JSON 投递给 Redis/RabbitMQ。
 - Redis 支持后台展示 broker waiting/delayed 数量；RabbitMQ 当前后台不直接读取 broker 管理接口。
 - RabbitMQ 默认配置为禁用，需要配置环境变量、启用后台队列配置并 reload Webman 后使用。
 - RabbitMQ 复杂拓扑可以通过多条配置和 `arguments` 表达，超出后台表单能力的场景建议增加专用 Builder 或扩展配置字段。

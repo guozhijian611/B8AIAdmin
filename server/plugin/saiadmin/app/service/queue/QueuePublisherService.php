@@ -30,6 +30,9 @@ class QueuePublisherService
         if ($config->isEmpty() || (int) $config->status !== 1) {
             throw new ApiException('队列配置不存在或未启用');
         }
+        if (($config->message_mode ?? 'internal_job') !== 'internal_job') {
+            throw new ApiException('外部消息队列不能投递内部任务');
+        }
 
         $className = is_object($class) ? get_class($class) : $class;
         if ($className === '' || !class_exists($className)) {
@@ -84,6 +87,9 @@ class QueuePublisherService
         $config = QueueConfig::findOrEmpty((int) $task->config_id);
         if ($config->isEmpty() || (int) $config->status !== 1) {
             throw new ApiException('队列配置不存在或未启用');
+        }
+        if (($config->message_mode ?? 'internal_job') !== 'internal_job') {
+            throw new ApiException('外部消息队列不能重试内部任务');
         }
 
         $task->status = 0;

@@ -43,9 +43,10 @@ export default {
     })
   },
 
-  options() {
+  options(params: Record<string, any> = {}) {
     return request.get<Api.Common.ApiData[]>({
-      url: '/tool/queueConfig/options'
+      url: '/tool/queueConfig/options',
+      params
     })
   }
 }

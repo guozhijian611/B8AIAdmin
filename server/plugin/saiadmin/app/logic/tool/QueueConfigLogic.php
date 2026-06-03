@@ -41,18 +41,19 @@ class QueueConfigLogic extends BaseLogic
         return (bool) $model->save(['status' => $status]);
     }
 
-    public function options(): array
+    public function options(string $messageMode = ''): array
     {
-        return $this->model
-            ->where('status', 1)
-            ->order('sort', 'desc')
-            ->select()
-            ->toArray();
+        $query = $this->model->where('status', 1);
+        if ($messageMode !== '') {
+            $query->where('message_mode', $messageMode);
+        }
+        return $query->order('sort', 'desc')->select()->toArray();
     }
 
     private function normalizeData(array $data): array
     {
         $data['driver'] = $data['driver'] ?? 'redis';
+        $data['message_mode'] = $this->normalizeMessageMode((string) ($data['message_mode'] ?? 'internal_job'));
         $data['connection'] = $data['connection'] ?? 'default';
         $data['queue_name'] = trim((string) ($data['queue_name'] ?? ''));
         $data['exchange_type'] = $this->normalizeExchangeType((string) ($data['exchange_type'] ?? 'direct'));
@@ -65,7 +66,9 @@ class QueueConfigLogic extends BaseLogic
         $data['is_delayed'] = (int) ($data['is_delayed'] ?? 2);
         $data['delay_mode'] = $data['is_delayed'] === 1 ? ($data['delay_mode'] ?? 'x_delay') : ($data['delay_mode'] ?? 'none');
         $data['prefetch_count'] = max(0, (int) ($data['prefetch_count'] ?? 0));
-        $data['consumer_count'] = max(1, (int) ($data['consumer_count'] ?? 1));
+        $data['consumer_count'] = $data['message_mode'] === 'internal_job'
+            ? max(1, (int) ($data['consumer_count'] ?? 1))
+            : 0;
         $data['max_attempts'] = max(1, (int) ($data['max_attempts'] ?? 3));
         $data['retry_delay_seconds'] = max(0, (int) ($data['retry_delay_seconds'] ?? 5));
         $data['sort'] = (int) ($data['sort'] ?? 100);
@@ -98,5 +101,10 @@ class QueueConfigLogic extends BaseLogic
             'header', 'headers' => 'header',
             default => 'direct',
         };
+    }
+
+    private function normalizeMessageMode(string $messageMode): string
+    {
+        return $messageMode === 'external_message' ? 'external_message' : 'internal_job';
     }
 }

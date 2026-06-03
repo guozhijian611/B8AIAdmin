@@ -16,6 +16,7 @@ class QueueConfigValidate extends BaseValidate
     protected $rule = [
         'name' => 'require',
         'driver' => 'require|in:redis,rabbitmq',
+        'message_mode' => 'require|in:internal_job,external_message',
         'connection' => 'require',
         'queue_name' => 'require',
         'exchange_type' => 'in:direct,fanout,topic,header,headers',
@@ -27,6 +28,8 @@ class QueueConfigValidate extends BaseValidate
         'name.require' => '配置名称必须填写',
         'driver.require' => '队列驱动必须填写',
         'driver.in' => '队列驱动仅支持 redis 或 rabbitmq',
+        'message_mode.require' => '队列用途必须填写',
+        'message_mode.in' => '队列用途不正确',
         'connection.require' => '连接名必须填写',
         'queue_name.require' => '队列名称必须填写',
         'exchange_type.in' => '交换机类型不正确',
@@ -39,6 +42,7 @@ class QueueConfigValidate extends BaseValidate
         'save' => [
             'name',
             'driver',
+            'message_mode',
             'connection',
             'queue_name',
             'exchange_type',
@@ -48,6 +52,7 @@ class QueueConfigValidate extends BaseValidate
         'update' => [
             'name',
             'driver',
+            'message_mode',
             'connection',
             'queue_name',
             'exchange_type',

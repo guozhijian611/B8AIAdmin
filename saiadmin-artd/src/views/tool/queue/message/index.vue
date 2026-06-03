@@ -19,11 +19,17 @@
     <ElCard class="art-table-card" shadow="never">
       <ArtTableHeader v-model:columns="columnChecks" :loading="loading" @refresh="refreshAll">
         <template #left>
-          <ElButton v-permission="'tool:queue-task:clear'" @click="handleClearCompleted" v-ripple>
+          <ElButton v-permission="'tool:queue-message:publish'" @click="publishVisible = true" v-ripple>
+            <template #icon>
+              <ArtSvgIcon icon="ri:send-plane-line" />
+            </template>
+            发布消息
+          </ElButton>
+          <ElButton v-permission="'tool:queue-message:clear'" @click="handleClearPublished" v-ripple>
             <template #icon>
               <ArtSvgIcon icon="ri:delete-bin-6-line" />
             </template>
-            清理已完成
+            清理已发布
           </ElButton>
         </template>
       </ArtTableHeader>
@@ -47,16 +53,10 @@
         <template #status="{ row }">
           <ElTag :type="statusMeta(row.status).type">{{ statusMeta(row.status).label }}</ElTag>
         </template>
-        <template #target="{ row }">
-          <span>{{ row.class_name }}::{{ row.method_name }}</span>
-        </template>
-        <template #runtime="{ row }">
-          <span>{{ row.run_time }} ms / {{ row.run_memory }} MB</span>
-        </template>
         <template #operation="{ row }">
           <div class="flex gap-2">
             <SaButton
-              v-permission="'tool:queue-task:read'"
+              v-permission="'tool:queue-message:read'"
               type="primary"
               icon="ri:file-search-line"
               toolTip="详情"
@@ -64,7 +64,7 @@
             />
             <SaButton
               v-if="[0, 3, 4].includes(Number(row.status))"
-              v-permission="'tool:queue-task:retry'"
+              v-permission="'tool:queue-message:retry'"
               type="primary"
               icon="ri:restart-line"
               toolTip="重试"
@@ -72,14 +72,14 @@
             />
             <SaButton
               v-if="[0, 3].includes(Number(row.status))"
-              v-permission="'tool:queue-task:cancel'"
+              v-permission="'tool:queue-message:cancel'"
               type="secondary"
               icon="ri:stop-circle-line"
               toolTip="取消"
               @click="handleCancel(row)"
             />
             <SaButton
-              v-permission="'tool:queue-task:destroy'"
+              v-permission="'tool:queue-message:destroy'"
               type="error"
               @click="deleteRow(row, api.delete, refreshAll)"
             />
@@ -88,6 +88,7 @@
       </ArtTable>
     </ElCard>
 
+    <PublishDialog v-model="publishVisible" :config-options="configOptions" @success="refreshAll" />
     <DetailDialog v-model="detailVisible" :data="detailData" />
   </div>
 </template>
@@ -96,39 +97,41 @@
   import { useTable } from '@/hooks/core/useTable'
   import { useSaiAdmin } from '@/composables/useSaiAdmin'
   import { ElMessage, ElMessageBox } from 'element-plus'
-  import api from '@/api/tool/queueTask'
+  import api from '@/api/tool/queueMessage'
   import configApi from '@/api/tool/queueConfig'
   import TableSearch from './modules/table-search.vue'
   import DetailDialog from './modules/detail-dialog.vue'
+  import PublishDialog from './modules/publish-dialog.vue'
 
   const searchForm = ref({
     config_id: undefined,
     driver: undefined,
     status: undefined,
-    class_name: undefined
+    event_name: undefined
   })
   const configOptions = ref<Record<string, any>[]>([])
-  const stats = ref<Record<string, any>>({ status: {} })
+  const stats = ref<Record<string, any>>({})
+  const publishVisible = ref(false)
   const detailVisible = ref(false)
   const detailData = ref<Record<string, any>>({})
 
   const statusMeta = (status: number) => {
     const map: Record<number, any> = {
-      0: { label: '待消费', type: 'info' },
-      1: { label: '消费中', type: 'warning' },
-      2: { label: '已完成', type: 'success' },
-      3: { label: '消费失败', type: 'danger' },
+      0: { label: '待发布', type: 'info' },
+      1: { label: '发布中', type: 'warning' },
+      2: { label: '已发布', type: 'success' },
+      3: { label: '发布失败', type: 'danger' },
       4: { label: '已取消', type: 'info' }
     }
     return map[Number(status)] || { label: '-', type: 'info' }
   }
 
   const statCards = computed(() => [
-    { key: 'pending', label: '待消费', value: stats.value.status?.pending ?? 0 },
-    { key: 'processing', label: '消费中', value: stats.value.status?.processing ?? 0 },
-    { key: 'completed', label: '已完成', value: stats.value.status?.completed ?? 0 },
-    { key: 'failed', label: '失败', value: stats.value.status?.failed ?? 0 },
-    { key: 'cancelled', label: '已取消', value: stats.value.status?.cancelled ?? 0 }
+    { key: 'pending', label: '待发布', value: stats.value.pending ?? 0 },
+    { key: 'publishing', label: '发布中', value: stats.value.publishing ?? 0 },
+    { key: 'published', label: '已发布', value: stats.value.published ?? 0 },
+    { key: 'failed', label: '失败', value: stats.value.failed ?? 0 },
+    { key: 'cancelled', label: '已取消', value: stats.value.cancelled ?? 0 }
   ])
 
   const handleSearch = (params: Record<string, any>) => {
@@ -155,13 +158,14 @@
       columnsFactory: () => [
         { prop: 'id', label: '编号', width: 90, align: 'center', sortable: true },
         { prop: 'driver', label: '驱动', width: 110, useSlot: true },
-        { prop: 'name', label: '队列名称', minWidth: 140 },
-        { prop: 'target', label: '执行目标', minWidth: 260, useSlot: true, showOverflowTooltip: true },
+        { prop: 'name', label: '队列名称', minWidth: 130 },
+        { prop: 'event_name', label: '事件名称', minWidth: 160, showOverflowTooltip: true },
+        { prop: 'message_key', label: '业务键', minWidth: 140, showOverflowTooltip: true },
+        { prop: 'routing_key', label: 'Routing Key', minWidth: 140, showOverflowTooltip: true },
         { prop: 'status', label: '状态', width: 110, useSlot: true },
         { prop: 'err_num', label: '失败次数', width: 100, align: 'center' },
-        { prop: 'runtime', label: '运行资源', width: 170, useSlot: true },
         { prop: 'source', label: '来源', width: 120 },
-        { prop: 'create_time', label: '创建日期', width: 180, sortable: true },
+        { prop: 'publish_time', label: '发布时间', width: 180, sortable: true },
         { prop: 'operation', label: '操作', width: 190, fixed: 'right', useSlot: true }
       ]
     }
@@ -170,13 +174,13 @@
   const { deleteRow, handleSelectionChange } = useSaiAdmin()
 
   const loadOptions = async () => {
-    const res: any = await configApi.options({ message_mode: 'internal_job' })
+    const res: any = await configApi.options({ message_mode: 'external_message' })
     configOptions.value = res.data || []
   }
 
   const loadStats = async () => {
     const res: any = await api.stats()
-    stats.value = res.data || { status: {} }
+    stats.value = res.data || {}
   }
 
   const refreshAll = () => {
@@ -191,19 +195,19 @@
   }
 
   const handleRetry = (row: any) => {
-    ElMessageBox.confirm(`确定要重试任务 #${row.id} 吗？`, '重试任务', {
+    ElMessageBox.confirm(`确定要重试消息 #${row.id} 吗？`, '重试消息', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       type: 'warning'
     }).then(async () => {
       await api.retry({ id: row.id })
-      ElMessage.success('重试投递成功')
+      ElMessage.success('重试发布成功')
       refreshAll()
     })
   }
 
   const handleCancel = (row: any) => {
-    ElMessageBox.confirm(`确定要取消任务 #${row.id} 吗？`, '取消任务', {
+    ElMessageBox.confirm(`确定要取消消息 #${row.id} 吗？`, '取消消息', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       type: 'warning'
@@ -214,13 +218,13 @@
     })
   }
 
-  const handleClearCompleted = () => {
-    ElMessageBox.confirm('确定要清理已完成任务吗？', '清理任务', {
+  const handleClearPublished = () => {
+    ElMessageBox.confirm('确定要清理已发布消息吗？', '清理消息', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       type: 'warning'
     }).then(async () => {
-      await api.clearCompleted({})
+      await api.clearPublished({})
       ElMessage.success('清理成功')
       refreshAll()
     })

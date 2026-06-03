@@ -138,6 +138,14 @@ Route::group('/tool', function () {
     Route::post("/queueTask/cancel", [\plugin\saiadmin\app\controller\tool\QueueTaskController::class, 'cancel']);
     Route::post("/queueTask/clearCompleted", [\plugin\saiadmin\app\controller\tool\QueueTaskController::class, 'clearCompleted']);
     Route::get("/queueTask/stats", [\plugin\saiadmin\app\controller\tool\QueueTaskController::class, 'stats']);
+
+    // 队列消息
+    fastRoute('queueMessage', \plugin\saiadmin\app\controller\tool\QueueMessageController::class);
+    Route::post("/queueMessage/publish", [\plugin\saiadmin\app\controller\tool\QueueMessageController::class, 'publish']);
+    Route::post("/queueMessage/retry", [\plugin\saiadmin\app\controller\tool\QueueMessageController::class, 'retry']);
+    Route::post("/queueMessage/cancel", [\plugin\saiadmin\app\controller\tool\QueueMessageController::class, 'cancel']);
+    Route::post("/queueMessage/clearPublished", [\plugin\saiadmin\app\controller\tool\QueueMessageController::class, 'clearPublished']);
+    Route::get("/queueMessage/stats", [\plugin\saiadmin\app\controller\tool\QueueMessageController::class, 'stats']);
 });
 
 Route::disableDefaultRoute('saiadmin');

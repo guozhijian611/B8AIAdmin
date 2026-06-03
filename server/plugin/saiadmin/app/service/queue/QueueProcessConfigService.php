@@ -40,6 +40,9 @@ class QueueProcessConfigService
 
         $processes = [];
         foreach ($rows as $row) {
+            if (($row['message_mode'] ?? 'internal_job') !== 'internal_job') {
+                continue;
+            }
             $id = (int) $row['id'];
             $name = preg_replace('/[^a-zA-Z0-9_]/', '_', (string) $row['queue_name']);
             $processes["saiadmin_{$driver}_queue_{$id}_{$name}"] = [

@@ -32,6 +32,7 @@ class QueueConfigController extends BaseController
     #[Apidoc\Url('/tool/queueConfig/index')]
     #[Apidoc\Method('GET')]
     #[Apidoc\Query('driver', type: 'string', require: false, desc: '队列驱动 redis/rabbitmq')]
+    #[Apidoc\Query('message_mode', type: 'string', require: false, desc: '队列用途 internal_job/external_message')]
     #[Apidoc\Query('queue_name', type: 'string', require: false, desc: '队列名称')]
     #[Apidoc\Query('status', type: 'int', require: false, desc: '状态 1启用 2禁用')]
     #[Permission('队列配置列表', 'tool:queue-config:index')]
@@ -40,6 +41,7 @@ class QueueConfigController extends BaseController
         $where = $request->more([
             ['name', ''],
             ['driver', ''],
+            ['message_mode', ''],
             ['connection', ''],
             ['queue_name', ''],
             ['status', ''],
@@ -113,8 +115,8 @@ class QueueConfigController extends BaseController
     #[Apidoc\Url('/tool/queueConfig/options')]
     #[Apidoc\Method('GET')]
     #[Permission('队列配置列表', 'tool:queue-config:index')]
-    public function options(): Response
+    public function options(Request $request): Response
     {
-        return $this->success($this->logic->options());
+        return $this->success($this->logic->options((string) $request->input('message_mode', '')));
     }
 }
