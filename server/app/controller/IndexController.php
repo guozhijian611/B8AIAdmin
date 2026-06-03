@@ -55,7 +55,7 @@ EOF;
 
     public function json(Request $request)
     {
-        return json(['code' => 0, 'msg' => 'ok']);
+        return b8_success(['msg' => 'ok']);
     }
 
 }
