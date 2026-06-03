@@ -126,6 +126,18 @@ Route::group('/tool', function () {
     Route::post("/code/generate", [\plugin\saiadmin\app\controller\tool\GenerateTablesController::class, 'generate']);
     Route::post("/code/generateFile", [\plugin\saiadmin\app\controller\tool\GenerateTablesController::class, 'generateFile']);
     Route::post("/code/sync", [\plugin\saiadmin\app\controller\tool\GenerateTablesController::class, 'sync']);
+
+    // 队列配置
+    fastRoute('queueConfig', \plugin\saiadmin\app\controller\tool\QueueConfigController::class);
+    Route::post("/queueConfig/changeStatus", [\plugin\saiadmin\app\controller\tool\QueueConfigController::class, 'changeStatus']);
+    Route::get("/queueConfig/options", [\plugin\saiadmin\app\controller\tool\QueueConfigController::class, 'options']);
+
+    // 队列任务
+    fastRoute('queueTask', \plugin\saiadmin\app\controller\tool\QueueTaskController::class);
+    Route::post("/queueTask/retry", [\plugin\saiadmin\app\controller\tool\QueueTaskController::class, 'retry']);
+    Route::post("/queueTask/cancel", [\plugin\saiadmin\app\controller\tool\QueueTaskController::class, 'cancel']);
+    Route::post("/queueTask/clearCompleted", [\plugin\saiadmin\app\controller\tool\QueueTaskController::class, 'clearCompleted']);
+    Route::get("/queueTask/stats", [\plugin\saiadmin\app\controller\tool\QueueTaskController::class, 'stats']);
 });
 
 Route::disableDefaultRoute('saiadmin');

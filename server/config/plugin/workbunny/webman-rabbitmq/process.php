@@ -2,5 +2,4 @@
 
 declare(strict_types=1);
 
-return [
-];
+return \plugin\saiadmin\app\service\queue\QueueProcessConfigService::rabbitmq();

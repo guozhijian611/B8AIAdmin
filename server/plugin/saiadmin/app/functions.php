@@ -112,3 +112,81 @@ if (!function_exists('dictDataList')) {
         return DictCache::getDict($code);
     }
 }
+
+if (!function_exists('queue_send')) {
+    /**
+     * 投递队列任务
+     */
+    function queue_send(
+        int $configId,
+        object|string $class,
+        string $method,
+        array $arguments = [],
+        int $delay = 0,
+        string $source = 'saiadmin'
+    ): bool {
+        (new \plugin\saiadmin\app\service\queue\QueuePublisherService())->dispatch(
+            $configId,
+            $class,
+            $method,
+            $arguments,
+            $delay,
+            $source
+        );
+        return true;
+    }
+}
+
+if (!function_exists('redis_send')) {
+    /**
+     * 按 Redis 队列名称投递任务
+     */
+    function redis_send(
+        object|string|null $class = null,
+        string $method = '',
+        array $arguments = [],
+        int $delay = 0,
+        string $queueName = 'fast_queue',
+        string $connection = 'default'
+    ): bool {
+        if ($class === null) {
+            throw new \plugin\saiadmin\exception\ApiException('请填写执行类');
+        }
+        $config = \plugin\saiadmin\app\model\tool\QueueConfig::where('driver', 'redis')
+            ->where('connection', $connection)
+            ->where('queue_name', $queueName)
+            ->where('status', 1)
+            ->findOrEmpty();
+        if ($config->isEmpty()) {
+            throw new \plugin\saiadmin\exception\ApiException('Redis队列配置不存在或未启用');
+        }
+        return queue_send((int) $config->id, $class, $method, $arguments, $delay, 'redis');
+    }
+}
+
+if (!function_exists('rabbitmq_send')) {
+    /**
+     * 按 RabbitMQ 队列名称投递任务
+     */
+    function rabbitmq_send(
+        object|string|null $class = null,
+        string $method = '',
+        array $arguments = [],
+        int $delay = 0,
+        string $queueName = 'fast_queue',
+        string $connection = 'default'
+    ): bool {
+        if ($class === null) {
+            throw new \plugin\saiadmin\exception\ApiException('请填写执行类');
+        }
+        $config = \plugin\saiadmin\app\model\tool\QueueConfig::where('driver', 'rabbitmq')
+            ->where('connection', $connection)
+            ->where('queue_name', $queueName)
+            ->where('status', 1)
+            ->findOrEmpty();
+        if ($config->isEmpty()) {
+            throw new \plugin\saiadmin\exception\ApiException('RabbitMQ队列配置不存在或未启用');
+        }
+        return queue_send((int) $config->id, $class, $method, $arguments, $delay, 'rabbitmq');
+    }
+}
