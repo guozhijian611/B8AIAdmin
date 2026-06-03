@@ -309,16 +309,16 @@ RABBITMQ_PASSWORD = admin
 RABBITMQ_DEBUG = false
 RABBITMQ_TIMEOUT = 10
 RABBITMQ_RESTART_INTERVAL = 5
-WEBMAN_EVENT_LOOP = ''
+WEBMAN_EVENT_LOOP = Workerman\Events\Fiber
 ```
 
-RabbitMQ 消费者依赖 Workerman 协程事件循环。启用 RabbitMQ 消费进程前，需要把 `WEBMAN_EVENT_LOOP` 设置为支持协程的事件循环，例如：
+RabbitMQ 消费者依赖 Workerman 协程事件循环。项目默认使用 `Workerman\Events\Fiber`，并已通过 Composer 引入 `revolt/event-loop` 作为 Fiber 事件循环依赖。也可以在 `.env` 中通过 `WEBMAN_EVENT_LOOP` 覆盖为其他支持协程的事件循环，例如：
 
 ```env
 WEBMAN_EVENT_LOOP = Workerman\Events\Fiber
 ```
 
-如果未配置该项，即使后台 RabbitMQ 队列配置为启用，也不会生成 RabbitMQ 消费者进程，避免出现 `Not in fiber context` 后反复重启。
+如果老环境的 `.env` 中已经存在 `WEBMAN_EVENT_LOOP = ''`，需要删除该行或改为 `WEBMAN_EVENT_LOOP = Workerman\Events\Fiber`，然后 restart Webman。
 
 RabbitMQ 动态消费者位于：
 
@@ -347,6 +347,8 @@ use function Workbunny\WebmanRabbitMQ\publish;
 
 publish($builder, json_encode(['id' => $taskId], JSON_UNESCAPED_UNICODE), $routingKey, $headers);
 ```
+
+注意：Workbunny RabbitMQ 的发布和消费都依赖 Workerman Fiber 运行时。后台 HTTP 请求、Webman 进程和队列消费者进程中可以正常使用；不要用普通 `php -r` 直接调用 `rabbitmq_send()` 或 `rabbitmq_publish()` 做测试，否则仍可能因为不在 Fiber 上下文中报 `Not in fiber context`。
 
 ### RabbitMQ 多队列与交换机
 
@@ -604,7 +606,7 @@ php webman b8:migrate
 
 - Redis 环境变量已配置。
 - RabbitMQ 环境变量已配置。
-- RabbitMQ 消费者所需的 `WEBMAN_EVENT_LOOP` 已配置。
+- RabbitMQ 消费者所需的 `WEBMAN_EVENT_LOOP` 已配置，或使用项目默认 `Workerman\Events\Fiber`。
 - RabbitMQ 用户、vhost、权限正确。
 - 如果使用 x-delay，RabbitMQ 已启用 `rabbitmq_delayed_message_exchange`。
 
@@ -705,7 +707,7 @@ Webman 是常驻进程，配置修改后需要 reload/restart。RabbitMQ broker 
 
 ### 6. RabbitMQ 消费者一直重启
 
-如果 `server/runtime/logs/workerman.log` 出现 `Not in fiber context`，说明 Workbunny RabbitMQ 运行在非协程事件循环下。设置 `WEBMAN_EVENT_LOOP = Workerman\Events\Fiber` 并 restart Webman 后再启用 RabbitMQ 消费者。
+如果 `server/runtime/logs/workerman.log` 出现 `Not in fiber context`，说明 Workbunny RabbitMQ 运行在非协程事件循环下。确认 `.env` 没有把 `WEBMAN_EVENT_LOOP` 覆盖为空值，必要时设置为 `WEBMAN_EVENT_LOOP = Workerman\Events\Fiber` 并 restart Webman。
 
 ### 7. 任务失败后没有自动重试
 
