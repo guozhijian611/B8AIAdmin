@@ -17,6 +17,7 @@ description: 在 B8AIadmin 中查询 openb8/webman-otel-trace 本地日志、定
 - 配置入口：`server/config/plugin/openb8/webman-otel-trace/`。
 - 本地日志：
   - HTTP 请求：`server/runtime/logs/otel-request-*.log`
+  - 业务 Span：`server/runtime/logs/otel-span-*.log`
   - SQL：`server/runtime/logs/otel-sql-*.log`
   - Webman 异常：`server/runtime/logs/webman-*.log`
 - 页面入口：debug 模式下 `/__trace`，路由来自 `server/config/plugin/openb8/webman-otel-trace/route.php`。
@@ -47,7 +48,7 @@ Trace::setAttribute('model', $model);
 Trace::addEvent('llm.request.start');
 ```
 
-业务 span 默认由 `OTEL_BUSINESS_SPAN=true` 开启。生产若只保留 HTTP/SQL/request log，可设置 `OTEL_BUSINESS_SPAN=false`。
+业务 span 默认由 `OTEL_BUSINESS_SPAN=true` 开启，本地页面日志由 `OTEL_BUSINESS_SPAN_FILE=true` 控制。生产若只保留 HTTP/SQL/request log，可设置 `OTEL_BUSINESS_SPAN=false`。
 
 ## 快速查询
 
@@ -86,7 +87,7 @@ rg -n "<trace_id>" server/runtime/logs
 3. 若出现在 `otel-request-*.log`，解析 JSON，关注 `path`、`status_code`、`business_code`、`exception`、`request`、`response`。
 4. 若 SQL trace_id 是 `null`，多半是定时任务、健康检查、连接 ping 或未进入 HTTP trace 上下文，不要误判为当前请求 SQL。
 5. 若 `/__trace` 查不到但日志里有，检查 `trace_view.max_files`、`trace_view.max_lines`、日志日期范围和页面解析逻辑。
-6. 若业务 span 看不到，先确认 `OTEL_BUSINESS_SPAN`、`exporter.driver` 和外部 OTLP/Jaeger/Tempo 后端；`/__trace` 当前主要展示 request/sql 文件日志，不等价于完整 span 时间线。
+6. 若业务 span 看不到，先确认业务代码是否调用 `Trace::span()`、`OTEL_BUSINESS_SPAN`、`OTEL_BUSINESS_SPAN_FILE`、`runtime/logs/otel-span-*.log` 是否有同 trace_id 记录；跨服务完整时间线再看 OTLP/Jaeger/Tempo 后端。
 
 ## 修复流程
 

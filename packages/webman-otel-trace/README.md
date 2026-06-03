@@ -2,7 +2,7 @@
 
 Webman OpenTelemetry trace 插件，当前项目建议用它统一 HTTP、PDO/ThinkORM、业务 span、RabbitMQ、日志 trace id 和 Prometheus 文本指标。
 
-当前版本：`0.2.0`。
+当前版本：`0.2.1`。
 
 ## 使用方式
 
@@ -72,11 +72,19 @@ span('order.pay', fn () => $this->orderLogic->pay($orderId));
 'business_span' => [
     'enable' => true,
     'tracer_name' => 'openb8.webman.business',
+    'console' => false,
+    'file' => true,
 ],
 ```
 
 ```bash
 OTEL_BUSINESS_SPAN=false php start.php start
+```
+
+业务 span 文件日志默认写入 `runtime/logs/otel-span-YYYY-MM-DD.log`，用于 `/__trace` 本地页面展示业务时间线。需要关闭本地文件日志时可配置：
+
+```bash
+OTEL_BUSINESS_SPAN_FILE=false php start.php start
 ```
 
 RabbitMQ 生产端使用：
@@ -157,9 +165,9 @@ class DemoQueue extends TraceQueueBuilder
 
 也可以用环境变量临时开启：`OTEL_SQL_LOG=true php start.php start`。请求日志控制台输出对应 `OTEL_REQUEST_LOG_CONSOLE=true`，SQL 日志控制台输出对应 `OTEL_SQL_LOG_CONSOLE=true`。
 
-日志会通过 Monolog processor 自动给默认日志通道补充 `trace_id` 和 `span_id`；插件自己的 request/sql 日志也会在 JSON 内容里直接写入这两个字段。
+日志会通过 Monolog processor 自动给默认日志通道补充 `trace_id` 和 `span_id`；插件自己的 request/span/sql 日志也会在 JSON 内容里直接写入这两个字段。
 
-调试模式下会额外注册一个简易查询页，默认地址是 `http://127.0.0.1:8787/__trace`。它只在 `config/app.php` 的 `debug=true` 时生效，来源是本地 `runtime/logs/otel-request-*.log` 和 `runtime/logs/otel-sql-*.log`。浏览器 F12 里可以在接口响应头复制 `x-trace-id`，或者直接复制完整 `traceparent`，粘到页面里查询同一次请求的 HTTP 日志和 SQL 文件日志：
+调试模式下会额外注册一个简易查询页，默认地址是 `http://127.0.0.1:8787/__trace`。它只在 `config/app.php` 的 `debug=true` 时生效，来源是本地 `runtime/logs/otel-request-*.log`、`runtime/logs/otel-span-*.log` 和 `runtime/logs/otel-sql-*.log`。浏览器 F12 里可以在接口响应头复制 `x-trace-id`，或者直接复制完整 `traceparent`，粘到页面里查询同一次请求的 HTTP、业务 Span 和 SQL 文件日志：
 
 ```php
 'trace_view' => [

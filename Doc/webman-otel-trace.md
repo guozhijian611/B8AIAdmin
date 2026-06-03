@@ -12,7 +12,7 @@ Trace 插件用于观察一次请求或一次后台任务的关键链路。当�
 - RabbitMQ 发布和消费
 - 队列任务消费
 - 异常、耗时、业务状态码
-- 本地 request/sql 日志中的 `trace_id` 和 `span_id`
+- 本地 request/span/sql 日志中的 `trace_id` 和 `span_id`
 
 完整 PHP 方法调用栈不建议放到常驻 trace 里。全量方法调用图属于 Xdebug、Blackfire、Tideways、XHProf、SPX 这类 profiler/debug 工具。
 
@@ -109,6 +109,8 @@ public function createChat(array $data): array
 'business_span' => [
     'enable' => true,
     'tracer_name' => 'openb8.webman.business',
+    'console' => false,
+    'file' => true,
 ],
 ```
 
@@ -116,6 +118,7 @@ public function createChat(array $data): array
 
 ```bash
 OTEL_BUSINESS_SPAN=true
+OTEL_BUSINESS_SPAN_FILE=true
 OTEL_BUSINESS_TRACER_NAME=openb8.webman.business
 ```
 
@@ -133,13 +136,15 @@ OTEL_BUSINESS_SPAN=false
 http://127.0.0.1:8787/__trace
 ```
 
-浏览器接口响应头中复制 `x-trace-id` 或完整 `traceparent`，在页面中查询本地 request/sql 日志。
+浏览器接口响应头中复制 `x-trace-id` 或完整 `traceparent`，在页面中查询本地 request/span/sql 日志。
 
-注意：`/__trace` 当前主要展示本地请求日志和 SQL 文件日志。业务 span 会进入 OpenTelemetry span 导出链路；如果 `exporter.driver=none`，不会发送到外部 OTLP 后端。需要完整 span 时间线时，建议配置 OTLP Collector、Jaeger、Tempo 等后端。
+页面会读取本地 `otel-request-*`、`otel-span-*` 和 `otel-sql-*` 日志，展示 HTTP、业务 Span、SQL 的单次 trace 时间线。业务 span 需要 `business_span.file=true` 或 `OTEL_BUSINESS_SPAN_FILE=true` 才会出现在本地页面中。
+
+如果需要跨服务、跨机器的完整时间线，仍建议配置 OTLP Collector、Jaeger、Tempo 等后端。
 
 ## 版本
 
-当前 trace 插件版本：`0.2.0`。
+当前 trace 插件版本：`0.2.1`。
 
 本版本新增：
 
@@ -149,3 +154,5 @@ http://127.0.0.1:8787/__trace
 - `Trace::addEvent()`
 - `Trace::context()`
 - `OTEL_BUSINESS_SPAN` 业务 span 开关
+- `OTEL_BUSINESS_SPAN_FILE` 业务 span 本地日志开关
+- `/__trace` 展示业务 Span 时间线

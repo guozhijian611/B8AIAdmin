@@ -14,7 +14,7 @@ return [
     'service' => [
         'name' => getenv('OTEL_SERVICE_NAME') ?: 'b8aiadmin-webman',
         'namespace' => getenv('OTEL_SERVICE_NAMESPACE') ?: 'openb8',
-        'version' => getenv('OTEL_SERVICE_VERSION') ?: '0.2.0',
+        'version' => getenv('OTEL_SERVICE_VERSION') ?: '0.2.1',
         'environment' => getenv('APP_ENV') ?: getenv('OTEL_DEPLOYMENT_ENVIRONMENT') ?: 'local',
     ],
     'exporter' => [
@@ -48,6 +48,8 @@ return [
         // Logic/Service 中通过 Trace::span() 手动创建的业务 span。
         'enable' => $bool('OTEL_BUSINESS_SPAN', true),
         'tracer_name' => getenv('OTEL_BUSINESS_TRACER_NAME') ?: 'openb8.webman.business',
+        'console' => $bool('OTEL_BUSINESS_SPAN_CONSOLE', false),
+        'file' => $bool('OTEL_BUSINESS_SPAN_FILE', true),
     ],
     'metrics' => [
         'enable' => true,

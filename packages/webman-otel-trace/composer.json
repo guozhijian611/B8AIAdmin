@@ -1,7 +1,7 @@
 {
     "name": "openb8/webman-otel-trace",
     "description": "OpenTelemetry trace integration for Webman.",
-    "version": "0.2.0",
+    "version": "0.2.1",
     "type": "library",
     "license": "MIT",
     "require": {
