@@ -42,13 +42,17 @@
         "guozhijian611/thinkorm-log": "dev-main",
         "webman/redis-queue": "^2.1",
         "workbunny/webman-rabbitmq": "^3.0",
-        "openb8/webman-otel-trace": "dev-main",
+        "openb8/webman-otel-trace": "^0.2.1",
         "hg/apidoc": "^5.3",
         "hg/apidoc-export": "^1.0",
         "zjkal/mysql-helper": "^1.0",
         "robmorgan/phinx": "^0.16.11",
         "webman-tech/log-reader": "^5.0",
-        "revolt/event-loop": "^1.0"
+        "revolt/event-loop": "^1.0",
+        "aliyuncs/oss-sdk-php": "^2.7",
+        "qcloud/cos-sdk-v5": "^2.6",
+        "qiniu/php-sdk": "^7.14",
+        "league/flysystem-aws-s3-v3": "^3.34"
     },
     "suggest": {
         "ext-event": "For better performance. "
