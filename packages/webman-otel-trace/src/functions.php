@@ -10,3 +10,10 @@ function publish(AbstractBuilder $builder, string $body, ?string $routingKey = n
 {
     return TracePublisher::publish($builder, $body, $routingKey, $headers);
 }
+
+namespace OpenB8\WebmanOtelTrace;
+
+function span(string $name, callable $callback, array $attributes = []): mixed
+{
+    return Support\Trace::span($name, $callback, $attributes);
+}

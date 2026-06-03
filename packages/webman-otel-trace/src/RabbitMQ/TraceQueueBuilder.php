@@ -6,6 +6,7 @@ namespace OpenB8\WebmanOtelTrace\RabbitMQ;
 
 use Bunny\Message as BunnyMessage;
 use OpenB8\WebmanOtelTrace\Metrics\MetricRegistry;
+use OpenB8\WebmanOtelTrace\Support\Version;
 use OpenTelemetry\API\Globals;
 use OpenTelemetry\API\Trace\SpanKind;
 use OpenTelemetry\API\Trace\StatusCode;
@@ -35,7 +36,7 @@ abstract class TraceQueueBuilder extends QueueBuilder
         );
 
         $span = Globals::tracerProvider()
-            ->getTracer('openb8.webman.rabbitmq', '0.1.0')
+            ->getTracer('openb8.webman.rabbitmq', Version::VERSION)
             ->spanBuilder('rabbitmq consume ' . $destination)
             ->setParent($parent)
             ->setSpanKind(SpanKind::KIND_CONSUMER)

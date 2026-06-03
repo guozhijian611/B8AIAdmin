@@ -6,6 +6,7 @@ namespace OpenB8\WebmanOtelTrace\Middleware;
 
 use OpenB8\WebmanOtelTrace\Metrics\MetricRegistry;
 use OpenB8\WebmanOtelTrace\Support\TraceContext;
+use OpenB8\WebmanOtelTrace\Support\Version;
 use OpenTelemetry\API\Globals;
 use OpenTelemetry\API\Trace\SpanKind;
 use OpenTelemetry\API\Trace\StatusCode;
@@ -37,7 +38,7 @@ class TraceMiddleware implements MiddlewareInterface
         );
 
         $span = Globals::tracerProvider()
-            ->getTracer('openb8.webman.http', '0.1.0')
+            ->getTracer('openb8.webman.http', Version::VERSION)
             ->spanBuilder($spanName)
             ->setParent($parent)
             ->setSpanKind(SpanKind::KIND_SERVER)

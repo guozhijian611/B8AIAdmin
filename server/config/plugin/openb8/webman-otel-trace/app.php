@@ -14,7 +14,7 @@ return [
     'service' => [
         'name' => getenv('OTEL_SERVICE_NAME') ?: 'b8aiadmin-webman',
         'namespace' => getenv('OTEL_SERVICE_NAMESPACE') ?: 'openb8',
-        'version' => getenv('OTEL_SERVICE_VERSION') ?: 'dev',
+        'version' => getenv('OTEL_SERVICE_VERSION') ?: '0.2.0',
         'environment' => getenv('APP_ENV') ?: getenv('OTEL_DEPLOYMENT_ENVIRONMENT') ?: 'local',
     ],
     'exporter' => [
@@ -43,6 +43,11 @@ return [
         // 当前项目未启用 ext-ffi，OpenTelemetry 默认 fiber storage 会让 PDO 自动埋点在 Webman fiber 中告警。
         // 开启后使用进程级 ContextStorage；若以后启用 FFI + OTEL_PHP_FIBERS_ENABLED，可关闭它。
         'force_global_storage_without_ffi' => true,
+    ],
+    'business_span' => [
+        // Logic/Service 中通过 Trace::span() 手动创建的业务 span。
+        'enable' => $bool('OTEL_BUSINESS_SPAN', true),
+        'tracer_name' => getenv('OTEL_BUSINESS_TRACER_NAME') ?: 'openb8.webman.business',
     ],
     'metrics' => [
         'enable' => true,

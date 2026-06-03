@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OpenB8\WebmanOtelTrace\RabbitMQ;
 
 use OpenB8\WebmanOtelTrace\Metrics\MetricRegistry;
+use OpenB8\WebmanOtelTrace\Support\Version;
 use OpenTelemetry\API\Globals;
 use OpenTelemetry\API\Trace\SpanKind;
 use OpenTelemetry\API\Trace\StatusCode;
@@ -28,7 +29,7 @@ class TracePublisher
         $config = $builder->getBuilderConfig();
         $destination = $config->getExchange() ?: $config->getQueue() ?: $builder->getBuilderName();
         $span = Globals::tracerProvider()
-            ->getTracer('openb8.webman.rabbitmq', '0.1.0')
+            ->getTracer('openb8.webman.rabbitmq', Version::VERSION)
             ->spanBuilder('rabbitmq publish ' . $destination)
             ->setSpanKind(SpanKind::KIND_PRODUCER)
             ->setAttributes([

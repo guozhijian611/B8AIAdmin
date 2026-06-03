@@ -1,6 +1,8 @@
 # openb8/webman-otel-trace
 
-Webman OpenTelemetry trace 插件，当前项目建议用它统一 HTTP、PDO/ThinkORM、RabbitMQ、日志 trace id 和 Prometheus 文本指标。
+Webman OpenTelemetry trace 插件，当前项目建议用它统一 HTTP、PDO/ThinkORM、业务 span、RabbitMQ、日志 trace id 和 Prometheus 文本指标。
+
+当前版本：`0.2.0`。
 
 ## 使用方式
 
@@ -16,6 +18,66 @@ HTTP trace 会通过 Webman 全局中间件 `@` 自动创建 server span，主�
 对于 SaiAdmin 这类 HTTP 状态码为 200、但响应 JSON `code` 为 401/500 的接口，插件会额外写入 `app.response.code`、`app.response.message`，并把非成功业务码的 span 标记为 error。
 
 ThinkORM 底层走 PDO 时，由 `open-telemetry/opentelemetry-auto-pdo` 负责自动埋点，前提是 PHP 安装并启用了 `ext-opentelemetry`。
+
+## 业务 span
+
+`Trace::span()` 用于在 Logic、Service、队列任务或复杂业务代码中手动记录关键业务节点。它会继承当前 HTTP trace；如果当前没有 HTTP 入口，比如队列或定时任务，也会创建新的 root span。
+
+```php
+use OpenB8\WebmanOtelTrace\Support\Trace;
+
+class OrderLogic
+{
+    public function pay(int $orderId): bool
+    {
+        return Trace::span('order.pay', function () use ($orderId) {
+            $this->checkOrder($orderId);
+            $this->createPayment($orderId);
+            $this->markPaid($orderId);
+
+            return true;
+        }, [
+            'order.id' => $orderId,
+        ]);
+    }
+}
+```
+
+需要在 span 内继续补充属性或事件时：
+
+```php
+Trace::span('saiai.chat.create', function () use ($data) {
+    Trace::setAttribute('model', $data['model'] ?? '');
+    Trace::addEvent('llm.request.start');
+
+    return $this->llmService->chat($data);
+});
+```
+
+回调也可以声明一个参数接收当前 `SpanInterface`，用于少量高级场景；普通业务代码优先使用 `Trace::setAttribute()` 和 `Trace::addEvent()`。
+
+也可以使用函数风格：
+
+```php
+use function OpenB8\WebmanOtelTrace\span;
+
+span('order.pay', fn () => $this->orderLogic->pay($orderId));
+```
+
+业务 span 适合记录 Controller 之后的关键业务动作，不建议用于所有私有方法或框架内部方法。完整方法调用栈属于 profiler/debug 工具的范围。
+
+可以通过配置或环境变量单独关闭业务 span：
+
+```php
+'business_span' => [
+    'enable' => true,
+    'tracer_name' => 'openb8.webman.business',
+],
+```
+
+```bash
+OTEL_BUSINESS_SPAN=false php start.php start
+```
 
 RabbitMQ 生产端使用：
 
