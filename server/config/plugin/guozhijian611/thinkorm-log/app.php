@@ -23,7 +23,8 @@ return [
             '/logs',
             '/logview/',
             'trace',
-            '__trace'
+            '__trace',
+            'log-reader'
         ]
     ]
 ];
