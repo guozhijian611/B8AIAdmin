@@ -1,0 +1,4 @@
+interface:
+  display_name: "B8 Phinx"
+  short_description: "B8AIadmin 数据迁移工作流"
+  default_prompt: "Use $b8-phinx to create, run, or debug B8AIadmin Phinx database migrations."
