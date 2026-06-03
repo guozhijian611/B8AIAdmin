@@ -116,6 +116,7 @@ import { defineConfig } from 'openapi-ts-request'
 
 export default defineConfig([
   {
+    uniqueKey: 'app-api',
     describe: 'app-api',
     schemaPath: 'https://example.com/openapi.json',
     serversPath: './src/service',
@@ -132,6 +133,17 @@ export default defineConfig([
 
 ```bash
 pnpm openapi
+```
+
+固定生成某一个 APIDOC app 时，`-u/--uniqueKey` 匹配的是配置项里的 `uniqueKey`，不是 `describe`。例如新增 `justai-api` 时要同时写：
+
+```ts
+{
+  uniqueKey: 'justai-api',
+  describe: 'justai-api',
+  schemaPath: `${apidocBaseUrl}/apidoc/openapi/justai-api`,
+  serversPath: './src/service/justai',
+}
 ```
 
 生成后：

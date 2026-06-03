@@ -18,6 +18,7 @@ Primary local facts:
 - OpenAPI export bridge: `server/app/controller/ApidocOpenapiController.php`.
 - Export route: `/apidoc/openapi/{appKey}`.
 - Current APIDOC apps are mobile-facing only: `saiai-api`, `saiuser-api`, `saipay-api`.
+- When wiring `uniapp/openapi-ts-request.config.ts`, each APIDOC generation item must set both `uniqueKey` and `describe` to the app key, for example `uniqueKey: 'justai-api'` and `describe: 'justai-api'`. The `openapi-ts -u <key>` CLI filters by `uniqueKey`; `describe` is only the interactive display label.
 
 ## Operating Rules
 
@@ -109,4 +110,19 @@ For OpenAPI export checks, use:
 
 ```bash
 curl -s http://127.0.0.1:8787/apidoc/openapi/saiai-api | head
+```
+
+For unibest generation checks, make sure the config item contains a matching `uniqueKey` before running a fixed script:
+
+```ts
+{
+    uniqueKey: 'justai-api',
+    describe: 'justai-api',
+    schemaPath: createApidocSchemaPath('justai-api'),
+    serversPath: './src/service/justai',
+}
+```
+
+```bash
+pnpm openapi -- -u justai-api
 ```

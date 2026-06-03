@@ -92,9 +92,23 @@ unibest 侧自动接口生成应指向具体 appKey 的 OpenAPI URL，例如：
 - `http://127.0.0.1:8787/apidoc/openapi/saiuser-api`
 - `http://127.0.0.1:8787/apidoc/openapi/saipay-api`
 
+`openapi-ts-request@1.10.0` 的固定生成参数 `-u/--uniqueKey` 只匹配配置项里的 `uniqueKey`，不会匹配 `describe`。新增 APIDOC 生成项时必须同时写：
+
+```ts
+{
+  uniqueKey: 'justai-api',
+  describe: 'justai-api',
+  schemaPath: createApidocSchemaPath('justai-api'),
+  serversPath: './src/service/justai',
+}
+```
+
+其中 `uniqueKey` 用于 `pnpm openapi -- -u justai-api` 或 package script 的固定选择，`describe` 只用于交互列表展示。
+
 ## 排错
 
 - `Class "hg\apidoc\providers\WebmanService" not found`: 先确认 `server/vendor/hg/apidoc/src/providers/WebmanService.php` 存在，再运行 `composer require hg/apidoc hg/apidoc-export` 或 `composer install`。
+- `openapi-ts -u justai-api` 没有生成：确认 `openapi-ts-request.config.ts` 对应项存在 `uniqueKey: 'justai-api'`，只写 `describe: 'justai-api'` 不够。
 - APIDOC 页面/导出看不到接口：确认控制器目录在 `apps[*].path` 中，方法有可解析注解，Webman 常驻进程已 reload。
 - 自动 URL 不符合预期：补 `#[Apidoc\Url('/exact/path')]`，不要继续猜自动规则。
 - 注解类报未导入：确认文件顶部有 `use hg\apidoc\annotation as Apidoc;`。
