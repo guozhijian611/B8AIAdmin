@@ -23,7 +23,7 @@ class LogReaderAccess implements MiddlewareInterface
         }
 
         $response = $handler($request);
-        $this->keepLogActionsInIframe($response);
+        $this->normalizeLogReaderHtml($response);
 
         if ($request->get('ticket')) {
             $response->cookie(LogReaderTicketService::COOKIE, $ticket, LogReaderTicketService::TTL, '/', '', false, true, 'Lax');
@@ -38,7 +38,7 @@ class LogReaderAccess implements MiddlewareInterface
             ->withHeader('Content-Type', 'text/html; charset=utf-8');
     }
 
-    private function keepLogActionsInIframe(Response $response): void
+    private function normalizeLogReaderHtml(Response $response): void
     {
         $contentType = $response->getHeader('Content-Type');
         $contentType = is_array($contentType) ? implode(';', $contentType) : (string) $contentType;
@@ -48,18 +48,45 @@ class LogReaderAccess implements MiddlewareInterface
         }
 
         $body = $response->rawBody();
-        if (!str_contains($body, 'target="_blank"')) {
+        if (!str_contains($body, '/log-reader')) {
             return;
         }
 
-        $body = preg_replace(
-            '/(<a\\s+[^>]*href="[^"]*\\/log-reader\\/(?:view|tail)[^"]*"[^>]*)\\s+target="_blank"/i',
-            '$1',
-            $body
-        );
+        $body = str_replace(' target="_blank"', '', $body);
+        $body = $this->injectProxyPathFixScript($body);
 
         if (is_string($body)) {
+            $response->withoutHeader('Content-Length');
             $response->withBody($body);
         }
+    }
+
+    private function injectProxyPathFixScript(string $body): string
+    {
+        if (str_contains($body, 'data-log-reader-proxy-fix')) {
+            return $body;
+        }
+
+        $script = <<<'HTML'
+<script data-log-reader-proxy-fix>
+(function () {
+    var match = window.location.pathname.match(/^(.*)\/log-reader(?:\/.*)?$/);
+    var prefix = match ? match[1] : '';
+    if (!prefix) {
+        return;
+    }
+    document.querySelectorAll('a[href^="/log-reader"]').forEach(function (link) {
+        link.setAttribute('href', prefix + link.getAttribute('href'));
+        link.removeAttribute('target');
+    });
+})();
+</script>
+HTML;
+
+        if (str_contains($body, '</body>')) {
+            return str_replace('</body>', $script . "\n</body>", $body);
+        }
+
+        return $body . "\n" . $script;
     }
 }
