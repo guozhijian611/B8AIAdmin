@@ -15,7 +15,7 @@
 use app\middleware\CrossDomain;
 
 return [
-    '' => [
+    '@' => [
         CrossDomain::class,
     ],
 ];
