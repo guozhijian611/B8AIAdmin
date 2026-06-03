@@ -105,6 +105,9 @@ Route::group('/core', function () {
     Route::get("/adminer/ticket", [\plugin\saiadmin\app\controller\system\AdminerController::class, 'ticket']);
     Route::any("/adminer/proxy", [\plugin\saiadmin\app\controller\system\AdminerController::class, 'proxy']);
 
+    // 日志查看器
+    Route::get("/log-reader/ticket", [\plugin\saiadmin\app\controller\system\LogReaderController::class, 'ticket']);
+
 });
 
 Route::group('/tool', function () {

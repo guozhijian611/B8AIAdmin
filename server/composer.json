@@ -46,7 +46,8 @@
         "hg/apidoc": "^5.3",
         "hg/apidoc-export": "^1.0",
         "zjkal/mysql-helper": "^1.0",
-        "robmorgan/phinx": "^0.16.11"
+        "robmorgan/phinx": "^0.16.11",
+        "webman-tech/log-reader": "^5.0"
     },
     "suggest": {
         "ext-event": "For better performance. "
