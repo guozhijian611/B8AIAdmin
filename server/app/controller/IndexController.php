@@ -58,4 +58,8 @@ EOF;
         return ok(['msg' => 'ok']);
     }
 
+    public function fail(Request $request)
+    {
+        return fail('参数错误');
+    }
 }
