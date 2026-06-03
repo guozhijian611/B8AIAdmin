@@ -5,6 +5,7 @@
 - 每一次进行功能变更、文档变更或规范变更之后，都要提交中文 Git commit，commit message 需符合 Conventional Commits 规范。
 - 开始改动前先查看 `git status --short`，不要覆盖或回退用户已有改动。
 - 提交前只暂存本次任务相关文件，避免把无关改动带入 commit。
+- `b8aiadmin` 是父框架，`justai` 是基于本框架的子项目；凡是属于框架层的修复、规范或能力增强，必须优先或同步修改到父框架，不能只落在子项目里。
 
 ## 项目技术栈
 - 后端：PHP 8.3、Webman、SaiAdmin、ThinkORM、MySQL 8.0、Phinx。

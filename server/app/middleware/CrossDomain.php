@@ -17,6 +17,11 @@ class CrossDomain implements MiddlewareInterface
             ? response('', 204)
             : $handler($request);
 
+        return self::withCorsHeaders($request, $response);
+    }
+
+    public static function withCorsHeaders(Request $request, Response $response): Response
+    {
         $origin = $request->header('origin', '*');
         $requestHeaders = $request->header('access-control-request-headers', '*');
 
