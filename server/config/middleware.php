@@ -12,4 +12,10 @@
  * @license   http://www.opensource.org/licenses/mit-license.php MIT License
  */
 
-return [];
+use app\middleware\CrossDomain;
+
+return [
+    '' => [
+        CrossDomain::class,
+    ],
+];
