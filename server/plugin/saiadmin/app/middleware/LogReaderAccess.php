@@ -23,6 +23,8 @@ class LogReaderAccess implements MiddlewareInterface
         }
 
         $response = $handler($request);
+        $this->keepLogActionsInIframe($response);
+
         if ($request->get('ticket')) {
             $response->cookie(LogReaderTicketService::COOKIE, $ticket, LogReaderTicketService::TTL, '/', '', false, true, 'Lax');
         }
@@ -34,5 +36,30 @@ class LogReaderAccess implements MiddlewareInterface
     {
         return response('<h1>403 Forbidden</h1><p>' . htmlspecialchars($message, ENT_QUOTES, 'UTF-8') . '</p>', 403)
             ->withHeader('Content-Type', 'text/html; charset=utf-8');
+    }
+
+    private function keepLogActionsInIframe(Response $response): void
+    {
+        $contentType = $response->getHeader('Content-Type');
+        $contentType = is_array($contentType) ? implode(';', $contentType) : (string) $contentType;
+
+        if ($contentType !== '' && !str_contains(strtolower($contentType), 'text/html')) {
+            return;
+        }
+
+        $body = $response->rawBody();
+        if (!str_contains($body, 'target="_blank"')) {
+            return;
+        }
+
+        $body = preg_replace(
+            '/(<a\\s+[^>]*href="[^"]*\\/log-reader\\/(?:view|tail)[^"]*"[^>]*)\\s+target="_blank"/i',
+            '$1',
+            $body
+        );
+
+        if (is_string($body)) {
+            $response->withBody($body);
+        }
     }
 }
