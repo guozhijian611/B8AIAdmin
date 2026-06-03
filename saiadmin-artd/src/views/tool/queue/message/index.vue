@@ -175,12 +175,12 @@
 
   const loadOptions = async () => {
     const res: any = await configApi.options({ message_mode: 'external_message' })
-    configOptions.value = res.data || []
+    configOptions.value = Array.isArray(res) ? res : []
   }
 
   const loadStats = async () => {
     const res: any = await api.stats()
-    stats.value = res.data || {}
+    stats.value = res || {}
   }
 
   const refreshAll = () => {
@@ -190,7 +190,7 @@
 
   const showDetail = async (row: any) => {
     const res: any = await api.read(row.id)
-    detailData.value = res.data || row
+    detailData.value = res || row
     detailVisible.value = true
   }
 
