@@ -15,6 +15,9 @@ use Symfony\AI\Platform\Bridge\DeepSeek\Factory as DeepPlatformFactory;
 use Symfony\AI\Agent\Agent;
 use Symfony\AI\Agent\Toolbox\AgentProcessor;
 use Symfony\AI\Agent\Toolbox\Toolbox;
+use Symfony\AI\Platform\Message\Message;
+use Symfony\AI\Platform\Message\MessageBag;
+use Symfony\AI\Platform\Result\TextResult;
 use plugin\saiai\app\tool\DocTool;
 use plugin\saiai\app\tool\DbTool;
 use plugin\saiai\app\model\config\AiConfig;
@@ -22,6 +25,11 @@ use plugin\saiai\app\model\config\AiConfig;
 class AiFactory
 {
     private const REQUEST_TIMEOUT = 60;
+    private const IMAGE_REQUEST_TIMEOUT = 120;
+
+    public const DEFAULT_CHAT_TYPE = 'openai';
+    public const DEFAULT_CHAT_MODEL = 'gpt5.5';
+    public const DEFAULT_IMAGE_MODEL = 'gpt-image2';
 
     private const DEEPSEEK_MODELS = [
         'deepseek-chat',
@@ -70,7 +78,92 @@ class AiFactory
         return new Agent($platform, $resolvedModel, [$agentProcessor], [$agentProcessor]);
     }
 
-    protected static function resolveConfig(string $type, ?string $model = null): array
+    public static function chatOnce(string $message, array $history = [], ?string $model = null): array
+    {
+        $resolvedModel = $model ?: self::DEFAULT_CHAT_MODEL;
+        $agent = self::createAgent(self::DEFAULT_CHAT_TYPE, $resolvedModel, false);
+
+        $messages = [
+            Message::forSystem('你是一个中文 AI 助手，请用简洁、清晰、可执行的方式回答用户。'),
+        ];
+
+        foreach ($history as $item) {
+            $role = (string) ($item['role'] ?? '');
+            $content = trim((string) ($item['content'] ?? ''));
+            if ($content === '') {
+                continue;
+            }
+
+            if ($role === 'assistant') {
+                $messages[] = Message::ofAssistant($content);
+                continue;
+            }
+
+            $messages[] = Message::ofUser($content);
+        }
+
+        $messages[] = Message::ofUser($message);
+
+        $response = $agent->call(new MessageBag(...$messages), [
+            'temperature' => 0.7,
+        ]);
+
+        return [
+            'content' => self::normalizeTextResult($response->getContent()),
+            'model' => $resolvedModel,
+            'type' => self::DEFAULT_CHAT_TYPE,
+        ];
+    }
+
+    public static function generateImage(string $prompt, ?string $model = null, string $size = '1024x1024'): array
+    {
+        $resolved = self::resolveConfig(self::DEFAULT_CHAT_TYPE, $model ?: self::DEFAULT_IMAGE_MODEL);
+        $apiUrl = self::buildImageGenerationUrl($resolved['apiUrl'], $resolved['platformType']);
+        $httpClient = HttpClient::create([
+            'timeout' => self::IMAGE_REQUEST_TIMEOUT,
+            'max_duration' => self::IMAGE_REQUEST_TIMEOUT + 10,
+        ]);
+
+        $response = $httpClient->request('POST', $apiUrl, [
+            'auth_bearer' => $resolved['apiKey'],
+            'json' => [
+                'model' => $resolved['model'],
+                'prompt' => $prompt,
+                'n' => 1,
+                'size' => $size,
+            ],
+        ]);
+
+        $data = $response->toArray(false);
+        if ($response->getStatusCode() >= 400) {
+            throw new ApiException(self::formatProviderError($data, 'AI 生图服务调用失败'));
+        }
+
+        $images = [];
+        foreach (($data['data'] ?? []) as $item) {
+            if (!empty($item['url'])) {
+                $images[] = (string) $item['url'];
+                continue;
+            }
+
+            if (!empty($item['b64_json'])) {
+                $images[] = 'data:image/png;base64,' . $item['b64_json'];
+            }
+        }
+
+        if ($images === []) {
+            throw new ApiException('AI 生图服务未返回图片');
+        }
+
+        return [
+            'images' => $images,
+            'model' => $resolved['model'],
+            'size' => $size,
+            'revised_prompt' => (string) ($data['data'][0]['revised_prompt'] ?? ''),
+        ];
+    }
+
+    public static function resolveConfig(string $type, ?string $model = null): array
     {
         $config = AiConfig::where('type', $type)->where('status', 1)->findOrEmpty();
         if ($config->isEmpty()) {
@@ -78,12 +171,26 @@ class AiFactory
         }
 
         if ($config->isEmpty()) {
+            if ($type === self::DEFAULT_CHAT_TYPE && env('OPENAI_API_KEY', '') !== '') {
+                $apiUrl = self::normalizeApiUrl((string) env('OPENAI_BASE_URL', ''), $type);
+                $apiKey = (string) env('OPENAI_API_KEY', '');
+                $resolvedModel = trim((string) ($model ?: self::DEFAULT_CHAT_MODEL));
+                self::validateConfig(self::DEFAULT_CHAT_TYPE, $resolvedModel, $apiUrl, $apiKey);
+
+                return [
+                    'apiUrl' => $apiUrl,
+                    'apiKey' => $apiKey,
+                    'model' => $resolvedModel,
+                    'platformType' => self::DEFAULT_CHAT_TYPE,
+                ];
+            }
+
             throw new ApiException('未找到可用的 AI 配置，请先在后台启用模型配置');
         }
 
         $platformType = trim((string) $config->type);
         $apiUrl = self::normalizeApiUrl((string) $config->ai_url, $platformType);
-        $apiKey = trim((string) $config->ai_key);
+        $apiKey = trim((string) $config->ai_key) ?: (string) env('OPENAI_API_KEY', '');
         $resolvedModel = trim((string) ($model ?: $config->model));
 
         self::validateConfig($platformType, $resolvedModel, $apiUrl, $apiKey);
@@ -148,5 +255,53 @@ class AiFactory
         }
 
         return $apiUrl;
+    }
+
+    protected static function normalizeTextResult(mixed $content): string
+    {
+        if (is_string($content)) {
+            return $content;
+        }
+
+        if ($content instanceof TextResult) {
+            return $content->getContent();
+        }
+
+        if ($content instanceof \Stringable) {
+            return (string) $content;
+        }
+
+        if (is_object($content) && method_exists($content, 'getContent')) {
+            $value = $content->getContent();
+            return is_string($value) ? $value : '';
+        }
+
+        return '';
+    }
+
+    protected static function buildImageGenerationUrl(string $apiUrl, string $platformType): string
+    {
+        $apiUrl = rtrim($apiUrl, '/');
+        if ($platformType === 'openai' && $apiUrl === '') {
+            return 'https://api.openai.com/v1/images/generations';
+        }
+
+        if ($apiUrl === '') {
+            throw new ApiException('AI 图片配置缺少接口基础地址');
+        }
+
+        if (str_ends_with(strtolower($apiUrl), '/images/generations')) {
+            return $apiUrl;
+        }
+
+        return $apiUrl . '/v1/images/generations';
+    }
+
+    protected static function formatProviderError(array $data, string $fallback): string
+    {
+        $message = $data['error']['message'] ?? $data['message'] ?? '';
+        $message = trim((string) $message);
+
+        return $message !== '' ? $message : $fallback;
     }
 }
