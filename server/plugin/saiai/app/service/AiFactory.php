@@ -80,33 +80,31 @@ class AiFactory
 
     public static function chatOnce(string $message, array $history = [], ?string $model = null): array
     {
+        $content = '';
+        $resolvedModel = $model ?: self::DEFAULT_CHAT_MODEL;
+        foreach (self::chatStream($message, $history, $model) as $chunk) {
+            $resolvedModel = (string) ($chunk['model'] ?? $resolvedModel);
+            if (($chunk['type'] ?? '') === 'content') {
+                $content .= (string) ($chunk['content'] ?? '');
+            }
+        }
+
+        return [
+            'content' => $content,
+            'model' => $resolvedModel,
+            'type' => self::DEFAULT_CHAT_TYPE,
+        ];
+    }
+
+    public static function chatStream(string $message, array $history = [], ?string $model = null): \Generator
+    {
         $resolved = self::resolveConfig(self::DEFAULT_CHAT_TYPE, $model);
         $resolvedModel = $resolved['model'];
         $agent = self::createAgent(self::DEFAULT_CHAT_TYPE, $resolvedModel, false);
-
-        $messages = [
-            Message::forSystem('你是一个中文 AI 助手，请用简洁、清晰、可执行的方式回答用户。'),
-        ];
-
-        foreach ($history as $item) {
-            $role = (string) ($item['role'] ?? '');
-            $content = trim((string) ($item['content'] ?? ''));
-            if ($content === '') {
-                continue;
-            }
-
-            if ($role === 'assistant') {
-                $messages[] = Message::ofAssistant($content);
-                continue;
-            }
-
-            $messages[] = Message::ofUser($content);
-        }
-
-        $messages[] = Message::ofUser($message);
+        $messages = self::buildChatMessages($message, $history);
 
         try {
-            $response = $agent->call(new MessageBag(...$messages), [
+            $response = $agent->call($messages, [
                 'temperature' => 0.7,
                 'stream' => true,
             ]);
@@ -116,10 +114,20 @@ class AiFactory
             throw new ApiException(self::formatThrowableError($e, 'AI 对话服务调用失败'));
         }
 
-        return [
-            'content' => self::normalizeTextResult($response->getContent()),
+        foreach ($response->getContent() as $content) {
+            $text = self::normalizeTextResult($content);
+            if ($text !== '') {
+                yield [
+                    'type' => 'content',
+                    'content' => $text,
+                    'model' => $resolvedModel,
+                ];
+            }
+        }
+
+        yield [
+            'type' => 'done',
             'model' => $resolvedModel,
-            'type' => self::DEFAULT_CHAT_TYPE,
         ];
     }
 
@@ -307,6 +315,32 @@ class AiFactory
         }
 
         return '';
+    }
+
+    protected static function buildChatMessages(string $message, array $history = []): MessageBag
+    {
+        $messages = [
+            Message::forSystem('你是一个中文 AI 助手，请用简洁、清晰、可执行的方式回答用户。'),
+        ];
+
+        foreach ($history as $item) {
+            $role = (string) ($item['role'] ?? '');
+            $content = trim((string) ($item['content'] ?? ''));
+            if ($content === '') {
+                continue;
+            }
+
+            if ($role === 'assistant') {
+                $messages[] = Message::ofAssistant($content);
+                continue;
+            }
+
+            $messages[] = Message::ofUser($content);
+        }
+
+        $messages[] = Message::ofUser($message);
+
+        return new MessageBag(...$messages);
     }
 
     protected static function buildImageGenerationUrl(string $apiUrl, string $platformType): string
