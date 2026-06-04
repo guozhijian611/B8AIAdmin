@@ -18,6 +18,10 @@ use support\Request;
 use Webman\Route;
 
 Route::get('/apidoc/openapi/{appKey}', [app\controller\ApidocOpenapiController::class, 'show']);
+Route::get('/admin', [app\controller\IndexController::class, 'admin']);
+Route::get('/admin/', [app\controller\IndexController::class, 'admin']);
+Route::get('/h5', [app\controller\IndexController::class, 'h5']);
+Route::get('/h5/', [app\controller\IndexController::class, 'h5']);
 Route::fallback(function (Request $request) {
     if ($request->method() === 'OPTIONS') {
         return CrossDomain::withCorsHeaders($request, response('', 204));
