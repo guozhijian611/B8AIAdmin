@@ -28,8 +28,8 @@ class AiFactory
     private const IMAGE_REQUEST_TIMEOUT = 120;
 
     public const DEFAULT_CHAT_TYPE = 'openai';
-    public const DEFAULT_CHAT_MODEL = 'gpt5.5';
-    public const DEFAULT_IMAGE_MODEL = 'gpt-image2';
+    public const DEFAULT_CHAT_MODEL = 'gpt-5.5';
+    public const DEFAULT_IMAGE_MODEL = 'gpt-image-2';
 
     private const DEEPSEEK_MODELS = [
         'deepseek-chat',
@@ -80,7 +80,8 @@ class AiFactory
 
     public static function chatOnce(string $message, array $history = [], ?string $model = null): array
     {
-        $resolvedModel = $model ?: self::DEFAULT_CHAT_MODEL;
+        $resolved = self::resolveConfig(self::DEFAULT_CHAT_TYPE, $model);
+        $resolvedModel = $resolved['model'];
         $agent = self::createAgent(self::DEFAULT_CHAT_TYPE, $resolvedModel, false);
 
         $messages = [
@@ -104,9 +105,15 @@ class AiFactory
 
         $messages[] = Message::ofUser($message);
 
-        $response = $agent->call(new MessageBag(...$messages), [
-            'temperature' => 0.7,
-        ]);
+        try {
+            $response = $agent->call(new MessageBag(...$messages), [
+                'temperature' => 0.7,
+            ]);
+        } catch (ApiException $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            throw new ApiException(self::formatThrowableError($e, 'AI 对话服务调用失败'));
+        }
 
         return [
             'content' => self::normalizeTextResult($response->getContent()),
@@ -124,19 +131,25 @@ class AiFactory
             'max_duration' => self::IMAGE_REQUEST_TIMEOUT + 10,
         ]);
 
-        $response = $httpClient->request('POST', $apiUrl, [
-            'auth_bearer' => $resolved['apiKey'],
-            'json' => [
-                'model' => $resolved['model'],
-                'prompt' => $prompt,
-                'n' => 1,
-                'size' => $size,
-            ],
-        ]);
+        try {
+            $response = $httpClient->request('POST', $apiUrl, [
+                'auth_bearer' => $resolved['apiKey'],
+                'json' => [
+                    'model' => $resolved['model'],
+                    'prompt' => $prompt,
+                    'n' => 1,
+                    'size' => $size,
+                ],
+            ]);
 
-        $data = $response->toArray(false);
-        if ($response->getStatusCode() >= 400) {
-            throw new ApiException(self::formatProviderError($data, 'AI 生图服务调用失败'));
+            $data = $response->toArray(false);
+            if ($response->getStatusCode() >= 400) {
+                throw new ApiException(self::formatProviderError($data, 'AI 生图服务调用失败'));
+            }
+        } catch (ApiException $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            throw new ApiException(self::formatThrowableError($e, 'AI 生图服务调用失败'));
         }
 
         $images = [];
@@ -165,7 +178,14 @@ class AiFactory
 
     public static function resolveConfig(string $type, ?string $model = null): array
     {
-        $config = AiConfig::where('type', $type)->where('status', 1)->findOrEmpty();
+        $model = trim((string) $model);
+        $config = $model !== ''
+            ? AiConfig::where('model', $model)->where('status', 1)->findOrEmpty()
+            : AiConfig::where('id', 0)->findOrEmpty();
+
+        if ($config->isEmpty()) {
+            $config = AiConfig::where('type', $type)->where('status', 1)->findOrEmpty();
+        }
         if ($config->isEmpty()) {
             $config = AiConfig::where('is_default', 1)->where('status', 1)->findOrEmpty();
         }
@@ -174,7 +194,7 @@ class AiFactory
             if ($type === self::DEFAULT_CHAT_TYPE && env('OPENAI_API_KEY', '') !== '') {
                 $apiUrl = self::normalizeApiUrl((string) env('OPENAI_BASE_URL', ''), $type);
                 $apiKey = (string) env('OPENAI_API_KEY', '');
-                $resolvedModel = trim((string) ($model ?: self::DEFAULT_CHAT_MODEL));
+                $resolvedModel = $model !== '' ? $model : self::DEFAULT_CHAT_MODEL;
                 self::validateConfig(self::DEFAULT_CHAT_TYPE, $resolvedModel, $apiUrl, $apiKey);
 
                 return [
@@ -191,7 +211,7 @@ class AiFactory
         $platformType = trim((string) $config->type);
         $apiUrl = self::normalizeApiUrl((string) $config->ai_url, $platformType);
         $apiKey = trim((string) $config->ai_key) ?: (string) env('OPENAI_API_KEY', '');
-        $resolvedModel = trim((string) ($model ?: $config->model));
+        $resolvedModel = $model !== '' ? $model : trim((string) $config->model);
 
         self::validateConfig($platformType, $resolvedModel, $apiUrl, $apiKey);
 
@@ -303,5 +323,27 @@ class AiFactory
         $message = trim((string) $message);
 
         return $message !== '' ? $message : $fallback;
+    }
+
+    protected static function formatThrowableError(\Throwable $e, string $fallback): string
+    {
+        $message = trim($e->getMessage());
+        if ($message === '') {
+            return $fallback;
+        }
+
+        $lowerMessage = strtolower($message);
+        if (str_contains($lowerMessage, 'model_not_found') || str_contains($lowerMessage, 'no available channel for model')) {
+            $model = '';
+            if (preg_match('/model\s+([^\s"\']+)/i', $message, $matches)) {
+                $model = trim($matches[1]);
+            }
+
+            return $model !== ''
+                ? "当前 AI 网关没有可用的 {$model} 模型通道，请检查 saiai 后台模型配置或上游网关分组通道"
+                : '当前 AI 网关没有可用的模型通道，请检查 saiai 后台模型配置或上游网关分组通道';
+        }
+
+        return $message;
     }
 }
