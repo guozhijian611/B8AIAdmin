@@ -120,6 +120,7 @@ class PayService
                 'total' => (int)($params['total_amount'] * 100), // 微信单位为分
             ]
         ];
+        $order = array_merge($params, $order);
 
         $result = [
             'pay_method' => 'wechat',

@@ -8,7 +8,7 @@ namespace plugin\saipay\app\api\logic;
 
 use plugin\saipay\app\model\Order;
 use plugin\saiadmin\basic\think\BaseLogic;
-use plugin\saiadmin\exception\ApiException;
+use Webman\Event\Event;
 
 /**
  * 订单记录逻辑层
@@ -43,18 +43,26 @@ class OrderLogic extends BaseLogic
      * @param $order_no
      * @param $money
      */
-    public function notifyOrder($order_no, $money)
+    public function notifyOrder($order_no, $money, string $trade_no = '', array $payload = []): void
     {
         $order = $this->model->where('order_no', $order_no)->where('pay_status', 2)->findOrEmpty();
         if (!$order->isEmpty()) {
             // 处理订单状态
             $order->pay_status = 1;
             $order->pay_price = $money;
+            if ($trade_no !== '') {
+                $order->trade_no = $trade_no;
+            }
             $order->pay_time = date('Y-m-d H:i:s');
             $order->save();
 
             // 业务逻辑
-            $this->handleBusinessLogic($order);
+            $this->handleBusinessLogic($order, [
+                'pay_amount' => (float)$money,
+                'trade_no' => $trade_no,
+                'payload' => $payload,
+                'notify_time' => $order->pay_time,
+            ]);
         }
     }
 
@@ -62,10 +70,12 @@ class OrderLogic extends BaseLogic
      * 处理业务逻辑
      * @param $order
      */
-    public function handleBusinessLogic($order)
+    public function handleBusinessLogic($order, array $context = []): void
     {
-        // 业务逻辑处理
-        // 例如: 更新订单状态, 增加用户积分, 发送通知等
+        Event::emit('saipay.order.paid', [
+            'order' => $order,
+            'context' => $context,
+        ]);
     }
 
 }

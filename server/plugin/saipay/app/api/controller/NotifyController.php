@@ -23,10 +23,15 @@ class NotifyController extends OpenController
     {
         $data = $request->all();
         $result = AlipayService::notify($data);
-        if ($result['trade_status'] === "TRADE_SUCCESS") {
+        if (in_array($result['trade_status'], ['TRADE_SUCCESS', 'TRADE_FINISHED'], true)) {
             // 处理业务
             $logic = new OrderLogic();
-            $logic->notifyOrder($result['out_trade_no'], $result['total_amount']);
+            $logic->notifyOrder(
+                $result['out_trade_no'],
+                $result['total_amount'],
+                (string)($result['trade_no'] ?? ''),
+                $this->payloadToArray($result)
+            );
             return new Response(200, [], 'success');
         } else {
             return new Response(500, [], 'fail');
@@ -47,7 +52,12 @@ class NotifyController extends OpenController
             $ret = $result['resource']['ciphertext'];
             if ($ret['trade_state'] === 'SUCCESS') {
                 $logic = new OrderLogic();
-                $logic->notifyOrder($ret['out_trade_no'], $ret['amount']['total'] / 100);
+                $logic->notifyOrder(
+                    $ret['out_trade_no'],
+                    $ret['amount']['total'] / 100,
+                    (string)($ret['transaction_id'] ?? ''),
+                    $this->payloadToArray($ret)
+                );
                 return new Response(200, [], 'success');
             }
         }
@@ -66,7 +76,12 @@ class NotifyController extends OpenController
         if ($result['respCode'] === '00') {
             // 处理业务
             $logic = new OrderLogic();
-            $logic->notifyOrder($result['orderId'], $result['txnAmt']);
+            $logic->notifyOrder(
+                $result['orderId'],
+                $result['txnAmt'],
+                (string)($result['queryId'] ?? ''),
+                $this->payloadToArray($result)
+            );
             return new Response(200, [], 'success');
         } else {
             return new Response(500, [], 'fail');
@@ -84,6 +99,23 @@ class NotifyController extends OpenController
         $logic = new OrderLogic();
         $result = $logic->checkOrder($order_no);
         return $this->success($result);
+    }
+
+    private function payloadToArray(mixed $payload): array
+    {
+        if (is_array($payload)) {
+            return $payload;
+        }
+        if (is_object($payload) && method_exists($payload, 'all')) {
+            $data = $payload->all();
+            return is_array($data) ? $data : [];
+        }
+        if ($payload instanceof \JsonSerializable) {
+            $data = $payload->jsonSerialize();
+            return is_array($data) ? $data : [];
+        }
+
+        return [];
     }
 
 }
