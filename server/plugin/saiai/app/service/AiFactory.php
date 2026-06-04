@@ -108,6 +108,7 @@ class AiFactory
         try {
             $response = $agent->call(new MessageBag(...$messages), [
                 'temperature' => 0.7,
+                'stream' => true,
             ]);
         } catch (ApiException $e) {
             throw $e;
@@ -281,6 +282,15 @@ class AiFactory
     {
         if (is_string($content)) {
             return $content;
+        }
+
+        if ($content instanceof \Traversable) {
+            $text = '';
+            foreach ($content as $item) {
+                $text .= self::normalizeTextResult($item);
+            }
+
+            return $text;
         }
 
         if ($content instanceof TextResult) {
