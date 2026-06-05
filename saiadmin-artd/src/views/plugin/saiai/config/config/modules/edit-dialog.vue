@@ -24,9 +24,12 @@
             />
           </el-form-item>
         </el-col>
-        <el-col :span="24" v-if="formData.type === 'generic'">
+        <el-col :span="24" v-if="['generic', 'aliyun_realtime'].includes(formData.type)">
           <el-form-item label="接口地址" prop="ai_url">
-            <el-input v-model="formData.ai_url" placeholder="请输入接口地址" />
+            <el-input
+              v-model="formData.ai_url"
+              placeholder="例如 wss://dashscope.aliyuncs.com/api-ws/v1/realtime"
+            />
           </el-form-item>
         </el-col>
         <el-col :span="24">
@@ -47,6 +50,16 @@
         <el-col :span="24">
           <el-form-item label="是否默认" prop="is_default">
             <sa-radio v-model="formData.is_default" dict="yes_or_no" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="24" v-if="formData.type === 'aliyun_realtime'">
+          <el-form-item label="扩展配置" prop="options">
+            <el-input
+              v-model="formData.options"
+              type="textarea"
+              :rows="5"
+              placeholder='{"modalities":["text","audio"],"voice":"Ethan"}'
+            />
           </el-form-item>
         </el-col>
         <el-col :span="24">
@@ -127,6 +140,7 @@
     model: '',
     ai_url: '',
     ai_key: '',
+    options: '',
     is_default: 2,
     status: 1,
     remark: '',

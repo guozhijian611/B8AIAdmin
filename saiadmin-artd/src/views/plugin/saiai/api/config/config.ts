@@ -41,6 +41,16 @@ export default {
   },
 
   /**
+   * 获取实时测试默认配置
+   * @returns 实时测试配置
+   */
+  realtimeTestConfig() {
+    return request.get<Record<string, any>>({
+      url: '/app/saiai/admin/config/AiConfig/realtimeTestConfig'
+    })
+  },
+
+  /**
    * 读取数据
    * @param id 数据ID
    * @returns 数据详情

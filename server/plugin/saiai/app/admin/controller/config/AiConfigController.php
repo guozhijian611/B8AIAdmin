@@ -11,6 +11,7 @@ use plugin\saiai\app\admin\logic\config\AiConfigLogic;
 use plugin\saiai\app\admin\validate\config\AiConfigValidate;
 use plugin\saiadmin\service\Permission;
 use plugin\saiai\app\service\AiFactory;
+use plugin\saiai\app\service\AliyunRealtimeConfig;
 use support\Request;
 use support\Response;
 
@@ -148,6 +149,31 @@ class AiConfigController extends BaseController
         $platform = $request->get('platform', 'gemini');
         $modelList = AiFactory::getModelCategory($platform);
         return $this->success($modelList);
+    }
+
+    /**
+     * 阿里云实时测试页默认配置
+     * @param Request $request
+     * @return Response
+     */
+    #[Permission('实时测试配置', 'saiai:realtime:test')]
+    public function realtimeTestConfig(Request $request): Response
+    {
+        $port = (int) env('SAIAI_REALTIME_WS_PORT', 8791);
+        $forwardedProto = strtolower((string) $request->header('x-forwarded-proto', ''));
+        $scheme = $forwardedProto === 'https' || $request->header('https') === 'on' ? 'wss' : 'ws';
+        $host = $request->host(false) ?: '127.0.0.1';
+        $host = preg_match('/:\d+$/', $host)
+            ? (preg_replace('/:\d+$/', ':' . $port, $host) ?: $host)
+            : $host . ':' . $port;
+
+        return $this->success([
+            'ws_url' => $scheme . '://' . $host,
+            'default_model' => AliyunRealtimeConfig::DEFAULT_MODEL,
+            'default_ai_url' => AliyunRealtimeConfig::DEFAULT_URL,
+            'default_session' => AliyunRealtimeConfig::defaultSession(),
+            'port' => $port,
+        ]);
     }
 
 }

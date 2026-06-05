@@ -4,5 +4,6 @@ return [
     'openai',
     'gemini',
     'deepseek',
-    'generic'
+    'generic',
+    'aliyun_realtime'
 ];

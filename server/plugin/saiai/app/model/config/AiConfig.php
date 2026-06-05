@@ -18,6 +18,7 @@ use plugin\saiadmin\basic\think\BaseModel;
  * @property  $type 平台类型
  * @property  $ai_key API Key
  * @property  $model 模型名称
+ * @property  $options 扩展配置JSON
  * @property  $is_default 是否默认
  * @property  $status 状态
  * @property  $remark 备注

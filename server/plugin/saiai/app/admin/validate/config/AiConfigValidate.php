@@ -21,6 +21,7 @@ class AiConfigValidate extends BaseValidate
         'type' => 'require',
         'ai_key' => 'require',
         'model' => 'require',
+        'options' => 'max:2000',
         'is_default' => 'require',
     ];
 
@@ -44,6 +45,7 @@ class AiConfigValidate extends BaseValidate
             'type',
             'ai_key',
             'model',
+            'options',
             'is_default',
         ],
         'update' => [
@@ -51,6 +53,7 @@ class AiConfigValidate extends BaseValidate
             'type',
             'ai_key',
             'model',
+            'options',
             'is_default',
         ],
     ];
