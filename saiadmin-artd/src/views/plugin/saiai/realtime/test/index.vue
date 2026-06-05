@@ -237,8 +237,11 @@
                 开始麦克风
               </el-button>
               <el-button :disabled="!recording" @click="stopRecording">停止麦克风</el-button>
-              <el-button :disabled="!upstreamReady" @click="commitCurrentTurn(true)">
-                提交本轮
+              <el-button
+                :disabled="!upstreamReady || !isManualMode"
+                @click="commitCurrentTurn(true)"
+              >
+                Manual 提交本轮
               </el-button>
               <el-button :disabled="!upstreamReady" @click="clearAudioBuffer">清空缓冲</el-button>
             </div>
@@ -258,7 +261,7 @@
             </div>
           </el-tab-pane>
 
-          <el-tab-pane label="视频" name="video">
+          <el-tab-pane label="音视频" name="video">
             <div class="video-layout">
               <video ref="cameraVideoRef" class="camera-preview" autoplay muted playsinline />
               <div class="frame-preview">
@@ -282,25 +285,17 @@
               </el-form>
               <div class="media-actions">
                 <el-button
-                  :disabled="!upstreamReady || videoStreaming"
-                  type="primary"
-                  @click="startVideo"
-                >
-                  开始摄像头
-                </el-button>
-                <el-button :disabled="!videoStreaming" @click="stopVideo">停止摄像头</el-button>
-                <el-button :disabled="!videoStreaming" @click="captureVideoFrame">
-                  发送单帧
-                </el-button>
-                <el-button
                   :disabled="!upstreamReady || recording || videoStreaming"
-                  type="success"
+                  type="primary"
                   @click="startAvCall"
                 >
-                  开始音视频
+                  开始音视频通话
                 </el-button>
                 <el-button :disabled="!recording && !videoStreaming" @click="stopAvCall">
                   停止音视频
+                </el-button>
+                <el-button :disabled="!recording || !videoStreaming" @click="captureVideoFrame">
+                  发送单帧
                 </el-button>
               </div>
             </div>
@@ -421,6 +416,7 @@
 
   let socket: WebSocket | null = null
   let audioContext: AudioContext | null = null
+  let playbackContext: AudioContext | null = null
   let audioStream: MediaStream | null = null
   let sourceNode: MediaStreamAudioSourceNode | null = null
   let processorNode: ScriptProcessorNode | null = null
@@ -429,9 +425,9 @@
   let elapsedTimer: number | undefined
   let pingTimer: number | undefined
   let connectionStartedAt = 0
-  let audioChunks: string[] = []
+  let outputSampleChunks: Int16Array[] = []
+  let playbackCursor = 0
   let pendingResponseAfterCommit = false
-  let hasAudioInput = false
 
   const isManualMode = computed(() => vadMode.value === 'manual')
   const vadLabel = computed(() => (isManualMode.value ? 'Manual' : vadMode.value))
@@ -440,14 +436,14 @@
   )
   const activeInputName = computed(() => {
     if (activeInput.value === 'text') return '文本事件'
-    if (activeInput.value === 'video') return '视频抽帧'
+    if (activeInput.value === 'video') return '音视频通话'
     return '麦克风 PCM'
   })
 
   const statusText = computed(() => {
     if (recording.value && videoStreaming.value) return '正在进行音视频实时输入'
     if (recording.value) return '正在发送麦克风 PCM 音频'
-    if (videoStreaming.value) return '正在发送视频 JPEG 抽帧'
+    if (videoStreaming.value) return '正在发送视频 JPEG 抽帧，等待音频输入'
     if (upstreamReady.value) return '已连接阿里云实时端点'
     if (connected.value) return '已连接本地代理，等待上游就绪'
     return '请选择 aliyun_realtime 配置后连接'
@@ -557,6 +553,7 @@
     stopAudioNodes()
     stopVideo()
     stopTimers()
+    resetPlaybackQueue()
     if (socket) {
       socket.close()
       socket = null
@@ -620,8 +617,10 @@
 
   async function startRecording() {
     if (!socket || socket.readyState !== WebSocket.OPEN) return
+    if (recording.value) return
     assistantText.value = ''
-    audioChunks = []
+    outputSampleChunks = []
+    resetPlaybackQueue()
     audioStream = await navigator.mediaDevices.getUserMedia({ audio: true })
     audioContext = new AudioContext()
     audioSampleRate.value = audioContext.sampleRate
@@ -650,6 +649,7 @@
 
   async function startVideo() {
     if (!socket || socket.readyState !== WebSocket.OPEN) return
+    if (videoStreaming.value) return
     videoStream = await navigator.mediaDevices.getUserMedia({
       video: {
         width: { ideal: 1280 },
@@ -686,8 +686,10 @@
   }
 
   async function startAvCall() {
+    activeInput.value = 'video'
     await startRecording()
     await startVideo()
+    addEvent('client.av_start', '已同步开启麦克风与摄像头', 'info')
   }
 
   function stopAvCall() {
@@ -700,6 +702,11 @@
   }
 
   function commitCurrentTurn(createResponse = false) {
+    if (!isManualMode.value) {
+      addEvent('client.commit_skip', 'VAD 模式由服务端自动提交音频缓冲', 'warn')
+      return
+    }
+
     pendingResponseAfterCommit = createResponse && isManualMode.value
     sendJson({
       type: 'input_audio_buffer.commit',
@@ -718,8 +725,6 @@
     const video = cameraVideoRef.value
     const canvas = frameCanvasRef.value
     if (!video || !canvas || !video.videoWidth || !video.videoHeight || !upstreamReady.value) return
-
-    ensureAudioPrimer()
 
     const ratio = video.videoHeight / video.videoWidth
     canvas.width = frameWidth.value
@@ -837,13 +842,15 @@
     const audioDoneTypes = ['response.audio.done', 'response.output_audio.done']
 
     if (audioDeltaTypes.includes(payload.type) && payload.delta) {
-      audioChunks.push(payload.delta)
+      const samples = base64ToInt16Array(String(payload.delta))
+      outputSampleChunks.push(samples)
+      queuePcmPlayback(samples)
       counters.receivedAudioChunks += 1
-      counters.receivedAudioBytes += Math.round((String(payload.delta).length * 3) / 4)
+      counters.receivedAudioBytes += samples.byteLength
     }
-    if (audioDoneTypes.includes(payload.type) && audioChunks.length > 0) {
-      playPcmAudio(audioChunks)
-      audioChunks = []
+    if (audioDoneTypes.includes(payload.type) && outputSampleChunks.length > 0) {
+      buildOutputAudioUrl(outputSampleChunks)
+      outputSampleChunks = []
     }
   }
 
@@ -862,17 +869,9 @@
       event_id: createEventId('audio'),
       audio: arrayBufferToBase64(buffer)
     })
-    hasAudioInput = true
     counters.sentAudioChunks += 1
     counters.sentAudioBytes += buffer.byteLength
     sentAudioSeconds.value += buffer.byteLength / 2 / 16000
-  }
-
-  function ensureAudioPrimer() {
-    if (hasAudioInput) return
-    const silence = new Int16Array(320)
-    sendAudioPcm(silence.buffer)
-    addEvent('client.audio_primer', '发送静音音频前置帧', 'info')
   }
 
   function buildSession() {
@@ -987,8 +986,8 @@
     sentAudioSeconds.value = 0
     elapsedSeconds.value = 0
     latencyMs.value = undefined
-    hasAudioInput = false
-    audioChunks = []
+    outputSampleChunks = []
+    resetPlaybackQueue()
     Object.assign(counters, {
       sentAudioChunks: 0,
       sentAudioBytes: 0,
@@ -1078,29 +1077,62 @@
     return Math.min(1, Math.sqrt(sum / Math.max(1, samples.length)) * 6)
   }
 
-  function playPcmAudio(chunks: string[]) {
-    const bytes = base64ChunksToBytes(chunks)
-    const samples = new Int16Array(bytes.buffer)
+  function queuePcmPlayback(samples: Int16Array) {
     outputVolume.value = calculatePcmVolume(samples)
+
+    if (!playbackContext) {
+      playbackContext = new AudioContext({ sampleRate: 24000 })
+      playbackCursor = playbackContext.currentTime + 0.03
+    }
+
+    if (playbackContext.state === 'suspended') {
+      playbackContext.resume().catch(() => undefined)
+    }
+
+    const buffer = playbackContext.createBuffer(1, samples.length, 24000)
+    const channel = buffer.getChannelData(0)
+    for (let i = 0; i < samples.length; i++) {
+      channel[i] = samples[i] / 0x8000
+    }
+
+    const source = playbackContext.createBufferSource()
+    source.buffer = buffer
+    source.connect(playbackContext.destination)
+
+    const startAt = Math.max(playbackCursor, playbackContext.currentTime + 0.01)
+    source.start(startAt)
+    playbackCursor = startAt + buffer.duration
+  }
+
+  function buildOutputAudioUrl(chunks: Int16Array[]) {
+    const samples = mergePcmSamples(chunks)
     const wav = createWavBlob(samples, 24000)
     revokeOutputAudioUrl()
     outputAudioUrl.value = URL.createObjectURL(wav)
-    nextTick(() => outputAudioRef.value?.play().catch(() => undefined))
   }
 
-  function base64ChunksToBytes(chunks: string[]) {
-    const byteParts = chunks.map((chunk) => {
-      const binary = atob(chunk)
-      const bytes = new Uint8Array(binary.length)
-      for (let i = 0; i < binary.length; i++) {
-        bytes[i] = binary.charCodeAt(i)
-      }
-      return bytes
-    })
-    const total = byteParts.reduce((sum, item) => sum + item.length, 0)
-    const merged = new Uint8Array(total)
+  function resetPlaybackQueue() {
+    if (playbackContext) {
+      playbackContext.close().catch(() => undefined)
+      playbackContext = null
+    }
+    playbackCursor = 0
+  }
+
+  function base64ToInt16Array(chunk: string) {
+    const binary = atob(chunk)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i)
+    }
+    return new Int16Array(bytes.buffer)
+  }
+
+  function mergePcmSamples(chunks: Int16Array[]) {
+    const total = chunks.reduce((sum, item) => sum + item.length, 0)
+    const merged = new Int16Array(total)
     let offset = 0
-    for (const item of byteParts) {
+    for (const item of chunks) {
       merged.set(item, offset)
       offset += item.length
     }
