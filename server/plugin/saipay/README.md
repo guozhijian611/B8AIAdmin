@@ -34,7 +34,7 @@ server/plugin/saipay/
 插件默认会尝试读取系统配置：
 
 - `支付插件配置`（`saipay_config`）：控制支付方式启停，`alipay_enabled`、`wechat_enabled` 和 `manual_scan_enabled` 默认开启，`unipay_enabled` 默认关闭。
-- `扫码支付配置`（`qrpay_config`）：配置 `manual_scan_alipay_qrcode`、`manual_scan_wechat_qrcode` 和 `manual_scan_notice_emails`。至少配置一个收款码，并配置管理员通知邮箱后，人工扫码支付才会出现在前台可用支付方式中。
+- `扫码支付配置`（`qrpay_config`）：配置 `manual_scan_alipay_qrcode`、`manual_scan_wechat_qrcode` 和 `manual_scan_notice_emails`。扫码支付是否出现在前台由 `manual_scan_enabled` 控制，发起扫码支付时至少需要配置一个收款码，用户确认付款时需要配置管理员通知邮箱。
 - `支付宝支付`（`alipay_config`）：支付宝应用、证书和回调配置。
 - `微信支付`（`wxpay_config`）：微信商户、证书和回调配置。
 

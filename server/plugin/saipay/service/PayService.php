@@ -101,7 +101,7 @@ class PayService
                 'description' => '当前仅保留配置和回调，暂未接入统一发起支付',
                 'icon' => 'icon-bank-card',
                 'theme' => 'red',
-                'enabled' => false,
+                'enabled' => self::isPaymentMethodEnabled(self::CHANNEL_UNIPAY),
                 'supported' => false,
             ],
         ];
@@ -110,9 +110,7 @@ class PayService
             return $methods;
         }
 
-        return array_values(array_filter($methods, static function (array $method): bool {
-            return $method['enabled'] && ($method['supported'] ?? true) && ($method['configured'] ?? true);
-        }));
+        return array_values(array_filter($methods, static fn (array $method): bool => $method['enabled']));
     }
 
     /**
