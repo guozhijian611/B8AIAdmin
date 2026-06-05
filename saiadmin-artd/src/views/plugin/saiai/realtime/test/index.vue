@@ -78,6 +78,17 @@
                 <el-radio-button label="semantic_vad">Semantic VAD</el-radio-button>
                 <el-radio-button label="manual">Manual</el-radio-button>
               </el-radio-group>
+              <div class="vad-help">
+                <div
+                  v-for="item in vadModeTips"
+                  :key="item.value"
+                  class="vad-help-item"
+                  :class="{ active: vadMode === item.value }"
+                >
+                  <strong>{{ item.label }}</strong>
+                  <span>{{ item.description }}</span>
+                </div>
+              </div>
             </el-form-item>
           </div>
 
@@ -412,6 +423,24 @@
     { label: 'Ethan', value: 'Ethan' },
     { label: 'Chelsie', value: 'Chelsie' },
     { label: 'Tina', value: 'Tina' }
+  ]
+
+  const vadModeTips = [
+    {
+      value: 'server_vad',
+      label: 'Server VAD',
+      description: '默认通话模式，服务端根据声音能量判断说话结束，并自动提交本轮输入。'
+    },
+    {
+      value: 'semantic_vad',
+      label: 'Semantic VAD',
+      description: '语义断句模式，可减少附和声或背景音误触发；仅 qwen3.5-omni-realtime 系列支持。'
+    },
+    {
+      value: 'manual',
+      label: 'Manual',
+      description: '关闭服务端 VAD，需要手动点击“Manual 提交本轮”，适合按住说话或语音留言测试。'
+    }
   ]
 
   let socket: WebSocket | null = null
@@ -1351,6 +1380,39 @@
 
   .vad-grid {
     margin-bottom: 8px;
+  }
+
+  .vad-help {
+    display: grid;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .vad-help-item {
+    padding: 8px 10px;
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 6px;
+    background: var(--el-fill-color-lighter);
+  }
+
+  .vad-help-item.active {
+    border-color: var(--el-color-primary-light-5);
+    background: var(--el-color-primary-light-9);
+  }
+
+  .vad-help-item strong,
+  .vad-help-item span {
+    display: block;
+  }
+
+  .vad-help-item strong {
+    margin-bottom: 3px;
+    color: var(--el-text-color-primary);
+  }
+
+  .vad-help-item span {
+    line-height: 1.5;
+    color: var(--el-text-color-secondary);
   }
 
   .health-list {
