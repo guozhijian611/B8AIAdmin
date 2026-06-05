@@ -1,5 +1,7 @@
 # SaiPay 统一支付插件
 
+> 完整支付接入、配置和人工扫码确认流程见 [Doc/saipay-payment.md](../../../Doc/saipay-payment.md)。
+
 ## 简介
 `saipay` 是基于 SaiAdmin 框架开发的统一支付插件，旨在简化支付功能的集成。它封装了支付宝（Alipay）、微信支付（WechatPay）和人工扫码支付的常用接口，提供了统一的调用方式，并支持跨模块调用。
 
@@ -82,7 +84,7 @@ PayService::paymentMethods();
 
 返回当前启用的支付方式列表。`PayService::pay()` 会在发起支付前检查渠道开关，渠道关闭时抛出 `ApiException`。
 
-> 银联支付当前仅保留 `unipay_config` 配置和 `/app/saipay/api/notify/unipay` 回调入口，尚未实现 `PayService::pay()` 的银联统一下单能力，因此不会出现在用户可选支付方式中。
+> 银联支付当前仅保留 `unipay_config` 配置和 `/app/saipay/api/notify/unipay` 回调入口，尚未实现 `PayService::pay()` 的银联统一下单能力。开关启用后会出现在支付方式列表中，但发起支付时会返回不支持的支付渠道。
 
 ## 使用案例
 
