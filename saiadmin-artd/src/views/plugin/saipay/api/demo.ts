@@ -29,11 +29,30 @@ export default {
   },
 
   /**
+   * 扫码支付示例
+   */
+  manualScan() {
+    return request.get<any>({
+      url: '/app/saipay/api/demo/manualScan'
+    })
+  },
+
+  /**
    * 继续支付
    */
   payOrder(params: Record<string, any>) {
     return request.post<any>({
       url: '/app/saipay/api/demo/payOrder',
+      params
+    })
+  },
+
+  /**
+   * 用户确认扫码支付已付款
+   */
+  confirmManualPaid(params: Record<string, any>) {
+    return request.post<any>({
+      url: '/app/saipay/api/demo/confirmManualPaid',
       params
     })
   }

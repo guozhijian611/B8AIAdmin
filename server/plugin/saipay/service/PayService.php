@@ -17,6 +17,8 @@ class PayService
      */
     const CHANNEL_ALIPAY = 'alipay';
     const CHANNEL_WECHAT = 'wechat';
+    const CHANNEL_UNIPAY = 'unipay';
+    const CHANNEL_MANUAL_SCAN = 'manual_scan';
 
     /**
      * 支付类型
@@ -52,6 +54,8 @@ class PayService
                 return self::payAlipay($type, $params, $config);
             case self::CHANNEL_WECHAT:
                 return self::payWechat($type, $params, $config);
+            case self::CHANNEL_MANUAL_SCAN:
+                return self::payManualScan($type, $params);
             default:
                 throw new ApiException('不支持的支付渠道: ' . $channel);
         }
@@ -62,6 +66,7 @@ class PayService
      */
     public static function paymentMethods(bool $onlyEnabled = true): array
     {
+        $manualScanQrcodes = ManualScanPaymentService::qrcodes();
         $methods = [
             [
                 'label' => '支付宝支付',
@@ -79,13 +84,35 @@ class PayService
                 'theme' => 'green',
                 'enabled' => self::isPaymentMethodEnabled(self::CHANNEL_WECHAT),
             ],
+            [
+                'label' => '扫码支付',
+                'value' => self::CHANNEL_MANUAL_SCAN,
+                'description' => '展示配置的支付宝/微信收款码，管理员人工确认到账',
+                'icon' => 'icon-scan',
+                'theme' => 'orange',
+                'enabled' => self::isPaymentMethodEnabled(self::CHANNEL_MANUAL_SCAN),
+                'manual' => true,
+                'configured' => !empty($manualScanQrcodes),
+                'qrcodes' => $manualScanQrcodes,
+            ],
+            [
+                'label' => '银联支付',
+                'value' => self::CHANNEL_UNIPAY,
+                'description' => '当前仅保留配置和回调，暂未接入统一发起支付',
+                'icon' => 'icon-bank-card',
+                'theme' => 'red',
+                'enabled' => false,
+                'supported' => false,
+            ],
         ];
 
         if (!$onlyEnabled) {
             return $methods;
         }
 
-        return array_values(array_filter($methods, static fn (array $method): bool => $method['enabled']));
+        return array_values(array_filter($methods, static function (array $method): bool {
+            return $method['enabled'] && ($method['supported'] ?? true) && ($method['configured'] ?? true);
+        }));
     }
 
     /**
@@ -241,6 +268,26 @@ class PayService
             default:
                 throw new ApiException('不支持的微信支付类型: ' . $type);
         }
+    }
+
+    /**
+     * 人工扫码支付
+     */
+    protected static function payManualScan(string $type, array $params): array
+    {
+        if (!in_array($type, [self::TYPE_SCAN, self::CHANNEL_MANUAL_SCAN], true)) {
+            throw new ApiException('扫码支付仅支持人工扫码类型');
+        }
+
+        ManualScanPaymentService::assertConfigured();
+
+        return [
+            'pay_method' => self::CHANNEL_MANUAL_SCAN,
+            'pay_type' => self::TYPE_SCAN,
+            'order_no' => $params['out_trade_no'],
+            'manual' => true,
+            'qrcodes' => ManualScanPaymentService::qrcodes(),
+        ];
     }
 
     /**

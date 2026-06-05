@@ -23,6 +23,7 @@
         <el-select v-model="formData.pay_status" placeholder="请选择支付状态" clearable>
           <el-option label="已支付" :value="1" />
           <el-option label="未支付" :value="2" />
+          <el-option label="待确认" :value="3" />
         </el-select>
       </el-form-item>
     </el-col>

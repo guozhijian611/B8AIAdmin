@@ -52,6 +52,7 @@
         </template>
         <template #pay_status="{ row }">
           <ElTag v-if="row.pay_status === 1" type="success">已支付</ElTag>
+          <ElTag v-else-if="row.pay_status === 3" type="warning">待确认</ElTag>
           <ElTag v-else type="danger">未支付</ElTag>
         </template>
 
@@ -71,6 +72,14 @@
               icon="ri:loop-left-ai-fill"
               tool-tip="刷新业务通知"
               @click="handleRefresh(row)"
+            />
+            <SaButton
+              v-if="row.pay_status == 3"
+              v-permission="'saipay:order:confirmManualPaid'"
+              type="primary"
+              icon="ri:checkbox-circle-line"
+              tool-tip="确认到账"
+              @click="handleConfirmManualPaid(row)"
             />
             <SaButton type="success" @click="showViewDialog('view', row)" />
             <SaButton
@@ -95,11 +104,12 @@
     <ViewDialog v-model="viewDialogVisible" :dialog-type="dialogType" :data="viewDialogData" />
 
     <!-- 支付弹窗 -->
-    <PayDialog v-model="visible" :data="currentOrder" />
+    <PayDialog v-model="visible" :data="currentOrder" @success="refreshData" />
   </div>
 </template>
 
 <script setup lang="ts">
+  import { ElMessageBox } from 'element-plus'
   import { useTable } from '@/hooks/core/useTable'
   import { useSaiAdmin } from '@/composables/useSaiAdmin'
   import api from '../api/order'
@@ -130,6 +140,18 @@
       order_no: row.order_no
     })
     ElMessage.success('刷新业务通知成功')
+  }
+
+  // 管理员确认扫码支付到账
+  const handleConfirmManualPaid = async (row: any) => {
+    await ElMessageBox.confirm('确认该扫码支付订单已到账吗？确认后会触发支付成功业务通知。', '确认到账', {
+      type: 'warning'
+    })
+    await api.confirmManualPaid({
+      order_no: row.order_no
+    })
+    ElMessage.success('确认到账成功')
+    refreshData()
   }
 
   const visible = ref(false)
@@ -181,7 +203,7 @@
           width: 100,
           useSlot: true
         },
-        { prop: 'operation', label: '操作', width: 140, fixed: 'right', useSlot: true }
+        { prop: 'operation', label: '操作', width: 180, fixed: 'right', useSlot: true }
       ]
     }
   })

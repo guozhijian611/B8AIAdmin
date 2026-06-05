@@ -40,6 +40,18 @@ export default {
   },
 
   /**
+   * 管理员确认扫码支付到账
+   * @param params 数据参数
+   * @returns 执行结果
+   */
+  confirmManualPaid(params: Record<string, any>) {
+    return request.post<any>({
+      url: '/app/saipay/admin/Order/confirmManualPaid',
+      data: params
+    })
+  },
+
+  /**
    * 删除数据
    * @param params 数据参数
    * @returns 执行结果

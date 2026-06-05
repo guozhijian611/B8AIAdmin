@@ -7,7 +7,10 @@
 namespace plugin\saipay\app\api\logic;
 
 use plugin\saipay\app\model\Order;
+use plugin\saipay\service\ManualScanPaymentService;
+use plugin\saipay\service\PayService;
 use plugin\saiadmin\basic\think\BaseLogic;
+use plugin\saiadmin\exception\ApiException;
 use Webman\Event\Event;
 
 /**
@@ -45,25 +48,77 @@ class OrderLogic extends BaseLogic
      */
     public function notifyOrder($order_no, $money, string $trade_no = '', array $payload = []): void
     {
-        $order = $this->model->where('order_no', $order_no)->where('pay_status', 2)->findOrEmpty();
+        $order = $this->model->where('order_no', $order_no)->whereIn('pay_status', [2, 3])->findOrEmpty();
         if (!$order->isEmpty()) {
-            // 处理订单状态
-            $order->pay_status = 1;
-            $order->pay_price = $money;
-            if ($trade_no !== '') {
-                $order->trade_no = $trade_no;
-            }
-            $order->pay_time = date('Y-m-d H:i:s');
-            $order->save();
-
-            // 业务逻辑
-            $this->handleBusinessLogic($order, [
+            $this->markPaid($order, $money, $trade_no, [
                 'pay_amount' => (float)$money,
                 'trade_no' => $trade_no,
                 'payload' => $payload,
-                'notify_time' => $order->pay_time,
             ]);
         }
+    }
+
+    /**
+     * 用户确认人工扫码已付款
+     */
+    public function confirmManualPaidByUser(string $orderNo): void
+    {
+        $order = $this->model
+            ->where('order_no', $orderNo)
+            ->where('pay_method', PayService::CHANNEL_MANUAL_SCAN)
+            ->where('pay_status', 2)
+            ->findOrEmpty();
+
+        if ($order->isEmpty()) {
+            throw new ApiException('订单不存在或当前状态不支持确认付款');
+        }
+
+        ManualScanPaymentService::assertNoticeConfigured();
+
+        $order->pay_status = 3;
+        $order->trade_no = 'manual_pending_' . $order->order_no;
+        $order->save();
+
+        ManualScanPaymentService::sendPaymentNotice($order);
+    }
+
+    /**
+     * 管理员确认人工扫码到账
+     */
+    public function confirmManualPaidByAdmin(string $orderNo): void
+    {
+        $order = $this->model
+            ->where('order_no', $orderNo)
+            ->where('pay_method', PayService::CHANNEL_MANUAL_SCAN)
+            ->where('pay_status', 3)
+            ->findOrEmpty();
+
+        if ($order->isEmpty()) {
+            throw new ApiException('订单不存在或当前状态不支持确认到账');
+        }
+
+        $this->markPaid($order, $order->order_price, 'manual_scan_' . $order->order_no, [
+            'pay_amount' => (float)$order->order_price,
+            'trade_no' => 'manual_scan_' . $order->order_no,
+            'payload' => [
+                'source' => 'manual_scan',
+                'confirmed_by' => 'admin',
+            ],
+        ]);
+    }
+
+    private function markPaid(Order $order, $money, string $tradeNo = '', array $context = []): void
+    {
+        $order->pay_status = 1;
+        $order->pay_price = $money;
+        if ($tradeNo !== '') {
+            $order->trade_no = $tradeNo;
+        }
+        $order->pay_time = date('Y-m-d H:i:s');
+        $order->save();
+
+        $context['notify_time'] = $order->pay_time;
+        $this->handleBusinessLogic($order, $context);
     }
 
     /**

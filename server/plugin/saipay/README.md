@@ -1,14 +1,15 @@
 # SaiPay 统一支付插件
 
 ## 简介
-`saipay` 是基于 SaiAdmin 框架开发的统一支付插件，旨在简化支付功能的集成。它封装了支付宝（Alipay）和微信支付（WechatPay）的常用接口，提供了统一的调用方式，并支持跨模块调用。
+`saipay` 是基于 SaiAdmin 框架开发的统一支付插件，旨在简化支付功能的集成。它封装了支付宝（Alipay）、微信支付（WechatPay）和人工扫码支付的常用接口，提供了统一的调用方式，并支持跨模块调用。
 
 ## 功能特性
 - **统一接口**：通过 `PayService::pay()` 一个方法即可完成多种渠道和类型的支付。
-- **多渠道支持**：目前支持支付宝和微信支付。
+- **多渠道支持**：目前支持支付宝、微信支付和人工扫码支付；银联支付保留配置和回调入口，暂未接入统一发起支付。
 - **多场景支持**：支持扫码支付（Scan）、网页支付（Web）、H5支付、App支付、小程序支付（Mini/MP）等。
 - **配置灵活**：支持从数据库读取配置（SystemConfigLogic），也支持动态传递配置参数（适合多商户模式）。
-- **渠道开关**：支持在系统设置的 `支付插件配置` 分组中独立启用或关闭支付宝、微信支付。
+- **渠道开关**：支持在系统设置的 `支付插件配置` 分组中独立启用或关闭支付宝、微信支付和人工扫码支付。
+- **人工确认**：人工扫码支付展示配置的支付宝/微信收款码，用户提交付款确认后邮件通知管理员，管理员在后台核对到账并确认支付成功。
 - **跨模块调用**：其他应用插件（如 `doc`、`shop` 等）可以直接调用本插件的服务，无需重复集成支付 SDK。
 
 ## 目录结构
@@ -22,7 +23,8 @@ server/plugin/saipay/
 ├── service/
 │   ├── PayService.php                     # 核心统一支付服务
 │   ├── AlipayService.php                  # 支付宝服务实现
-│   └── WechatPayService.php               # 微信支付服务实现
+│   ├── WechatPayService.php               # 微信支付服务实现
+│   └── ManualScanPaymentService.php       # 人工扫码支付服务实现
 └── README.md                              # 本文档
 ```
 
@@ -31,7 +33,8 @@ server/plugin/saipay/
 ### 1. 配置参数
 插件默认会尝试读取系统配置：
 
-- `支付插件配置`（`saipay_config`）：控制支付方式启停，`alipay_enabled` 和 `wechat_enabled` 默认开启。
+- `支付插件配置`（`saipay_config`）：控制支付方式启停，`alipay_enabled`、`wechat_enabled` 和 `manual_scan_enabled` 默认开启，`unipay_enabled` 默认关闭。
+- `扫码支付配置`：在 `saipay_config` 中配置 `manual_scan_alipay_qrcode`、`manual_scan_wechat_qrcode` 和 `manual_scan_notice_emails`。至少配置一个收款码，并配置管理员通知邮箱后，人工扫码支付才会出现在前台可用支付方式中。
 - `支付宝支付`（`alipay_config`）：支付宝应用、证书和回调配置。
 - `微信支付`（`wxpay_config`）：微信商户、证书和回调配置。
 
@@ -56,6 +59,7 @@ public static function pay(string $channel, string $type, array $params, array $
 - **$channel**: 支付渠道
     - `PayService::CHANNEL_ALIPAY` ('alipay')
     - `PayService::CHANNEL_WECHAT` ('wechat')
+    - `PayService::CHANNEL_MANUAL_SCAN` ('manual_scan')
 - **$type**: 支付类型
     - `PayService::TYPE_SCAN` (扫码支付)
     - `PayService::TYPE_WEB` (电脑网页支付)
@@ -77,6 +81,8 @@ PayService::paymentMethods();
 ```
 
 返回当前启用的支付方式列表。`PayService::pay()` 会在发起支付前检查渠道开关，渠道关闭时抛出 `ApiException`。
+
+> 银联支付当前仅保留 `unipay_config` 配置和 `/app/saipay/api/notify/unipay` 回调入口，尚未实现 `PayService::pay()` 的银联统一下单能力，因此不会出现在用户可选支付方式中。
 
 ## 使用案例
 
@@ -141,7 +147,37 @@ public function wechatScan()
 }
 ```
 
-### 3. 跨模块动态配置调用（多商户模式）
+### 3. 人工扫码支付
+```php
+use plugin\saipay\service\PayService;
+
+$result = PayService::pay(
+    PayService::CHANNEL_MANUAL_SCAN,
+    PayService::TYPE_SCAN,
+    [
+        'out_trade_no' => 'MANUAL_' . time(),
+        'total_amount' => 0.01,
+        'subject'      => '人工扫码测试'
+    ]
+);
+
+// 返回示例：
+// [
+//     'pay_method' => 'manual_scan',
+//     'manual' => true,
+//     'qrcodes' => [
+//         ['label' => '支付宝收款码', 'method' => 'alipay', 'image' => '...']
+//     ]
+// ]
+```
+
+人工扫码支付流程：
+1. 用户创建订单并选择 `manual_scan`。
+2. 前台展示后台配置的支付宝/微信收款码。
+3. 用户付款后点击“我已付款”，订单状态变为 `待确认`，系统给 `manual_scan_notice_emails` 配置的管理员邮箱发送通知。
+4. 管理员在后台订单列表核对到账后点击“确认到账”，订单变为已支付并触发 `saipay.order.paid` 事件。
+
+### 4. 跨模块动态配置调用（多商户模式）
 假设您在开发一个 `shop` 插件，每个店铺有自己的支付账号。
 
 ```php
@@ -180,3 +216,4 @@ public function shopPay($storeId)
 1. **金额单位**：`PayService` 统一使用 **元** 为单位，内部会自动根据渠道转换为分（如微信支付）。
 2. **异常处理**：建议使用 `try-catch` 捕获异常，以便处理支付失败的情况。
 3. **回调处理**：支付回调逻辑需在 `NotifyController` 中实现（待完善）。
+4. **人工支付风控**：人工扫码支付不会自动校验资金到账，必须由管理员核对后点击“确认到账”。

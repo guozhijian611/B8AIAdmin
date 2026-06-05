@@ -64,7 +64,18 @@
           <div class="text-xl font-medium text-gray-800 mb-6">请使用手机扫码支付</div>
 
           <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-100 mb-6 relative group">
+            <div v-if="payOrder.manual" class="flex gap-6">
+              <div
+                v-for="qrcode in payOrder.qrcodes"
+                :key="qrcode.method"
+                class="flex flex-col items-center gap-3"
+              >
+                <img class="w-48 h-48 object-contain" :src="qrcode.image" :alt="qrcode.label" />
+                <span class="text-sm text-gray-500">{{ qrcode.label }}</span>
+              </div>
+            </div>
             <img
+              v-else
               class="w-48 h-48 object-contain"
               :src="'https://api.pwmqr.com/qrcode/create/?url=' + payOrder.code_url"
               alt="支付二维码"
@@ -90,11 +101,17 @@
 
           <div class="flex gap-4">
             <ElButton @click="step = 1" size="large" plain>重新选择支付方式</ElButton>
-            <ElButton type="primary" @click="visible = false" size="large">支付完成</ElButton>
+            <ElButton v-if="payOrder.manual" type="primary" @click="confirmManualPaid" size="large">
+              我已付款
+            </ElButton>
+            <ElButton v-else type="primary" @click="visible = false" size="large">支付完成</ElButton>
           </div>
 
           <div class="mt-8 text-xs text-red-400 text-center max-w-sm">
-            提示：请在10分钟内完成支付，超时订单将自动关闭。
+            <template v-if="payOrder.manual">
+              提示：付款后请点击“我已付款”，管理员核对到账后订单才会变为已支付。
+            </template>
+            <template v-else> 提示：请在10分钟内完成支付，超时订单将自动关闭。 </template>
           </div>
         </div>
       </div>
@@ -111,7 +128,7 @@
     value: string
     description: string
     icon: string
-    theme: 'blue' | 'green'
+    theme: 'blue' | 'green' | 'orange' | 'red'
     enabled: boolean
   }
 
@@ -165,12 +182,14 @@
       const res = await demoApi.payOrder({
         order_no: orderData.value.order_no
       })
-      if (res.pay_url) {
+      if (res.pay_url || res.manual) {
         step.value = 2
         payOrder.value = {
           pay_method: res.pay_method,
           pay_type: res.pay_type,
           code_url: res.pay_url,
+          manual: res.manual,
+          qrcodes: res.qrcodes || [],
           order_no: res.order_no,
           order_price: res.order_price
         }
@@ -206,6 +225,8 @@
 
       payOrder.value = {
         code_url: res.pay_url,
+        manual: res.manual,
+        qrcodes: res.qrcodes || [],
         order_no: res.order_no,
         order_price: res.order_price,
         pay_method: res.pay_method
@@ -225,26 +246,60 @@
     // cleanup
   }
 
+  const confirmManualPaid = async () => {
+    loading.value = true
+    try {
+      await demoApi.confirmManualPaid({
+        order_no: payOrder.value.order_no
+      })
+      ElMessage.success('已提交付款确认，请等待管理员核对到账')
+      visible.value = false
+      emit('success')
+    } finally {
+      loading.value = false
+    }
+  }
+
   const getMethodCardClass = (method: PaymentMethod) => {
     if (loading.value) {
       return 'opacity-50 pointer-events-none'
     }
-    return method.theme === 'green'
-      ? 'border-gray-200 hover:border-green-500'
-      : 'border-gray-200 hover:border-blue-500'
+    const borderMap = {
+      blue: 'border-gray-200 hover:border-blue-500',
+      green: 'border-gray-200 hover:border-green-500',
+      orange: 'border-gray-200 hover:border-orange-500',
+      red: 'border-gray-200 hover:border-red-500'
+    }
+    return borderMap[method.theme] || borderMap.blue
   }
 
   const getMethodIconWrapperClass = (method: PaymentMethod) => {
-    return method.theme === 'green'
-      ? 'bg-green-50 group-hover:bg-green-100'
-      : 'bg-blue-50 group-hover:bg-blue-100'
+    const wrapperMap = {
+      blue: 'bg-blue-50 group-hover:bg-blue-100',
+      green: 'bg-green-50 group-hover:bg-green-100',
+      orange: 'bg-orange-50 group-hover:bg-orange-100',
+      red: 'bg-red-50 group-hover:bg-red-100'
+    }
+    return wrapperMap[method.theme] || wrapperMap.blue
   }
 
   const getMethodIconClass = (method: PaymentMethod) => {
-    return method.theme === 'green' ? 'text-green-500' : 'text-blue-500'
+    const iconMap = {
+      blue: 'text-blue-500',
+      green: 'text-green-500',
+      orange: 'text-orange-500',
+      red: 'text-red-500'
+    }
+    return iconMap[method.theme] || iconMap.blue
   }
 
   const getMethodActiveBorderClass = (method: PaymentMethod) => {
-    return method.theme === 'green' ? 'border-green-500' : 'border-blue-500'
+    const borderMap = {
+      blue: 'border-blue-500',
+      green: 'border-green-500',
+      orange: 'border-orange-500',
+      red: 'border-red-500'
+    }
+    return borderMap[method.theme] || borderMap.blue
   }
 </script>

@@ -40,5 +40,14 @@ class OrderLogic extends BaseLogic
         }
         return false;
     }
-    
+
+    /**
+     * 管理员确认扫码支付到账
+     */
+    public function confirmManualPaid(string $orderNo): void
+    {
+        $logic = new ApiOrderLogic();
+        $logic->confirmManualPaidByAdmin($orderNo);
+    }
+
 }

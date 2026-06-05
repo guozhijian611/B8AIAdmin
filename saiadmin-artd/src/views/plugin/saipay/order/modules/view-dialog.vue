@@ -26,6 +26,7 @@
         </el-descriptions-item>
         <el-descriptions-item label="支付状态">
           <ElTag v-if="formData?.pay_status === 1" type="success">已支付</ElTag>
+          <ElTag v-else-if="formData?.pay_status === 3" type="warning">待确认</ElTag>
           <ElTag v-else type="danger">未支付</ElTag>
         </el-descriptions-item>
         <el-descriptions-item v-if="formData?.pay_status === 1" label="支付金额">

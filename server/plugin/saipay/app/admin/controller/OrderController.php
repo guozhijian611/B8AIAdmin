@@ -80,6 +80,23 @@ class OrderController extends BaseController
     }
 
     /**
+     * 管理员确认扫码支付到账
+     * @param Request $request
+     * @return Response
+     */
+    #[Permission('确认扫码支付到账', 'saipay:order:confirmManualPaid')]
+    public function confirmManualPaid(Request $request): Response
+    {
+        $order_no = $request->post('order_no', '');
+        if (empty($order_no)) {
+            return $this->fail('请输入订单号');
+        }
+
+        $this->logic->confirmManualPaid($order_no);
+        return $this->success('确认成功');
+    }
+
+    /**
      * 删除数据
      * @param Request $request
      * @return Response
