@@ -40,6 +40,26 @@ class ManualScanPaymentService
         return $qrcodes;
     }
 
+    public static function qrcode(string $method): ?array
+    {
+        foreach (self::qrcodes() as $qrcode) {
+            if ($qrcode['method'] === $method) {
+                return $qrcode;
+            }
+        }
+
+        return null;
+    }
+
+    public static function channelLabel(?string $method): string
+    {
+        return match ($method) {
+            PayService::CHANNEL_ALIPAY => '支付宝收款码',
+            PayService::CHANNEL_WECHAT => '微信收款码',
+            default => '未选择',
+        };
+    }
+
     public static function assertConfigured(): void
     {
         if (empty(self::qrcodes())) {
@@ -91,6 +111,7 @@ class ManualScanPaymentService
             '订单名称' => $order->order_name,
             '订单金额' => $order->order_price,
             '支付方式' => '扫码支付',
+            '收款渠道' => self::channelLabel($order->pay_channel),
             '应用插件' => $order->plugin,
             '关联订单ID' => $order->order_id,
             '会员ID' => $order->member_id,

@@ -19,7 +19,10 @@
           <div v-text="formData?.order_price"></div>
         </el-descriptions-item>
         <el-descriptions-item label="支付方式">
-          <sa-dict :value="formData?.pay_method" dict="saipay_method" />
+          <div v-text="payMethodLabel(formData?.pay_method)"></div>
+        </el-descriptions-item>
+        <el-descriptions-item label="收款渠道">
+          <div v-text="payChannelLabel(formData?.pay_channel || formData?.pay_method)"></div>
         </el-descriptions-item>
         <el-descriptions-item label="支付类型">
           <div v-text="formData?.pay_type"></div>
@@ -83,6 +86,7 @@
     pay_status: 2,
     pay_time: '',
     pay_type: '',
+    pay_channel: '',
     pay_price: '',
     create_time: '',
     remark: ''
@@ -130,5 +134,25 @@
         }
       }
     }
+  }
+
+  const payMethodLabel = (method: string) => {
+    const labelMap: Record<string, string> = {
+      alipay: '支付宝支付',
+      wechat: '微信支付',
+      manual_scan: '扫码支付',
+      unipay: '银联支付'
+    }
+    return labelMap[method] || method || '-'
+  }
+
+  const payChannelLabel = (channel: string) => {
+    const labelMap: Record<string, string> = {
+      alipay: '支付宝',
+      wechat: '微信支付',
+      manual_scan: '待选择',
+      unipay: '银联支付'
+    }
+    return labelMap[channel] || '-'
   }
 </script>

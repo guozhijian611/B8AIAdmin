@@ -240,6 +240,7 @@ class DemoController extends OpenController
     #[Apidoc\Url('/app/saipay/api/demo/confirmManualPaid')]
     #[Apidoc\Method('POST')]
     #[Apidoc\Param('order_no', type: 'string', require: true, desc: '订单号')]
+    #[Apidoc\Param('pay_channel', type: 'string', require: true, desc: '实际付款收款码渠道，alipay 或 wechat')]
     public function confirmManualPaid(Request $request): Response
     {
         $orderNo = (string)$request->post('order_no', '');
@@ -247,7 +248,12 @@ class DemoController extends OpenController
             return $this->fail('请输入订单号');
         }
 
-        (new OrderLogic())->confirmManualPaidByUser($orderNo);
+        $payChannel = (string)$request->post('pay_channel', '');
+        if ($payChannel === '') {
+            return $this->fail('请选择实际付款的收款码');
+        }
+
+        (new OrderLogic())->confirmManualPaidByUser($orderNo, $payChannel);
         return $this->success('已提交付款确认，请等待管理员核对到账');
     }
 }

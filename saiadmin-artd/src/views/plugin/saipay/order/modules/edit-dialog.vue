@@ -60,15 +60,28 @@
           <div class="text-xl font-medium text-gray-800 mb-6">请使用手机扫码支付</div>
 
           <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-100 mb-6 relative group">
-            <div v-if="payOrder.manual" class="flex gap-6">
-              <div
-                v-for="qrcode in payOrder.qrcodes"
-                :key="qrcode.method"
-                class="flex flex-col items-center gap-3"
-              >
-                <img class="w-48 h-48 object-contain" :src="qrcode.image" :alt="qrcode.label" />
-                <span class="text-sm text-gray-500">{{ qrcode.label }}</span>
+            <div v-if="payOrder.manual" class="flex flex-col items-center gap-4">
+              <div class="grid grid-cols-2 gap-4 w-full max-w-md">
+                <button
+                  v-for="qrcode in payOrder.qrcodes"
+                  :key="qrcode.method"
+                  type="button"
+                  class="border rounded-lg px-4 py-3 text-sm transition-all"
+                  :class="getQrcodeOptionClass(qrcode.method)"
+                  @click="selectManualQrcode(qrcode.method)"
+                >
+                  {{ qrcode.label }}
+                </button>
               </div>
+              <div v-if="selectedManualQrcode" class="flex flex-col items-center gap-3">
+                <img
+                  class="w-48 h-48 object-contain"
+                  :src="selectedManualQrcode.image"
+                  :alt="selectedManualQrcode.label"
+                />
+                <span class="text-sm text-gray-500">{{ selectedManualQrcode.label }}</span>
+              </div>
+              <ElEmpty v-else description="请选择收款码" />
             </div>
             <img
               v-else
@@ -87,7 +100,11 @@
             </div>
             <div class="flex justify-between items-center mb-2">
               <span class="text-gray-500">支付方式</span>
-              <SaDict :value="payOrder.pay_method" dict="saipay_method" />
+              <span class="text-gray-800">{{ payMethodLabel(payOrder.pay_method) }}</span>
+            </div>
+            <div v-if="payOrder.manual" class="flex justify-between items-center mb-2">
+              <span class="text-gray-500">收款渠道</span>
+              <span class="text-gray-800">{{ selectedManualQrcode?.label || '请选择' }}</span>
             </div>
             <div class="flex justify-between items-center">
               <span class="text-gray-500">测试单号</span>
@@ -118,6 +135,12 @@
 <script setup lang="ts">
   import { ElMessage } from 'element-plus'
   import demoApi from '../../api/demo'
+
+  interface PaymentQrcode {
+    label: string
+    method: string
+    image: string
+  }
 
   interface PaymentMethod {
     label: string
@@ -158,6 +181,12 @@
   // 支付订单
   const payOrder = ref<Record<string, any>>({})
   const paymentMethods = ref<PaymentMethod[]>([])
+  const selectedManualQrcodeMethod = ref('')
+
+  const selectedManualQrcode = computed<PaymentQrcode | null>(() => {
+    const qrcodes = (payOrder.value.qrcodes || []) as PaymentQrcode[]
+    return qrcodes.find((qrcode) => qrcode.method === selectedManualQrcodeMethod.value) || null
+  })
 
   // 初始化
   const initForm = async () => {
@@ -202,6 +231,7 @@
         order_no: res.order_no,
         order_price: res.order_price
       }
+      selectedManualQrcodeMethod.value = ''
       step.value = 2
       ElMessage.success('测试支付二维码已生成')
     } catch (e) {
@@ -217,10 +247,16 @@
   }
 
   const confirmManualPaid = async () => {
+    if (!selectedManualQrcode.value) {
+      ElMessage.warning('请先选择实际付款的收款码')
+      return
+    }
+
     loading.value = true
     try {
       await demoApi.confirmManualPaid({
-        order_no: payOrder.value.order_no
+        order_no: payOrder.value.order_no,
+        pay_channel: selectedManualQrcode.value.method
       })
       ElMessage.success('已提交付款确认，请等待管理员核对到账')
       visible.value = false
@@ -228,6 +264,26 @@
     } finally {
       loading.value = false
     }
+  }
+
+  const selectManualQrcode = (method: string) => {
+    selectedManualQrcodeMethod.value = method
+  }
+
+  const getQrcodeOptionClass = (method: string) => {
+    return selectedManualQrcodeMethod.value === method
+      ? 'border-blue-500 bg-blue-50 text-blue-600'
+      : 'border-gray-200 text-gray-600 hover:border-blue-300'
+  }
+
+  const payMethodLabel = (method: string) => {
+    const labelMap: Record<string, string> = {
+      alipay: '支付宝支付',
+      wechat: '微信支付',
+      manual_scan: '扫码支付',
+      unipay: '银联支付'
+    }
+    return labelMap[method] || method || '-'
   }
 
   const getMethodCardClass = (method: PaymentMethod) => {

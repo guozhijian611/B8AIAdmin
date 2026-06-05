@@ -55,6 +55,9 @@
           <ElTag v-else-if="row.pay_status === 3" type="warning">待确认</ElTag>
           <ElTag v-else type="danger">未支付</ElTag>
         </template>
+        <template #pay_channel="{ row }">
+          <span>{{ payChannelLabel(row.pay_channel || row.pay_method) }}</span>
+        </template>
 
         <!-- 操作列 -->
         <template #operation="{ row }">
@@ -198,6 +201,12 @@
           width: 100
         },
         {
+          prop: 'pay_channel',
+          label: '收款渠道',
+          width: 120,
+          useSlot: true
+        },
+        {
           prop: 'pay_status',
           label: '支付状态',
           width: 100,
@@ -226,4 +235,14 @@
     dialogVisible: viewDialogVisible,
     dialogData: viewDialogData
   } = useSaiAdmin()
+
+  const payChannelLabel = (channel: string) => {
+    const labelMap: Record<string, string> = {
+      alipay: '支付宝',
+      wechat: '微信支付',
+      manual_scan: '待选择',
+      unipay: '银联支付'
+    }
+    return labelMap[channel] || '-'
+  }
 </script>

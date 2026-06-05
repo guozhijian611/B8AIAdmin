@@ -61,8 +61,12 @@ class OrderLogic extends BaseLogic
     /**
      * 用户确认人工扫码已付款
      */
-    public function confirmManualPaidByUser(string $orderNo): void
+    public function confirmManualPaidByUser(string $orderNo, string $payChannel): void
     {
+        if (!ManualScanPaymentService::qrcode($payChannel)) {
+            throw new ApiException('请选择有效的扫码支付收款码');
+        }
+
         $order = $this->model
             ->where('order_no', $orderNo)
             ->where('pay_method', PayService::CHANNEL_MANUAL_SCAN)
@@ -76,6 +80,7 @@ class OrderLogic extends BaseLogic
         ManualScanPaymentService::assertNoticeConfigured();
 
         $order->pay_status = 3;
+        $order->pay_channel = $payChannel;
         $order->trade_no = 'manual_pending_' . $order->order_no;
         $order->save();
 
@@ -97,11 +102,13 @@ class OrderLogic extends BaseLogic
             throw new ApiException('订单不存在或当前状态不支持确认到账');
         }
 
-        $this->markPaid($order, $order->order_price, 'manual_scan_' . $order->order_no, [
+        $tradeNo = 'manual_scan_' . ($order->pay_channel ?: 'unknown') . '_' . $order->order_no;
+        $this->markPaid($order, $order->order_price, $tradeNo, [
             'pay_amount' => (float)$order->order_price,
-            'trade_no' => 'manual_scan_' . $order->order_no,
+            'trade_no' => $tradeNo,
             'payload' => [
                 'source' => 'manual_scan',
+                'pay_channel' => $order->pay_channel,
                 'confirmed_by' => 'admin',
             ],
         ]);
