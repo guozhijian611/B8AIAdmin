@@ -45,6 +45,9 @@ class AliyunRealtimeConfig
         return [
             'id' => (int) $data['id'],
             'name' => (string) ($data['name'] ?? ''),
+            'type' => 'aliyun_realtime',
+            'provider' => 'aliyun_qwen',
+            'rawAiUrl' => (string) ($data['ai_url'] ?? ''),
             'apiUrl' => $apiUrl,
             'apiKey' => $apiKey,
             'model' => $model,
@@ -82,6 +85,18 @@ class AliyunRealtimeConfig
         return $apiUrl;
     }
 
+    public static function withModel(array $config, string $model): array
+    {
+        $model = trim($model);
+        if ($model === '') {
+            return $config;
+        }
+
+        $config['model'] = $model;
+        $config['apiUrl'] = self::normalizeRealtimeUrl((string) ($config['rawAiUrl'] ?? $config['apiUrl'] ?? ''), $model);
+        return $config;
+    }
+
     public static function defaultSession(array $options = []): array
     {
         $turnDetection = array_key_exists('turn_detection', $options)
@@ -95,8 +110,8 @@ class AliyunRealtimeConfig
         return [
             'modalities' => $options['modalities'] ?? ['text', 'audio'],
             'voice' => (string) ($options['voice'] ?? self::DEFAULT_VOICE),
-            'input_audio_format' => 'pcm',
-            'output_audio_format' => 'pcm',
+            'input_audio_format' => 'pcm16',
+            'output_audio_format' => 'pcm16',
             'instructions' => (string) ($options['instructions'] ?? '你是 B8AIadmin 的实时语音助手，请用准确、简洁、友好的中文回答用户。'),
             'turn_detection' => $turnDetection,
             'input_audio_transcription' => $options['input_audio_transcription'] ?? [

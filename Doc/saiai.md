@@ -9,7 +9,7 @@
 | 能力 | 入口 | 说明 |
 | --- | --- | --- |
 | 文字对话 | `server/plugin/saiai/app/service/AiFactory.php` | 通过 `saiai_config` 中的模型配置调用 OpenAI、Gemini、DeepSeek、Generic 等文本模型通道。 |
-| 阿里云实时多模态 | `plugin.saiai.saiai_realtime_gateway` 进程 | 后台浏览器连接本地 WebSocket 代理，由代理携带 API Key 连接阿里云 Qwen-Omni-Realtime。支持文本测试、麦克风音频、摄像头抽帧视频和音频输出监测。 |
+| SAI Realtime 多模态 | `plugin.saiai.saiai_realtime_gateway` 进程 | 后台浏览器连接本地 WebSocket 协议网关，由网关通过 provider adapter 连接阿里云 Qwen-Omni-Realtime 等上游。支持文本测试、麦克风音频、摄像头抽帧视频和音频输出监测。 |
 
 后台前端位于 `saiadmin-artd/src/views/plugin/saiai`，后端插件位于 `server/plugin/saiai`。
 
@@ -98,13 +98,220 @@ SAIAI_REALTIME_WS_COUNT=1
 }
 ```
 
+## SAI Realtime 协议
+
+SAI Realtime 是类 OpenAI `/v1/realtime` 的最小 WebSocket 协议层。它不追求完整厂商兼容，只稳定 saiai 自己的事件、状态机和 session 配置，再通过 provider adapter 翻译到不同厂商。
+
+对外端点：
+
+```text
+wss://{host}/v1/realtime?model={model}
+```
+
+后台测试页本地开发默认使用：
+
+```text
+ws://127.0.0.1:8791/v1/realtime?model={model}&token={admin_token}&config_id={id}
+```
+
+鉴权：
+
+- 浏览器测试台使用 `token` 查询参数传递 SaiAdmin JWT。
+- 服务端或非浏览器客户端优先使用 `Authorization: Bearer <token>`。
+- 网关会校验 JWT 中的 `plat=saiadmin`，厂商 API Key 只保存在服务端。
+
+### 客户端事件
+
+| 事件 | 说明 |
+| --- | --- |
+| `session.update` | 更新会话配置。 |
+| `input_audio_buffer.append` | 追加一段 base64 PCM16 音频。 |
+| `input_audio_buffer.commit` | 手动提交当前音频缓冲。 |
+| `input_text.append` | 追加一段文本输入。 |
+| `input_image.append` | 追加一帧图片输入，通常是 JPEG 抽帧。 |
+| `response.create` | 请求模型开始生成。 |
+| `response.cancel` | 取消当前生成。 |
+| `ping` | 心跳探测。 |
+
+### 服务端事件
+
+| 事件 | 说明 |
+| --- | --- |
+| `session.created` | 会话已创建且 provider 上游已就绪。 |
+| `session.updated` | 会话配置已更新。 |
+| `response.started` | 本轮响应开始。 |
+| `response.text.delta` | 文本增量。 |
+| `response.audio.delta` | base64 PCM16 音频增量。 |
+| `response.done` | 本轮响应结束。 |
+| `error` | 协议、鉴权、provider 或内部错误。 |
+| `pong` | 心跳响应。 |
+
+### Session 配置
+
+```json
+{
+  "modalities": ["text", "audio"],
+  "instructions": "你是 B8AIadmin 的实时语音助手。",
+  "input_audio_format": "pcm16",
+  "output_audio_format": "pcm16",
+  "voice": "Cherry",
+  "turn_detection": {
+    "type": "server_vad",
+    "threshold": 0.5,
+    "silence_duration_ms": 800
+  },
+  "temperature": 0.9,
+  "tools": []
+}
+```
+
+说明：
+
+- 音频统一使用 base64 PCM16。阿里云 adapter 会把协议层的 `pcm16` 翻译为 Qwen 上游需要的 `pcm`。
+- `tools` 当前只作为协议字段保留，第一版不触发工具调用事件。
+- `manual` 模式的 `turn_detection` 可传 `null` 或 `{ "type": "manual" }`。
+
+### JSON 示例
+
+创建会话后服务端会返回：
+
+```json
+{
+  "type": "session.created",
+  "event_id": "srv_123",
+  "session_id": "sess_123",
+  "provider": "aliyun_qwen",
+  "model": "qwen3-omni-flash-realtime-2025-12-01",
+  "session": {
+    "modalities": ["text", "audio"],
+    "input_audio_format": "pcm16",
+    "output_audio_format": "pcm16",
+    "voice": "Cherry"
+  },
+  "status": "ready"
+}
+```
+
+文本输入：
+
+```json
+{
+  "type": "input_text.append",
+  "event_id": "evt_text_1",
+  "text": "请介绍一下你看到的画面"
+}
+```
+
+音频输入：
+
+```json
+{
+  "type": "input_audio_buffer.append",
+  "event_id": "evt_audio_1",
+  "audio": "<base64 pcm16>"
+}
+```
+
+图片帧输入：
+
+```json
+{
+  "type": "input_image.append",
+  "event_id": "evt_image_1",
+  "image": "<base64 jpeg>",
+  "mime_type": "image/jpeg",
+  "timestamp_ms": 1200
+}
+```
+
+请求生成：
+
+```json
+{
+  "type": "response.create",
+  "event_id": "evt_response_1"
+}
+```
+
+输出增量：
+
+```json
+{
+  "type": "response.audio.delta",
+  "event_id": "srv_audio_1",
+  "session_id": "sess_123",
+  "response_id": "resp_123",
+  "delta": "<base64 pcm16>"
+}
+```
+
+### 状态机
+
+```mermaid
+stateDiagram-v2
+  [*] --> connecting
+  connecting --> session_ready: session.created
+  session_ready --> collecting_input: input_text/input_audio/input_image
+  collecting_input --> committed: input_audio_buffer.commit
+  collecting_input --> responding: response.create or server VAD
+  committed --> responding: response.create
+  responding --> session_ready: response.done
+  responding --> session_ready: response.cancel
+  connecting --> closed: fatal error
+  session_ready --> closed: fatal error
+  responding --> closed: fatal error
+```
+
+### Provider Adapter
+
+Adapter 接口位于 `server/plugin/saiai/app/realtime/adapter/RealtimeProviderAdapterInterface.php`，第一版真实实现阿里云 Qwen adapter，并预留 OpenAI Realtime、Gemini Live、本地 ASR+LLM+TTS 的扩展入口。
+
+伪代码：
+
+```php
+interface RealtimeProviderAdapterInterface
+{
+    public function upstreamUrl(array $config): string;
+    public function upstreamHeaders(array $config): array;
+    public function defaultSession(array $options = []): array;
+    public function toProviderEvents(array $event, RealtimeSessionState $state): array;
+    public function fromProviderEvent(array $event, RealtimeSessionState $state): array;
+}
+```
+
+当前 adapter：
+
+| Provider | 类 | 状态 |
+| --- | --- | --- |
+| 阿里云 Qwen Omni Realtime | `AliyunQwenRealtimeAdapter` | 已实现。 |
+| OpenAI Realtime | `UnsupportedRealtimeAdapter('openai_realtime')` | 已预留，未接上游。 |
+| Gemini Live | `UnsupportedRealtimeAdapter('gemini_live')` | 已预留，未接上游。 |
+| 本地 ASR+LLM+TTS | `UnsupportedRealtimeAdapter('local_realtime')` | 已预留，未接本地流水线。 |
+
+### 错误码
+
+| 错误码 | 场景 |
+| --- | --- |
+| `invalid_json` | 客户端事件不是合法 JSON object。 |
+| `unsupported_event` | 客户端事件不在最小协议白名单内。 |
+| `invalid_session` | session 字段非法，例如音频格式或 VAD 模式不支持。 |
+| `invalid_audio` | `audio` 不是 base64 PCM16。 |
+| `invalid_image` | `image` 为空或图片事件非法。 |
+| `invalid_path` | WebSocket 路径不是 `/` 或 `/v1/realtime`。 |
+| `authentication_error` | 缺少 token、JWT 无效或平台不匹配。 |
+| `upstream_not_ready` | Provider 上游尚未连接完成。 |
+| `provider_connection_error` | 上游连接错误。 |
+| `provider_connection_closed` | 上游连接关闭。 |
+| `provider_protocol_error` | 上游返回了非 JSON 事件。 |
+| `internal_error` | 未归类内部错误。 |
+
 ## 实时代理
 
 实时代理进程配置在 `server/plugin/saiai/config/process.php`：
 
 ```php
 'saiai_realtime_gateway' => [
-    'handler' => plugin\saiai\app\process\AliyunRealtimeGateway::class,
+    'handler' => plugin\saiai\app\process\RealtimeGateway::class,
     'listen' => 'websocket://0.0.0.0:' . env('SAIAI_REALTIME_WS_PORT', 8791),
     'count' => (int) env('SAIAI_REALTIME_WS_COUNT', 1),
     'reloadable' => true,
@@ -113,11 +320,12 @@ SAIAI_REALTIME_WS_COUNT=1
 
 连接链路：
 
-1. 后台测试台连接本地代理：`ws://<host>:8791/?token=<admin_token>&config_id=<id>`。
+1. 后台测试台连接本地代理：`ws://<host>:8791/v1/realtime?model=<model>&token=<admin_token>&config_id=<id>`。
 2. 代理校验 SaiAdmin JWT，确认 `plat=saiadmin`。
 3. 代理读取 `saiai_config` 中的 `aliyun_realtime` 配置。
-4. 代理连接阿里云实时端点，并用 `Authorization: Bearer <api_key>` 放在服务端请求头中。
-5. 前端只与本地代理通信，不直接暴露阿里云 API Key。
+4. 代理选择 provider adapter，当前默认 `aliyun_qwen`。
+5. Adapter 连接阿里云实时端点，并用 `Authorization: Bearer <api_key>` 放在服务端请求头中。
+6. 前端只与本地代理通信，不直接暴露阿里云 API Key。
 
 修改 PHP、进程配置或 `.env` 后，需要重启 Webman：
 
@@ -145,10 +353,10 @@ GET /app/saiai/admin/config/AiConfig/realtimeTestConfig
 | 模块 | 说明 |
 | --- | --- |
 | 会话配置 | 切换输出模态、音色、VAD、采样参数、系统提示，并发送 `session.update`。 |
-| 状态监测 | 展示本地代理、阿里云上游、会话状态、生成状态、延迟、错误数。 |
-| 文本测试 | 发送兼容文本事件并观察服务端是否接受。 |
+| 状态监测 | 展示本地代理、Provider 上游、会话状态、生成状态、延迟、错误数。 |
+| 文本测试 | 发送 `input_text.append` 并观察服务端是否接受。 |
 | 音频测试 | 采集麦克风，转换为 16 kHz PCM 后通过 `input_audio_buffer.append` 发送。 |
-| 音视频测试 | 同时开启麦克风和摄像头，从视频流抽 JPEG 帧通过 `input_image_buffer.append` 发送。 |
+| 音视频测试 | 同时开启麦克风和摄像头，从视频流抽 JPEG 帧通过 `input_image.append` 发送。 |
 | 音频输出 | 收到 `response.audio.delta` 后流式播放，`audio.done` 后生成完整 WAV 供回放。 |
 | 日志监测 | 按发送、接收、错误分类展示事件，并摘要音频和图片 Base64。 |
 
@@ -161,7 +369,7 @@ GET /app/saiai/admin/config/AiConfig/realtimeTestConfig
 ```json
 {
   "type": "input_audio_buffer.append",
-  "audio": "<base64 pcm>"
+  "audio": "<base64 pcm16>"
 }
 ```
 
@@ -171,8 +379,10 @@ WebSocket 模式不直接传 RTP 视频流。测试台从摄像头视频流按 F
 
 ```json
 {
-  "type": "input_image_buffer.append",
-  "image": "<base64 jpeg>"
+  "type": "input_image.append",
+  "image": "<base64 jpeg>",
+  "mime_type": "image/jpeg",
+  "timestamp_ms": 1200
 }
 ```
 
@@ -188,11 +398,11 @@ WebSocket 模式不直接传 RTP 视频流。测试台从摄像头视频流按 F
 
 | 事件 | 处理 |
 | --- | --- |
-| `response.text.delta` / `response.output_text.delta` | 追加到实时文本区。 |
-| `response.audio_transcript.delta` / `response.output_audio_transcript.delta` | 追加到实时文本区。 |
-| `response.audio.delta` / `response.output_audio.delta` | 流式播放 PCM 音频，并统计音频下行。 |
-| `response.audio.done` / `response.output_audio.done` | 生成完整 WAV 回放文件。 |
-| `error` / `gateway.error` | 计入错误数并写入事件日志。 |
+| `response.started` | 标记本轮生成开始。 |
+| `response.text.delta` | 追加到实时文本区。 |
+| `response.audio.delta` | 流式播放 PCM16 音频，并统计音频下行。 |
+| `response.done` | 标记本轮结束，并生成完整 WAV 回放文件。 |
+| `error` | 计入错误数并写入事件日志。 |
 
 ## VAD 模式
 
@@ -249,7 +459,8 @@ VAD 模式不需要点击提交。
 - 新增或修改实时端点时，同步更新：
   - `server/plugin/saiai/config/ai.php`
   - `server/plugin/saiai/app/service/AliyunRealtimeConfig.php`
-  - `server/plugin/saiai/app/process/AliyunRealtimeGateway.php`
+  - `server/plugin/saiai/app/process/RealtimeGateway.php`
+  - `server/plugin/saiai/app/realtime/adapter/*`
   - 后台测试台页面
   - `OpenAPI/saiai/openapi.yaml`
   - 本文档

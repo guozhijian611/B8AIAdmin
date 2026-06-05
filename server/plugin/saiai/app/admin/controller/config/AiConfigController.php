@@ -152,7 +152,7 @@ class AiConfigController extends BaseController
     }
 
     /**
-     * 阿里云实时测试页默认配置
+     * SAI Realtime 测试页默认配置
      * @param Request $request
      * @return Response
      */
@@ -168,7 +168,7 @@ class AiConfigController extends BaseController
             : $host . ':' . $port;
 
         return $this->success([
-            'ws_url' => $scheme . '://' . $host,
+            'ws_url' => $scheme . '://' . $host . '/v1/realtime',
             'default_model' => AliyunRealtimeConfig::DEFAULT_MODEL,
             'default_ai_url' => AliyunRealtimeConfig::DEFAULT_URL,
             'default_session' => AliyunRealtimeConfig::defaultSession(),

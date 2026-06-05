@@ -222,7 +222,7 @@
           "AI 配置"
         ],
         "summary": "AI 配置实时测试默认配置",
-        "description": "来源：server/plugin/saiai/app/admin/controller/config/AiConfigController.php 与 saiadmin-artd/src/views/plugin/saiai/api/config/config.ts。返回本地实时代理地址、默认模型、默认上游地址和默认会话参数。",
+        "description": "来源：server/plugin/saiai/app/admin/controller/config/AiConfigController.php 与 saiadmin-artd/src/views/plugin/saiai/api/config/config.ts。返回 SAI Realtime 本地代理地址（/v1/realtime）、默认模型、默认上游地址和默认会话参数。",
         "responses": {
           "200": {
             "$ref": "#/components/responses/ApiResponse"

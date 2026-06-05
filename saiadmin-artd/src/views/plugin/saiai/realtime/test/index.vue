@@ -3,7 +3,7 @@
     <section class="toolbar-band">
       <div class="toolbar-inner">
         <div class="title-block">
-          <h2>阿里云实时多模态调试台</h2>
+          <h2>SAI Realtime 多模态调试台</h2>
           <p>{{ statusText }}</p>
         </div>
         <div class="actions">
@@ -109,16 +109,7 @@
 
           <div class="form-grid">
             <el-form-item label="温度">
-              <el-input-number v-model="temperature" :min="0" :max="1.99" :step="0.1" />
-            </el-form-item>
-            <el-form-item label="Top K">
-              <el-input-number v-model="topK" :min="0" :max="100" :step="1" />
-            </el-form-item>
-            <el-form-item label="重复惩罚">
-              <el-input-number v-model="repetitionPenalty" :min="0.1" :max="2" :step="0.05" />
-            </el-form-item>
-            <el-form-item label="存在惩罚">
-              <el-input-number v-model="presencePenalty" :min="-2" :max="2" :step="0.1" />
+              <el-input-number v-model="temperature" :min="0" :max="2" :step="0.1" />
             </el-form-item>
           </div>
 
@@ -155,7 +146,7 @@
             </el-tag>
           </div>
           <div class="health-row">
-            <span>阿里云上游</span>
+            <span>Provider 上游</span>
             <el-tag :type="upstreamReady ? 'success' : 'info'">
               {{ upstreamReady ? '已就绪' : '等待中' }}
             </el-tag>
@@ -225,7 +216,7 @@
               v-model="textPrompt"
               type="textarea"
               :rows="8"
-              placeholder="输入一段文本，发送为兼容文本事件"
+              placeholder="输入一段文本，发送为 input_text.append 事件"
             />
             <div class="button-row">
               <el-button
@@ -254,7 +245,6 @@
               >
                 Manual 提交本轮
               </el-button>
-              <el-button :disabled="!upstreamReady" @click="clearAudioBuffer">清空缓冲</el-button>
             </div>
             <div class="audio-monitor">
               <div>
@@ -381,9 +371,6 @@
   const vadThreshold = ref(0.5)
   const vadSilenceDuration = ref(800)
   const temperature = ref(0.9)
-  const topK = ref(50)
-  const repetitionPenalty = ref(1.05)
-  const presencePenalty = ref(0)
 
   const textPrompt = ref('')
   const assistantText = ref('')
@@ -456,7 +443,6 @@
   let connectionStartedAt = 0
   let outputSampleChunks: Int16Array[] = []
   let playbackCursor = 0
-  let pendingResponseAfterCommit = false
 
   const isManualMode = computed(() => vadMode.value === 'manual')
   const vadLabel = computed(() => (isManualMode.value ? 'Manual' : vadMode.value))
@@ -473,7 +459,7 @@
     if (recording.value && videoStreaming.value) return '正在进行音视频实时输入'
     if (recording.value) return '正在发送麦克风 PCM 音频'
     if (videoStreaming.value) return '正在发送视频 JPEG 抽帧，等待音频输入'
-    if (upstreamReady.value) return '已连接阿里云实时端点'
+    if (upstreamReady.value) return 'SAI Realtime 会话已就绪'
     if (connected.value) return '已连接本地代理，等待上游就绪'
     return '请选择 aliyun_realtime 配置后连接'
   })
@@ -551,6 +537,7 @@
     const url = new URL(wsUrl.value)
     url.searchParams.set('token', token)
     url.searchParams.set('config_id', String(selectedConfigId.value))
+    url.searchParams.set('model', modelName.value)
     socket = new WebSocket(url.toString())
 
     socket.onopen = () => {
@@ -625,18 +612,9 @@
     if (!text) return
 
     sendJson({
-      type: 'conversation.item.create',
+      type: 'input_text.append',
       event_id: createEventId('text'),
-      item: {
-        type: 'message',
-        role: 'user',
-        content: [
-          {
-            type: 'input_text',
-            text
-          }
-        ]
-      }
+      text
     })
     sendJson({
       type: 'response.create',
@@ -736,18 +714,16 @@
       return
     }
 
-    pendingResponseAfterCommit = createResponse && isManualMode.value
     sendJson({
       type: 'input_audio_buffer.commit',
       event_id: createEventId('commit')
     })
-  }
-
-  function clearAudioBuffer() {
-    sendJson({
-      type: 'input_audio_buffer.clear',
-      event_id: createEventId('clear')
-    })
+    if (createResponse) {
+      sendJson({
+        type: 'response.create',
+        event_id: createEventId('response')
+      })
+    }
   }
 
   async function captureVideoFrame() {
@@ -765,9 +741,11 @@
     const blob = await createJpegBlob(canvas)
     const buffer = await blob.arrayBuffer()
     sendJson({
-      type: 'input_image_buffer.append',
+      type: 'input_image.append',
       event_id: createEventId('frame'),
-      image: arrayBufferToBase64(buffer)
+      image: arrayBufferToBase64(buffer),
+      mime_type: 'image/jpeg',
+      timestamp_ms: Date.now() - connectionStartedAt
     })
     counters.sentImageFrames += 1
     counters.sentImageBytes += buffer.byteLength
@@ -808,42 +786,34 @@
     const type = payload.type || 'server.message'
     counters.serverEvents += 1
 
-    if (type === 'gateway.connected') {
-      modelName.value = payload.data?.model || modelName.value
-      applySessionDefaults(payload.data?.session || {})
-    }
-    if (type === 'gateway.upstream_open') {
+    if (type === 'session.created') {
+      const shouldAutoUpdate = !upstreamReady.value && autoSessionUpdate.value
       upstreamReady.value = true
-      ElMessage.success('阿里云实时端点已连接')
-      if (autoSessionUpdate.value) {
+      modelName.value = payload.model || modelName.value
+      applySessionDefaults(payload.session || {})
+      ElMessage.success('SAI Realtime 会话已就绪')
+      if (shouldAutoUpdate) {
         sendSessionUpdate()
       }
     }
-    if (type === 'gateway.pong' && lastPingAt.value) {
+    if (type === 'pong' && lastPingAt.value) {
       latencyMs.value = Math.round(performance.now() - lastPingAt.value)
-    }
-    if (type === 'gateway.upstream_close') {
-      upstreamReady.value = false
     }
     if (type === 'session.updated') {
       sessionUpdated.value = true
       applySessionDefaults(payload.session || {})
     }
-    if (type === 'response.created') {
+    if (type === 'response.started') {
       responseActive.value = true
     }
     if (type === 'response.done') {
       responseActive.value = false
     }
-    if (type === 'input_audio_buffer.committed' && pendingResponseAfterCommit) {
-      pendingResponseAfterCommit = false
-      sendJson({
-        type: 'response.create',
-        event_id: createEventId('response')
-      })
-    }
-    if (type === 'error' || type === 'gateway.error' || type.endsWith('.error')) {
+    if (type === 'error') {
       counters.errors += 1
+      if (payload.error?.fatal) {
+        upstreamReady.value = false
+      }
     }
 
     appendTextDelta(payload)
@@ -857,8 +827,7 @@
       'response.text.delta',
       'response.output_text.delta',
       'response.audio_transcript.delta',
-      'response.output_audio_transcript.delta',
-      'conversation.item.input_audio_transcription.completed'
+      'response.output_audio_transcript.delta'
     ]
     if (textTypes.includes(payload.type) && delta) {
       assistantText.value += delta
@@ -906,18 +875,12 @@
   function buildSession() {
     const session: Record<string, any> = {
       modalities: modalities.value,
-      input_audio_format: 'pcm',
-      output_audio_format: 'pcm',
+      input_audio_format: 'pcm16',
+      output_audio_format: 'pcm16',
       instructions: instructions.value,
       turn_detection: buildTurnDetection(),
-      input_audio_transcription: {
-        model: 'qwen3-asr-flash-realtime'
-      },
-      smooth_output: true,
       temperature: temperature.value,
-      top_k: topK.value,
-      repetition_penalty: repetitionPenalty.value,
-      presence_penalty: presencePenalty.value
+      tools: []
     }
 
     if (modalities.value.includes('audio')) {
@@ -951,15 +914,6 @@
     }
     if (session.temperature !== undefined) {
       temperature.value = Number(session.temperature)
-    }
-    if (session.top_k !== undefined) {
-      topK.value = Number(session.top_k)
-    }
-    if (session.repetition_penalty !== undefined) {
-      repetitionPenalty.value = Number(session.repetition_penalty)
-    }
-    if (session.presence_penalty !== undefined) {
-      presencePenalty.value = Number(session.presence_penalty)
     }
 
     if (session.turn_detection === null) {
@@ -1001,7 +955,7 @@
   function sendGatewayPing() {
     if (!socket || socket.readyState !== WebSocket.OPEN) return
     lastPingAt.value = performance.now()
-    socket.send(JSON.stringify({ type: 'gateway.ping' }))
+    sendJson({ type: 'ping', event_id: createEventId('ping') })
   }
 
   function resetRuntimeState() {
@@ -1052,10 +1006,9 @@
   }
 
   function eventLevel(type: string): EventLevel {
-    if (type === 'error' || type === 'gateway.error' || type.endsWith('.error')) return 'error'
-    if (type.startsWith('gateway.') || type === 'session.updated') return 'info'
-    if (type.startsWith('response.') || type.startsWith('conversation.')) return 'recv'
-    if (type.startsWith('input_audio_buffer.')) return 'recv'
+    if (type === 'error') return 'error'
+    if (type === 'session.created' || type === 'session.updated' || type === 'pong') return 'info'
+    if (type.startsWith('response.')) return 'recv'
     return 'info'
   }
 
