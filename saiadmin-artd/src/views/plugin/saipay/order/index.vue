@@ -115,11 +115,18 @@
   import { ElMessageBox } from 'element-plus'
   import { useTable } from '@/hooks/core/useTable'
   import { useSaiAdmin } from '@/composables/useSaiAdmin'
+  import { useDictStore } from '@/store/modules/dict'
   import api from '../api/order'
   import TableSearch from './modules/table-search.vue'
   import EditDialog from './modules/edit-dialog.vue'
   import ViewDialog from './modules/view-dialog.vue'
   import PayDialog from './modules/pay-dialog.vue'
+
+  const dictStore = useDictStore()
+
+  onMounted(() => {
+    dictStore.refresh()
+  })
 
   // 搜索表单
   const searchForm = ref({
@@ -147,9 +154,13 @@
 
   // 管理员确认扫码支付到账
   const handleConfirmManualPaid = async (row: any) => {
-    await ElMessageBox.confirm('确认该扫码支付订单已到账吗？确认后会触发支付成功业务通知。', '确认到账', {
-      type: 'warning'
-    })
+    await ElMessageBox.confirm(
+      '确认该扫码支付订单已到账吗？确认后会触发支付成功业务通知。',
+      '确认到账',
+      {
+        type: 'warning'
+      }
+    )
     await api.confirmManualPaid({
       order_no: row.order_no
     })
