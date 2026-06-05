@@ -12,7 +12,7 @@ use plugin\saiadmin\utils\Arr;
  */
 class ManualScanPaymentService
 {
-    private const CONFIG_GROUP = 'saipay_config';
+    private const CONFIG_GROUP = 'qrpay_config';
 
     public static function qrcodes(): array
     {
