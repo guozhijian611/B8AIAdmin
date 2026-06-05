@@ -69,10 +69,10 @@ class RealtimeProtocol
 
     public static function normalizeProviderSession(array $session): array
     {
-        if (($session['input_audio_format'] ?? '') === 'pcm') {
+        if (in_array($session['input_audio_format'] ?? '', ['pcm', 'pcm24'], true)) {
             $session['input_audio_format'] = 'pcm16';
         }
-        if (($session['output_audio_format'] ?? '') === 'pcm') {
+        if (in_array($session['output_audio_format'] ?? '', ['pcm', 'pcm24'], true)) {
             $session['output_audio_format'] = 'pcm16';
         }
         if (!array_key_exists('tools', $session)) {

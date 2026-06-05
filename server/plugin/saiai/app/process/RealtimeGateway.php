@@ -149,8 +149,13 @@ class RealtimeGateway
                 return;
             }
 
-            foreach ($adapter->fromProviderEvent($providerEvent, $state) as $event) {
-                $this->sendServerEvent($client, $state, $event);
+            try {
+                foreach ($adapter->fromProviderEvent($providerEvent, $state) as $event) {
+                    $this->sendServerEvent($client, $state, $event);
+                }
+            } catch (\Throwable $e) {
+                Log::error('[saiai.realtime] provider event convert failed: ' . $this->maskSensitive($e->getMessage()));
+                $client->send(RealtimeProtocol::error('provider_protocol_error', $e->getMessage() ?: '上游事件转换失败', $state));
             }
         };
 

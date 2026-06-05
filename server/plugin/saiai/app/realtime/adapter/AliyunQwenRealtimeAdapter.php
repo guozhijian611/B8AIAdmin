@@ -207,8 +207,8 @@ class AliyunQwenRealtimeAdapter implements RealtimeProviderAdapterInterface
         return RealtimeProtocol::normalizeSession([
             'modalities' => $session['modalities'] ?? ['text', 'audio'],
             'instructions' => $session['instructions'] ?? '',
-            'input_audio_format' => $session['input_audio_format'] ?? 'pcm16',
-            'output_audio_format' => $session['output_audio_format'] ?? 'pcm16',
+            'input_audio_format' => $this->normalizeProviderAudioFormat((string) ($session['input_audio_format'] ?? 'pcm16')),
+            'output_audio_format' => $this->normalizeProviderAudioFormat((string) ($session['output_audio_format'] ?? 'pcm16')),
             'voice' => $session['voice'] ?? AliyunRealtimeConfig::DEFAULT_VOICE,
             'turn_detection' => $session['turn_detection'] ?? ['type' => 'server_vad'],
             'temperature' => $session['temperature'] ?? 0.9,
@@ -223,6 +223,16 @@ class AliyunQwenRealtimeAdapter implements RealtimeProviderAdapterInterface
             'temperature' => 0.9,
             'tools' => [],
         ]);
+    }
+
+    private function normalizeProviderAudioFormat(string $format): string
+    {
+        $format = strtolower(trim($format));
+        if (in_array($format, ['pcm', 'pcm16', 'pcm24'], true)) {
+            return 'pcm16';
+        }
+
+        return $format;
     }
 
     private function stripDataUrl(string $value): string

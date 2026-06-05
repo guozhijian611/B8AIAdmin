@@ -167,7 +167,7 @@ ws://127.0.0.1:8791/v1/realtime?model={model}&token={admin_token}&config_id={id}
 
 说明：
 
-- 音频统一使用 base64 PCM16。阿里云 adapter 会把协议层的 `pcm16` 翻译为 Qwen 上游需要的 `pcm`。
+- 音频统一使用 base64 PCM16。阿里云 adapter 会把协议层的 `pcm16` 翻译为 Qwen 上游需要的 `pcm`，并把上游 session 返回的 `pcm` / `pcm24` 归一成协议层 `pcm16`。
 - `tools` 当前只作为协议字段保留，第一版不触发工具调用事件。
 - `manual` 模式的 `turn_detection` 可传 `null` 或 `{ "type": "manual" }`。
 
