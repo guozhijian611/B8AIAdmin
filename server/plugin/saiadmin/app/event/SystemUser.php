@@ -86,13 +86,30 @@ class SystemUser
      */
     protected function filterParams($params): string
     {
-        $blackList = ['password', 'oldPassword', 'newPassword'];
+        $params = is_array($params) ? $params : [];
+        $params = $this->maskSensitiveParams($params);
+        return json_encode($params, JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
+     * 递归脱敏敏感参数
+     */
+    protected function maskSensitiveParams(array $params): array
+    {
+        $blackList = ['password', 'oldPassword', 'newPassword', 'ai_key', 'api_key', 'apikey', 'token', 'secret', 'authorization'];
         foreach ($params as $key => $value) {
-            if (in_array($key, $blackList)) {
+            $normalizedKey = strtolower((string) $key);
+            if (in_array($normalizedKey, array_map('strtolower', $blackList), true)) {
                 $params[$key] = '******';
+                continue;
+            }
+
+            if (is_array($value)) {
+                $params[$key] = $this->maskSensitiveParams($value);
             }
         }
-        return json_encode($params, JSON_UNESCAPED_UNICODE);
+
+        return $params;
     }
 
     /**

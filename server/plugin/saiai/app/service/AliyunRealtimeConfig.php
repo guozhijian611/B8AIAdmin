@@ -13,17 +13,19 @@ class AliyunRealtimeConfig
 
     public static function resolve(?int $configId = null): array
     {
-        $query = AiConfig::where('type', 'aliyun_realtime')->where('status', 1);
-        $config = $configId
-            ? (clone $query)->where('id', $configId)->findOrEmpty()
-            : (clone $query)->where('is_default', 1)->findOrEmpty();
+        if ($configId) {
+            $config = AiConfig::where('type', 'aliyun_realtime')->where('id', $configId)->findOrEmpty();
+        } else {
+            $query = AiConfig::where('type', 'aliyun_realtime')->where('status', 1);
+            $config = (clone $query)->where('is_default', 1)->findOrEmpty();
 
-        if ($config->isEmpty()) {
-            $config = $query->findOrEmpty();
+            if ($config->isEmpty()) {
+                $config = $query->findOrEmpty();
+            }
         }
 
         if ($config->isEmpty()) {
-            throw new ApiException('未找到已启用的阿里云实时模型配置');
+            throw new ApiException($configId ? '未找到指定的阿里云实时模型配置' : '未找到已启用的阿里云实时模型配置');
         }
 
         $data = $config->toArray();

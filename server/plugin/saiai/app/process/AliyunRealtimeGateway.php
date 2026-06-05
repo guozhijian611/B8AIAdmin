@@ -7,14 +7,24 @@ use support\Log;
 use Tinywan\Jwt\JwtToken;
 use Workerman\Connection\AsyncTcpConnection;
 use Workerman\Connection\TcpConnection;
+use Workerman\Protocols\Http\Request as WsRequest;
+use Workerman\Timer;
 
 class AliyunRealtimeGateway
 {
     private array $upstreams = [];
 
-    public function onWebSocketConnect(TcpConnection $connection, string $httpBuffer): void
+    public function onWebSocketConnect(TcpConnection $connection, string|WsRequest $request): void
     {
-        $query = $this->parseQuery($httpBuffer);
+        $connection->realtimeQuery = $this->parseQuery($request);
+        Timer::add(0.001, function () use ($connection): void {
+            $this->handleConnected($connection);
+        }, [], false);
+    }
+
+    private function handleConnected(TcpConnection $connection): void
+    {
+        $query = $connection->realtimeQuery ?? [];
         $token = trim((string) ($query['token'] ?? ''));
         $configId = isset($query['config_id']) ? (int) $query['config_id'] : null;
 
@@ -122,8 +132,13 @@ class AliyunRealtimeGateway
         return $apiUrl;
     }
 
-    private function parseQuery(string $httpBuffer): array
+    private function parseQuery(string|WsRequest $request): array
     {
+        if ($request instanceof WsRequest) {
+            return $request->get();
+        }
+
+        $httpBuffer = $request;
         $firstLine = strtok($httpBuffer, "\r\n") ?: '';
         if (!preg_match('#\s([^\s]+)\s#', $firstLine, $matches)) {
             return [];
