@@ -3,7 +3,7 @@ OpenAPIDoc Dir
 ## 目录说明
 
 - `admin/`：SaiAdmin 核心后台接口，覆盖 `/core` 与 `/tool`。
-- `saiai/`：SAI AI 插件接口。
+- `saiai/`：SAI AI 插件接口；功能说明见 `../Doc/saiai.md`。
 - `saicode/`：SaiCode 代码生成插件接口。
 - `saipackage/`：SaiPackage 插件管理接口。
 - `saipay/`：SaiPay 支付插件接口。

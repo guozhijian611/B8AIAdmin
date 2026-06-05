@@ -4,7 +4,8 @@
 
 ## 文件说明
 
-- `openapi.yaml`：OpenAPI 3.0 规范文件，共整理 24 个接口。
+- `openapi.yaml`：OpenAPI 3.0 规范文件，共整理 23 个接口。
+- `../../Doc/saiai.md`：SAI AI 插件功能、阿里云实时多模态配置、测试台和排障说明。
 
 ## 来源
 
