@@ -1,0 +1,4 @@
+interface:
+  display_name: "B8 Image to Code"
+  short_description: "750px UI image-to-code with PNG slicing"
+  default_prompt: "Use $b8-image-to-code to convert the selected UI image into 750px-locked code and export transparent PNG assets."
