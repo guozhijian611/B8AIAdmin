@@ -9,7 +9,7 @@ class AliyunRealtimeConfig
 {
     public const DEFAULT_MODEL = 'qwen3-omni-flash-realtime-2025-12-01';
     public const DEFAULT_URL = 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime';
-    public const DEFAULT_VOICE = 'Ethan';
+    public const DEFAULT_VOICE = 'Cherry';
 
     public static function resolve(?int $configId = null): array
     {
@@ -84,16 +84,29 @@ class AliyunRealtimeConfig
 
     public static function defaultSession(array $options = []): array
     {
+        $turnDetection = array_key_exists('turn_detection', $options)
+            ? $options['turn_detection']
+            : [
+                'type' => 'server_vad',
+                'threshold' => 0.5,
+                'silence_duration_ms' => 800,
+            ];
+
         return [
             'modalities' => $options['modalities'] ?? ['text', 'audio'],
             'voice' => (string) ($options['voice'] ?? self::DEFAULT_VOICE),
             'input_audio_format' => 'pcm',
             'output_audio_format' => 'pcm',
             'instructions' => (string) ($options['instructions'] ?? '你是 B8AIadmin 的实时语音助手，请用准确、简洁、友好的中文回答用户。'),
-            'turn_detection' => $options['turn_detection'] ?? null,
+            'turn_detection' => $turnDetection,
             'input_audio_transcription' => $options['input_audio_transcription'] ?? [
                 'model' => 'qwen3-asr-flash-realtime',
             ],
+            'smooth_output' => $options['smooth_output'] ?? true,
+            'temperature' => $options['temperature'] ?? 0.9,
+            'top_k' => $options['top_k'] ?? 50,
+            'repetition_penalty' => $options['repetition_penalty'] ?? 1.05,
+            'presence_penalty' => $options['presence_penalty'] ?? 0.0,
         ];
     }
 
