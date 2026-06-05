@@ -221,6 +221,25 @@ Event::emit('saipay.order.paid', [
 
 人工扫码支付只有管理员确认到账后才触发该事件。用户点击“我已付款”只表示进入待确认状态，不代表支付成功。
 
+### 管理员驳回付款确认
+
+`POST /app/saipay/admin/Order/rejectManualPaid`
+
+参数：
+
+| 参数 | 必填 | 说明 |
+| --- | --- | --- |
+| `order_no` | 是 | 订单号 |
+| `remark` | 是 | 驳回备注，例如未查到账、金额不一致、收款渠道不匹配 |
+
+管理员驳回后：
+
+1. 订单 `pay_status` 回到 `2` 未支付。
+2. 清空 `pay_channel`，避免继续展示上一次用户声称付款的渠道。
+3. `trade_no` 写入 `manual_rejected_<order_no>`。
+4. 驳回原因写入订单 `remark`，格式为 `扫码支付驳回：<remark>`。
+5. 不触发 `saipay.order.paid` 事件，用户可以重新发起或重新提交扫码支付确认。
+
 ## 验证命令
 
 后端语法：

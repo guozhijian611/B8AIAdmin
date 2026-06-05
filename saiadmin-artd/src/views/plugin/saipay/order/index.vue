@@ -84,6 +84,14 @@
               tool-tip="确认到账"
               @click="handleConfirmManualPaid(row)"
             />
+            <SaButton
+              v-if="row.pay_status == 3"
+              v-permission="'saipay:order:rejectManualPaid'"
+              type="error"
+              icon="ri:close-circle-line"
+              tool-tip="驳回付款"
+              @click="handleRejectManualPaid(row)"
+            />
             <SaButton type="success" @click="showViewDialog('view', row)" />
             <SaButton
               v-permission="'saipay:order:destroy'"
@@ -168,6 +176,30 @@
     refreshData()
   }
 
+  // 管理员驳回扫码支付付款确认
+  const handleRejectManualPaid = async (row: any) => {
+    const { value } = await ElMessageBox.prompt(
+      '请输入驳回备注，方便后续核对这笔扫码支付订单。',
+      '驳回付款',
+      {
+        confirmButtonText: '确认驳回',
+        cancelButtonText: '取消',
+        inputType: 'textarea',
+        inputPlaceholder: '例如：未查到账、金额不一致、收款渠道不匹配',
+        inputValidator: (value) => {
+          return !!value?.trim() || '请输入驳回备注'
+        },
+        type: 'warning'
+      }
+    )
+    await api.rejectManualPaid({
+      order_no: row.order_no,
+      remark: value.trim()
+    })
+    ElMessage.success('已驳回付款确认')
+    refreshData()
+  }
+
   const visible = ref(false)
   const currentOrder = ref({})
 
@@ -223,7 +255,7 @@
           width: 100,
           useSlot: true
         },
-        { prop: 'operation', label: '操作', width: 180, fixed: 'right', useSlot: true }
+        { prop: 'operation', label: '操作', width: 220, fixed: 'right', useSlot: true }
       ]
     }
   })

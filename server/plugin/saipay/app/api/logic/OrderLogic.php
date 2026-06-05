@@ -114,6 +114,49 @@ class OrderLogic extends BaseLogic
         ]);
     }
 
+    /**
+     * 管理员驳回人工扫码付款确认
+     */
+    public function rejectManualPaidByAdmin(string $orderNo, string $remark): void
+    {
+        $remark = trim($remark);
+        if ($remark === '') {
+            throw new ApiException('请输入驳回备注');
+        }
+
+        $order = $this->model
+            ->where('order_no', $orderNo)
+            ->where('pay_method', PayService::CHANNEL_MANUAL_SCAN)
+            ->where('pay_status', 3)
+            ->findOrEmpty();
+
+        if ($order->isEmpty()) {
+            throw new ApiException('订单不存在或当前状态不支持驳回');
+        }
+
+        $order->pay_status = 2;
+        $order->pay_price = 0;
+        $order->pay_channel = null;
+        $order->trade_no = 'manual_rejected_' . $order->order_no;
+        $order->pay_time = null;
+        $order->remark = $this->buildRejectRemark((string)$order->remark, $remark);
+        $order->save();
+    }
+
+    private function buildRejectRemark(string $originalRemark, string $rejectRemark): string
+    {
+        $remark = '扫码支付驳回：' . $rejectRemark;
+        if ($originalRemark !== '' && !str_contains($originalRemark, '扫码支付驳回：')) {
+            $remark = $originalRemark . '；' . $remark;
+        }
+
+        if (function_exists('mb_substr')) {
+            return mb_substr($remark, 0, 255);
+        }
+
+        return substr($remark, 0, 255);
+    }
+
     private function markPaid(Order $order, $money, string $tradeNo = '', array $context = []): void
     {
         $order->pay_status = 1;

@@ -12,6 +12,7 @@ Route::group('/app/saipay/api/demo', function () {
 });
 
 Route::post('/app/saipay/admin/Order/confirmManualPaid', [OrderController::class, 'confirmManualPaid']);
+Route::post('/app/saipay/admin/Order/rejectManualPaid', [OrderController::class, 'rejectManualPaid']);
 
 Route::group('/app/saipay/api/notify', function () {
     Route::post('/alipay', [NotifyController::class, 'alipay']);

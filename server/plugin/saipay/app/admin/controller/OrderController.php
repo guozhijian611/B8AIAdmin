@@ -97,6 +97,28 @@ class OrderController extends BaseController
     }
 
     /**
+     * 管理员驳回扫码支付付款确认
+     * @param Request $request
+     * @return Response
+     */
+    #[Permission('驳回扫码支付确认', 'saipay:order:rejectManualPaid')]
+    public function rejectManualPaid(Request $request): Response
+    {
+        $order_no = $request->post('order_no', '');
+        if (empty($order_no)) {
+            return $this->fail('请输入订单号');
+        }
+
+        $remark = trim((string)$request->post('remark', ''));
+        if ($remark === '') {
+            return $this->fail('请输入驳回备注');
+        }
+
+        $this->logic->rejectManualPaid($order_no, $remark);
+        return $this->success('驳回成功');
+    }
+
+    /**
      * 删除数据
      * @param Request $request
      * @return Response

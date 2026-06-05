@@ -50,4 +50,13 @@ class OrderLogic extends BaseLogic
         $logic->confirmManualPaidByAdmin($orderNo);
     }
 
+    /**
+     * 管理员驳回扫码支付付款确认
+     */
+    public function rejectManualPaid(string $orderNo, string $remark): void
+    {
+        $logic = new ApiOrderLogic();
+        $logic->rejectManualPaidByAdmin($orderNo, $remark);
+    }
+
 }

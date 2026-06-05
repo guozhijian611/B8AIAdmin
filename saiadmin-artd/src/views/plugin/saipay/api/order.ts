@@ -52,6 +52,18 @@ export default {
   },
 
   /**
+   * 管理员驳回扫码支付付款确认
+   * @param params 数据参数
+   * @returns 执行结果
+   */
+  rejectManualPaid(params: Record<string, any>) {
+    return request.post<any>({
+      url: '/app/saipay/admin/Order/rejectManualPaid',
+      data: params
+    })
+  },
+
+  /**
    * 删除数据
    * @param params 数据参数
    * @returns 执行结果
