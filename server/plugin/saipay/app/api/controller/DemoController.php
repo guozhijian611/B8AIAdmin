@@ -1,6 +1,7 @@
 <?php
 namespace plugin\saipay\app\api\controller;
 
+use hg\apidoc\annotation as Apidoc;
 use support\Request;
 use support\Response;
 use plugin\saipay\service\PayService;
@@ -10,13 +11,32 @@ use plugin\saiadmin\basic\OpenController;
 /**
  * 支付使用案例控制器
  */
+#[Apidoc\Group('支付插件')]
+#[Apidoc\Title('支付使用案例')]
 class DemoController extends OpenController
 {
+    /**
+     * 可用支付方式
+     */
+    #[Apidoc\Title('可用支付方式')]
+    #[Apidoc\Url('/app/saipay/api/demo/paymentMethods')]
+    #[Apidoc\Method('GET')]
+    #[Apidoc\Returned('label', type: 'string', desc: '支付方式名称')]
+    #[Apidoc\Returned('value', type: 'string', desc: '支付方式标识')]
+    #[Apidoc\Returned('description', type: 'string', desc: '支付方式说明')]
+    #[Apidoc\Returned('enabled', type: 'boolean', desc: '是否启用')]
+    public function paymentMethods(): Response
+    {
+        return $this->success(PayService::paymentMethods());
+    }
+
     /**
      * 支付宝扫码支付示例
      */
     public function alipayScan(): Response
     {
+        PayService::assertPaymentMethodEnabled(PayService::CHANNEL_ALIPAY);
+
         // 订单信息
         $orderData = [
             'order_no' => 'ALI_SCAN_' . uuid(), // 订单号
@@ -61,6 +81,8 @@ class DemoController extends OpenController
      */
     public function wechatScan(): Response
     {
+        PayService::assertPaymentMethodEnabled(PayService::CHANNEL_WECHAT);
+
         // 订单信息
         $orderData = [
             'order_no' => 'WE_SCAN_' . uuid(), // 订单号
@@ -117,6 +139,8 @@ class DemoController extends OpenController
         // 之前已经生成过订单, 且未过期, 直接返回支付链接
         $pay_method = $data['pay_method'] ?? $order->pay_method;
         $pay_type = $data['pay_type'] ?? $order->pay_type;
+        PayService::assertPaymentMethodEnabled($pay_method);
+
         if ($pay_method === $order->pay_method) {
             if (!empty($order->pay_url)) {
                 if (time() <= strtotime($order->pay_url_expire)) {

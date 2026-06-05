@@ -26,57 +26,35 @@
           </div>
           <div class="text-gray-400 text-sm mb-8">请选择支付方式进行支付</div>
 
-          <div class="flex justify-center gap-8 w-full max-w-2xl">
-            <!-- 支付宝卡片 -->
+          <div v-if="paymentMethods.length > 0" class="flex justify-center gap-8 w-full max-w-2xl">
             <div
+              v-for="method in paymentMethods"
+              :key="method.value"
               class="flex-1 border rounded-xl p-6 cursor-pointer transition-all hover:shadow-lg hover:-translate-y-1 group relative overflow-hidden"
-              :class="
-                loading ? 'opacity-50 pointer-events-none' : 'border-gray-200 hover:border-blue-500'
-              "
-              @click="handlePay('alipay')"
+              :class="getMethodCardClass(method)"
+              @click="handlePay(method.value)"
             >
               <div class="flex flex-col items-center gap-4">
                 <div
-                  class="w-16 h-16 rounded-full bg-blue-50 flex items-center justify-center group-hover:bg-blue-100 transition-colors"
+                  class="w-16 h-16 rounded-full flex items-center justify-center transition-colors"
+                  :class="getMethodIconWrapperClass(method)"
                 >
-                  <span class="text-3xl text-blue-500 iconfont icon-alipay">支</span>
+                  <span class="text-3xl iconfont" :class="[method.icon, getMethodIconClass(method)]">
+                    {{ method.label.slice(0, 1) }}
+                  </span>
                 </div>
                 <div class="text-center">
-                  <div class="font-bold text-lg text-gray-800 mb-1">支付宝支付</div>
-                  <div class="text-xs text-gray-400">支持手机支付宝扫码支付</div>
+                  <div class="font-bold text-lg text-gray-800 mb-1">{{ method.label }}</div>
+                  <div class="text-xs text-gray-400">{{ method.description }}</div>
                 </div>
               </div>
               <div
-                class="absolute inset-0 border-2 border-blue-500 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
-              ></div>
-            </div>
-
-            <!-- 微信卡片 -->
-            <div
-              class="flex-1 border rounded-xl p-6 cursor-pointer transition-all hover:shadow-lg hover:-translate-y-1 group relative overflow-hidden"
-              :class="
-                loading
-                  ? 'opacity-50 pointer-events-none'
-                  : 'border-gray-200 hover:border-green-500'
-              "
-              @click="handlePay('wechat')"
-            >
-              <div class="flex flex-col items-center gap-4">
-                <div
-                  class="w-16 h-16 rounded-full bg-green-50 flex items-center justify-center group-hover:bg-green-100 transition-colors"
-                >
-                  <span class="text-3xl text-green-500 iconfont icon-wechat">微</span>
-                </div>
-                <div class="text-center">
-                  <div class="font-bold text-lg text-gray-800 mb-1">微信支付</div>
-                  <div class="text-xs text-gray-400">支持手机微信扫码支付</div>
-                </div>
-              </div>
-              <div
-                class="absolute inset-0 border-2 border-green-500 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+                class="absolute inset-0 border-2 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+                :class="getMethodActiveBorderClass(method)"
               ></div>
             </div>
           </div>
+          <ElEmpty v-else description="暂无可用支付方式" />
         </div>
       </div>
 
@@ -128,6 +106,15 @@
   import { ElMessage } from 'element-plus'
   import demoApi from '../../api/demo'
 
+  interface PaymentMethod {
+    label: string
+    value: string
+    description: string
+    icon: string
+    theme: 'blue' | 'green'
+    enabled: boolean
+  }
+
   interface Props {
     modelValue: boolean
     data?: Record<string, any>
@@ -158,11 +145,23 @@
 
   // 支付订单信息
   const payOrder = ref<Record<string, any>>({})
+  const paymentMethods = ref<PaymentMethod[]>([])
+
+  const loadPaymentMethods = async () => {
+    paymentMethods.value = await demoApi.paymentMethods()
+  }
 
   // 初始化
   const initForm = async () => {
     loading.value = true
     try {
+      await loadPaymentMethods()
+      if (paymentMethods.value.length === 0) {
+        step.value = 1
+        payOrder.value = {}
+        return
+      }
+
       const res = await demoApi.payOrder({
         order_no: orderData.value.order_no
       })
@@ -179,6 +178,10 @@
       }
       step.value = 1
       payOrder.value = {}
+    } catch (e) {
+      step.value = 1
+      payOrder.value = {}
+      console.error(e)
     } finally {
       loading.value = false
     }
@@ -220,5 +223,28 @@
   // 关闭弹窗
   const handleClose = () => {
     // cleanup
+  }
+
+  const getMethodCardClass = (method: PaymentMethod) => {
+    if (loading.value) {
+      return 'opacity-50 pointer-events-none'
+    }
+    return method.theme === 'green'
+      ? 'border-gray-200 hover:border-green-500'
+      : 'border-gray-200 hover:border-blue-500'
+  }
+
+  const getMethodIconWrapperClass = (method: PaymentMethod) => {
+    return method.theme === 'green'
+      ? 'bg-green-50 group-hover:bg-green-100'
+      : 'bg-blue-50 group-hover:bg-blue-100'
+  }
+
+  const getMethodIconClass = (method: PaymentMethod) => {
+    return method.theme === 'green' ? 'text-green-500' : 'text-blue-500'
+  }
+
+  const getMethodActiveBorderClass = (method: PaymentMethod) => {
+    return method.theme === 'green' ? 'border-green-500' : 'border-blue-500'
   }
 </script>

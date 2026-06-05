@@ -10,6 +10,8 @@ use plugin\saiadmin\app\logic\system\SystemConfigLogic;
  */
 class PayService
 {
+    private const CONFIG_GROUP = 'saipay_config';
+
     /**
      * 支付渠道
      */
@@ -42,6 +44,7 @@ class PayService
      */
     public static function pay(string $channel, string $type, array $params, array $config = [])
     {
+        self::assertPaymentMethodEnabled($channel);
         self::validateParams($params);
 
         switch ($channel) {
@@ -52,6 +55,74 @@ class PayService
             default:
                 throw new ApiException('不支持的支付渠道: ' . $channel);
         }
+    }
+
+    /**
+     * 获取支付方式列表
+     */
+    public static function paymentMethods(bool $onlyEnabled = true): array
+    {
+        $methods = [
+            [
+                'label' => '支付宝支付',
+                'value' => self::CHANNEL_ALIPAY,
+                'description' => '支持手机支付宝扫码支付',
+                'icon' => 'icon-alipay',
+                'theme' => 'blue',
+                'enabled' => self::isPaymentMethodEnabled(self::CHANNEL_ALIPAY),
+            ],
+            [
+                'label' => '微信支付',
+                'value' => self::CHANNEL_WECHAT,
+                'description' => '支持手机微信扫码支付',
+                'icon' => 'icon-wechat',
+                'theme' => 'green',
+                'enabled' => self::isPaymentMethodEnabled(self::CHANNEL_WECHAT),
+            ],
+        ];
+
+        if (!$onlyEnabled) {
+            return $methods;
+        }
+
+        return array_values(array_filter($methods, static fn (array $method): bool => $method['enabled']));
+    }
+
+    /**
+     * 校验支付方式是否启用
+     */
+    public static function assertPaymentMethodEnabled(string $channel): void
+    {
+        if (!self::isPaymentMethodEnabled($channel)) {
+            $method = self::getPaymentMethod($channel);
+            $label = $method['label'] ?? $channel;
+            throw new ApiException($label . '已关闭');
+        }
+    }
+
+    protected static function getPaymentMethod(string $channel): ?array
+    {
+        foreach (self::paymentMethods(false) as $method) {
+            if ($method['value'] === $channel) {
+                return $method;
+            }
+        }
+
+        return null;
+    }
+
+    protected static function isPaymentMethodEnabled(string $channel): bool
+    {
+        $method = $channel . '_enabled';
+        $logic = new SystemConfigLogic();
+        $config = $logic->getGroup(self::CONFIG_GROUP);
+        $value = Arr::getConfigValue($config, $method);
+
+        if ($value === null || $value === '') {
+            return true;
+        }
+
+        return !in_array(strtolower((string)$value), ['0', '2', 'false', 'off'], true);
     }
 
     /**

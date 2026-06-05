@@ -8,6 +8,7 @@
 - **多渠道支持**：目前支持支付宝和微信支付。
 - **多场景支持**：支持扫码支付（Scan）、网页支付（Web）、H5支付、App支付、小程序支付（Mini/MP）等。
 - **配置灵活**：支持从数据库读取配置（SystemConfigLogic），也支持动态传递配置参数（适合多商户模式）。
+- **渠道开关**：支持在系统设置的 `支付插件配置` 分组中独立启用或关闭支付宝、微信支付。
 - **跨模块调用**：其他应用插件（如 `doc`、`shop` 等）可以直接调用本插件的服务，无需重复集成支付 SDK。
 
 ## 目录结构
@@ -28,7 +29,13 @@ server/plugin/saipay/
 ## 安装与配置
 
 ### 1. 配置参数
-插件默认会尝试读取系统配置（`saipay` 分组下的配置）。您也可以在调用时动态传递配置。
+插件默认会尝试读取系统配置：
+
+- `支付插件配置`（`saipay_config`）：控制支付方式启停，`alipay_enabled` 和 `wechat_enabled` 默认开启。
+- `支付宝支付`（`alipay_config`）：支付宝应用、证书和回调配置。
+- `微信支付`（`wxpay_config`）：微信商户、证书和回调配置。
+
+您也可以在调用时动态传递配置。
 
 ### 2. 路由配置
 确保 `config/route.php` 中已注册相关路由（如果需要对外提供 API）。
@@ -63,6 +70,13 @@ public static function pay(string $channel, string $type, array $params, array $
     - `openid`: 用户OpenID (微信小程序/公众号支付必填)
 - **$config**: 额外配置 (可选)
     - 用于覆盖默认配置，例如多商户场景下传入特定商户的 `app_id`、`private_key` 等。
+
+### 获取可用支付方式
+```php
+PayService::paymentMethods();
+```
+
+返回当前启用的支付方式列表。`PayService::pay()` 会在发起支付前检查渠道开关，渠道关闭时抛出 `ApiException`。
 
 ## 使用案例
 

@@ -121,6 +121,9 @@
                   <template v-if="item.input_type === 'radio'">
                     <el-radio-group v-model="item.value" :options="item.config_select_data" />
                   </template>
+                  <template v-if="item.input_type === 'switch'">
+                    <sa-switch v-model="item.value" active-value="1" inactive-value="2" />
+                  </template>
                   <template v-if="item.input_type === 'textarea'">
                     <el-input
                       type="textarea"

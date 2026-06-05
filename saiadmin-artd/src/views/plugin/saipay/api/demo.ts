@@ -2,6 +2,15 @@ import request from '@/utils/http'
 
 export default {
   /**
+   * 可用支付方式
+   */
+  paymentMethods() {
+    return request.get<any>({
+      url: '/app/saipay/api/demo/paymentMethods'
+    })
+  },
+
+  /**
    * 支付宝扫码支付示例
    */
   alipayScan() {

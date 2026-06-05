@@ -1,7 +1,12 @@
 <?php
 
+use plugin\saipay\app\api\controller\DemoController;
 use plugin\saipay\app\api\controller\NotifyController;
 use Webman\Route;
+
+Route::group('/app/saipay/api/demo', function () {
+    Route::get('/paymentMethods', [DemoController::class, 'paymentMethods']);
+});
 
 Route::group('/app/saipay/api/notify', function () {
     Route::post('/alipay', [NotifyController::class, 'alipay']);
