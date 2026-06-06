@@ -461,7 +461,7 @@
     if (videoStreaming.value) return '正在发送视频 JPEG 抽帧，等待音频输入'
     if (upstreamReady.value) return 'SAI Realtime 会话已就绪'
     if (connected.value) return '已连接本地代理，等待上游就绪'
-    return '请选择 aliyun_realtime 配置后连接'
+    return '请选择 realtime 配置后连接'
   })
 
   const statusCards = computed(() => [
@@ -507,7 +507,7 @@
   async function loadPage() {
     const [testConfig, configPage] = await Promise.all([
       configApi.realtimeTestConfig(),
-      configApi.list({ page: 1, limit: 100, type: 'aliyun_realtime' })
+      configApi.list({ page: 1, limit: 100, type: 'realtime' })
     ])
 
     wsUrl.value = testConfig.ws_url || ''
@@ -519,7 +519,9 @@
       : Array.isArray(configPage)
         ? configPage
         : []
-    realtimeConfigs.value = list.filter((item: RealtimeConfig) => item.type === 'aliyun_realtime')
+    realtimeConfigs.value = list.filter((item: RealtimeConfig) =>
+      ['realtime', 'aliyun_realtime'].includes(item.type)
+    )
     selectedConfigId.value = realtimeConfigs.value[0]?.id
   }
 

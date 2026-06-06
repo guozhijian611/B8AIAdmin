@@ -22,7 +22,7 @@
 | 字段 | 说明 |
 | --- | --- |
 | `name` | 配置名称。 |
-| `type` | 平台类型。实时模型固定为 `aliyun_realtime`。 |
+| `type` | 平台类型。实时模型固定为 `realtime`，旧数据 `aliyun_realtime` 仅作为兼容别名读取。 |
 | `ai_url` | 上游地址。实时模型使用 `wss://dashscope.aliyuncs.com/api-ws/v1/realtime`。 |
 | `ai_key` | 阿里云 DashScope API Key。也可留空并使用环境变量 `DASHSCOPE_API_KEY`。 |
 | `model` | 模型名，当前默认 `qwen3-omni-flash-realtime-2025-12-01`。 |
@@ -32,7 +32,7 @@
 实时模型初始化由迁移 `Database/migrations/20260606000600_add_saiai_aliyun_realtime.php` 完成：
 
 - 为 `saiai_config` 增加 `options` 字段。
-- 插入 `aliyun_realtime` 示例配置。
+- 插入实时示例配置，并通过后续迁移归一为 `realtime`。
 - 增加后台菜单“实时测试”和权限 `saiai:realtime:test`。
 
 ## 配置项
@@ -58,7 +58,15 @@ SAIAI_REALTIME_WS_COUNT=1
 `server/plugin/saiai/config/ai.php` 控制后台可选平台类型。实时模型类型为：
 
 ```php
-'aliyun_realtime'
+'realtime'
+```
+
+厂商适配器写入 `options.provider`，当前阿里云 Qwen 使用：
+
+```json
+{
+  "provider": "aliyun_qwen"
+}
 ```
 
 ### 实时模型默认值
@@ -322,7 +330,7 @@ interface RealtimeProviderAdapterInterface
 
 1. 后台测试台连接本地代理：`ws://<host>:8791/v1/realtime?model=<model>&token=<admin_token>&config_id=<id>`。
 2. 代理校验 SaiAdmin JWT，确认 `plat=saiadmin`。
-3. 代理读取 `saiai_config` 中的 `aliyun_realtime` 配置。
+3. 代理读取 `saiai_config` 中的 `realtime` 配置；旧 `aliyun_realtime` 仍可兼容读取。
 4. 代理选择 provider adapter，当前默认 `aliyun_qwen`。
 5. Adapter 连接阿里云实时端点，并用 `Authorization: Bearer <api_key>` 放在服务端请求头中。
 6. 前端只与本地代理通信，不直接暴露阿里云 API Key。

@@ -198,7 +198,7 @@ class RealtimeGateway
         if ($model !== '') {
             $config = AliyunRealtimeConfig::withModel($config, $model);
         }
-        $adapter = RealtimeAdapterFactory::make($provider ?: ($config['provider'] ?? 'aliyun_realtime'));
+        $adapter = RealtimeAdapterFactory::make($provider ?: ($config['provider'] ?? AliyunRealtimeConfig::DEFAULT_PROVIDER));
         $config['provider'] = $adapter->name();
 
         return [$config, $adapter];

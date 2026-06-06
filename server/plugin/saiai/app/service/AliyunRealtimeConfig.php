@@ -10,13 +10,18 @@ class AliyunRealtimeConfig
     public const DEFAULT_MODEL = 'qwen3-omni-flash-realtime-2025-12-01';
     public const DEFAULT_URL = 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime';
     public const DEFAULT_VOICE = 'Cherry';
+    public const PLATFORM_TYPE = 'realtime';
+    public const LEGACY_PLATFORM_TYPE = 'aliyun_realtime';
+    public const DEFAULT_PROVIDER = 'aliyun_qwen';
 
     public static function resolve(?int $configId = null): array
     {
         if ($configId) {
-            $config = AiConfig::where('type', 'aliyun_realtime')->where('id', $configId)->findOrEmpty();
+            $config = AiConfig::whereIn('type', [self::PLATFORM_TYPE, self::LEGACY_PLATFORM_TYPE])
+                ->where('id', $configId)
+                ->findOrEmpty();
         } else {
-            $query = AiConfig::where('type', 'aliyun_realtime')->where('status', 1);
+            $query = AiConfig::whereIn('type', [self::PLATFORM_TYPE, self::LEGACY_PLATFORM_TYPE])->where('status', 1);
             $config = (clone $query)->where('is_default', 1)->findOrEmpty();
 
             if ($config->isEmpty()) {
@@ -41,12 +46,13 @@ class AliyunRealtimeConfig
         $model = trim((string) ($data['model'] ?? '')) ?: self::DEFAULT_MODEL;
         $apiUrl = self::normalizeRealtimeUrl((string) ($data['ai_url'] ?? ''), $model);
         $options = self::decodeOptions((string) ($data['options'] ?? ''));
+        $provider = (string) ($options['provider'] ?? self::DEFAULT_PROVIDER);
 
         return [
             'id' => (int) $data['id'],
             'name' => (string) ($data['name'] ?? ''),
-            'type' => 'aliyun_realtime',
-            'provider' => 'aliyun_qwen',
+            'type' => self::PLATFORM_TYPE,
+            'provider' => $provider,
             'rawAiUrl' => (string) ($data['ai_url'] ?? ''),
             'apiUrl' => $apiUrl,
             'apiKey' => $apiKey,

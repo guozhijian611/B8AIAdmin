@@ -5,5 +5,5 @@ return [
     'gemini',
     'deepseek',
     'generic',
-    'aliyun_realtime'
+    'realtime'
 ];
