@@ -39,14 +39,14 @@ class SiteViewController
 
     private function content(Request $request, string $type): Response
     {
-        $slug = (string) $request->route->param('slug', '');
+        $slug = preg_replace('/\.html$/i', '', (string) $request->route->param('slug', '')) ?: '';
         $lang = (string) $request->route->param('lang', $request->input('lang', ''));
         $content = $this->site->contentDetail($type, $slug, $lang);
         if (!$content) {
             return response('Page not found', 404);
         }
 
-        if ($response = $this->redirectLegacyLangUrl($request, $this->site->canonicalPath((string) $content['lang_code'], $content, $type))) {
+        if ($response = $this->redirectCanonicalUrl($request, $this->site->canonicalPath((string) $content['lang_code'], $content, $type))) {
             return $response;
         }
 
@@ -87,6 +87,25 @@ class SiteViewController
         $target = $canonicalPath;
         if ($query !== []) {
             $target .= '?' . http_build_query($query);
+        }
+
+        return redirect($target)->withStatus(301);
+    }
+
+    private function redirectCanonicalUrl(Request $request, string $canonicalPath): ?Response
+    {
+        $query = [];
+        parse_str((string) $request->queryString(), $query);
+        unset($query['lang']);
+
+        $currentPath = '/' . ltrim($request->path(), '/');
+        $target = $canonicalPath;
+        if ($query !== []) {
+            $target .= '?' . http_build_query($query);
+        }
+
+        if ($currentPath === $canonicalPath && (string) $request->input('lang', '') === '') {
+            return null;
         }
 
         return redirect($target)->withStatus(301);

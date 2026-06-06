@@ -440,7 +440,7 @@ class SiteService
     private function contentPath(string $type, string $slug, string $lang, string $defaultLang): string
     {
         $type = in_array($type, ['article', 'product', 'page'], true) ? $type : 'page';
-        return $this->withSiteBase($lang === $defaultLang ? "/{$type}/{$slug}" : "/{$lang}/{$type}/{$slug}");
+        return $this->withSiteBase($lang === $defaultLang ? "/{$type}/{$slug}.html" : "/{$lang}/{$type}/{$slug}.html");
     }
 
     private function homePath(string $lang, string $defaultLang): string
@@ -486,11 +486,11 @@ class SiteService
             return $this->homePath($matches[1], $defaultLang);
         }
 
-        if (preg_match('~^/([A-Za-z]{2}-[A-Za-z]{2})/(article|product|page)/([^/?#]+)$~', $path, $matches)) {
+        if (preg_match('~^/([A-Za-z]{2}-[A-Za-z]{2})/(article|product|page)/([^/?#]+?)(?:\.html)?$~', $path, $matches)) {
             return $this->contentPath($matches[2], $matches[3], $matches[1], $defaultLang);
         }
 
-        if (preg_match('~^/(article|product|page)/([^/?#]+)$~', $path, $matches)) {
+        if (preg_match('~^/(article|product|page)/([^/?#]+?)(?:\.html)?$~', $path, $matches)) {
             return $this->contentPath($matches[1], $matches[2], $targetLang, $defaultLang);
         }
 

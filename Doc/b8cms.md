@@ -172,18 +172,20 @@ B8AIadmin 是父框架，B8CMS 前台默认挂载在 `/cms`，避免插件抢占
 | --- | --- |
 | `/cms` | 默认语言首页 |
 | `/cms/{lang}` | 指定语言首页 |
-| `/cms/article/{slug}` | 默认语言文章详情 |
-| `/cms/product/{slug}` | 默认语言产品详情 |
-| `/cms/page/{slug}` | 默认语言页面详情 |
-| `/cms/{lang}/article/{slug}` | 指定语言文章详情 |
-| `/cms/{lang}/product/{slug}` | 指定语言产品详情 |
-| `/cms/{lang}/page/{slug}` | 指定语言页面详情 |
+| `/cms/article/{slug}.html` | 默认语言文章详情 |
+| `/cms/product/{slug}.html` | 默认语言产品详情 |
+| `/cms/page/{slug}.html` | 默认语言页面详情 |
+| `/cms/{lang}/article/{slug}.html` | 指定语言文章详情 |
+| `/cms/{lang}/product/{slug}.html` | 指定语言产品详情 |
+| `/cms/{lang}/page/{slug}.html` | 指定语言页面详情 |
 
 例如英文首页：
 
 ```text
 /cms/en-US
 ```
+
+内容详情页的规范地址统一使用 `.html` 后缀；旧版无后缀详情地址会 301 跳转到对应 `.html` 地址，避免搜索引擎收录重复页面。
 
 ## ThinkTemplate 模板开发
 
@@ -292,7 +294,7 @@ SEO 的优先级为：
 | `rel="alternate" hreflang="语言编码"` | 同一内容在其他语言下的地址 |
 | `rel="alternate" hreflang="x-default"` | 默认语言地址 |
 
-详情页的多语言切换会优先指向同一个 `content_type + slug` 在其他语言下的详情页。例如中文产品 `/cms/product/b8cms-growth-suite` 会对应英文 `/cms/en-US/product/b8cms-growth-suite`。如果某个语言没有相同 slug 的已发布内容，则不会输出该语言的 alternate 链接，避免搜索引擎看到不存在的语言版本。
+详情页的多语言切换会优先指向同一个 `content_type + slug` 在其他语言下的详情页。例如中文产品 `/cms/product/b8cms-growth-suite.html` 会对应英文 `/cms/en-US/product/b8cms-growth-suite.html`。如果某个语言没有相同 slug 的已发布内容，则不会输出该语言的 alternate 链接，避免搜索引擎看到不存在的语言版本。
 
 ## 多语言内容规则
 
@@ -306,7 +308,7 @@ SEO 的优先级为：
 
 语言切换时，如果传入的语言不存在或已停用，系统会回退到默认语言。默认语言由 `b8cms_language.is_default = 1` 决定。
 
-首页和详情页都使用路径形式切换语言，默认语言不带语言前缀，非默认语言带 `/{lang}` 前缀，例如 `/cms/en-US`、`/cms/en-US/page/contact`。
+首页和详情页都使用路径形式切换语言，默认语言不带语言前缀，非默认语言带 `/{lang}` 前缀，例如 `/cms/en-US`、`/cms/en-US/page/contact.html`。
 
 ## 产品字段
 
@@ -383,7 +385,7 @@ SEO 的优先级为：
 cd server
 find plugin/b8cms -type f -name '*.php' -print | xargs -n1 php -l
 php -l ../Database/migrations/20260606151515_add_b_8cms_plugin.php
-php webman route:list | rg 'b8cms|/cms|/article|/product|/page'
+php webman route:list | rg 'b8cms|/cms|\.html|/article|/product|/page'
 php webman b8:migrate:status
 php webman b8:migrate --dry-run
 ```
@@ -401,5 +403,6 @@ pnpm build
 curl 'http://127.0.0.1:8787/app/b8cms/api/site/bootstrap?lang=zh-CN'
 curl -I 'http://127.0.0.1:8787/'
 curl 'http://127.0.0.1:8787/cms'
-curl 'http://127.0.0.1:8787/cms/product/b8cms-starter'
+curl 'http://127.0.0.1:8787/cms/product/b8cms-starter.html'
+curl -I 'http://127.0.0.1:8787/cms/product/b8cms-starter'
 ```
