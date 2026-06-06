@@ -81,8 +81,8 @@ class SiteService
     {
         $context = $this->bootstrap($lang);
         $context['content'] = $content;
-        $context['seo'] = $this->seo($context['settings'], $content);
         $context['seo_links'] = $this->seoLinks($context['languages'], $context['lang'], $content, $request, $type);
+        $context['seo'] = $this->seo($context['settings'], $content, $context['seo_links'], $request, $type);
         $defaultLang = $this->defaultLang($context['languages']);
         $context['all_products'] = $type === 'page' ? $this->contents('product', $context['lang'], 50, false, $defaultLang) : [];
         $context['all_articles'] = $type === 'page' ? $this->contents('article', $context['lang'], 50, false, $defaultLang) : [];
@@ -124,6 +124,21 @@ class SiteService
         }
 
         return $xml . "</urlset>\n";
+    }
+
+    public function robotsTxt(Request $request): string
+    {
+        $sitemapUrl = $this->absoluteUrl($this->baseUrl($request), $this->withSiteBase('/sitemap.xml'));
+        return implode("\n", [
+            'User-agent: *',
+            'Allow: /',
+            'Disallow: /admin',
+            'Disallow: /app/',
+            'Disallow: /apidoc/',
+            'Disallow: /runtime/',
+            'Sitemap: ' . $sitemapUrl,
+            '',
+        ]);
     }
 
     public function submitContact(Request $request): int
@@ -391,12 +406,33 @@ class SiteService
         return $rows;
     }
 
-    private function seo(array $settings, ?array $content): array
+    private function seo(array $settings, ?array $content, array $seoLinks, ?Request $request, ?string $type): array
     {
+        $baseUrl = $this->baseUrl($request);
+        $extraSeo = $this->contentSeoExtra($content);
+        $title = $this->firstFilled($content['seo_title'] ?? null, $content['title'] ?? null, $settings['seo_title'] ?? null, $settings['site_name'] ?? null, 'B8CMS');
+        $description = $this->firstFilled($content['seo_description'] ?? null, $content['summary'] ?? null, $settings['seo_description'] ?? null);
+        $image = $this->absoluteAssetUrl($baseUrl, $this->firstFilled($extraSeo['og_image'] ?? null, $content['cover_image'] ?? null, $settings['og_image'] ?? null, $settings['logo'] ?? null));
+        $ogTitle = $this->firstFilled($extraSeo['og_title'] ?? null, $title);
+        $ogDescription = $this->firstFilled($extraSeo['og_description'] ?? null, $description);
+        $twitterCard = $this->firstFilled($extraSeo['twitter_card'] ?? null, $image === '' ? 'summary' : 'summary_large_image');
+        $schemaEnabled = ($extraSeo['schema_enabled'] ?? true) !== false;
+
         return [
-            'title' => $this->firstFilled($content['seo_title'] ?? null, $content['title'] ?? null, $settings['seo_title'] ?? null, $settings['site_name'] ?? null, 'B8CMS'),
+            'title' => $title,
             'keywords' => $this->firstFilled($content['seo_keywords'] ?? null, $settings['seo_keywords'] ?? null),
-            'description' => $this->firstFilled($content['seo_description'] ?? null, $content['summary'] ?? null, $settings['seo_description'] ?? null),
+            'description' => $description,
+            'robots' => $this->firstFilled($extraSeo['robots'] ?? null, $settings['seo_robots'] ?? null, 'index,follow'),
+            'og_title' => $ogTitle,
+            'og_description' => $ogDescription,
+            'og_image' => $image,
+            'og_url' => (string) ($seoLinks['canonical'] ?? ''),
+            'og_type' => $type === 'article' ? 'article' : ($type === 'product' ? 'product' : 'website'),
+            'twitter_card' => $twitterCard,
+            'twitter_title' => $ogTitle,
+            'twitter_description' => $ogDescription,
+            'twitter_image' => $image,
+            'json_ld' => $schemaEnabled ? $this->structuredDataJson($settings, $content, $seoLinks, $type, $image) : '',
         ];
     }
 
@@ -447,8 +483,14 @@ class SiteService
             }
         }
 
+        $seoExtra = $this->contentSeoExtra($content);
+        $canonical = $this->absoluteUrl($baseUrl, $canonicalPath);
+        if (!empty($seoExtra['canonical_url'])) {
+            $canonical = $this->absoluteUrl($baseUrl, (string) $seoExtra['canonical_url']);
+        }
+
         return [
-            'canonical' => $this->absoluteUrl($baseUrl, $canonicalPath),
+            'canonical' => $canonical,
             'x_default' => $xDefault,
             'home_url' => $this->absoluteUrl($baseUrl, $this->homePath($currentLang, $defaultLang)),
             'alternates' => $alternates,
@@ -640,6 +682,125 @@ class SiteService
         return $params;
     }
 
+    private function contentSeoExtra(?array $content): array
+    {
+        $extra = is_array($content['extra'] ?? null) ? $content['extra'] : [];
+        $seo = is_array($extra['seo'] ?? null) ? $extra['seo'] : [];
+        return [
+            'robots' => trim((string) ($seo['robots'] ?? '')),
+            'canonical_url' => trim((string) ($seo['canonical_url'] ?? '')),
+            'og_title' => trim((string) ($seo['og_title'] ?? '')),
+            'og_description' => trim((string) ($seo['og_description'] ?? '')),
+            'og_image' => trim((string) ($seo['og_image'] ?? '')),
+            'twitter_card' => trim((string) ($seo['twitter_card'] ?? '')),
+            'schema_enabled' => !array_key_exists('schema_enabled', $seo) || $seo['schema_enabled'] !== false,
+        ];
+    }
+
+    private function structuredDataJson(array $settings, ?array $content, array $seoLinks, ?string $type, string $image): string
+    {
+        $siteName = $this->firstFilled($settings['site_name'] ?? null, 'B8CMS');
+        $siteUrl = (string) ($seoLinks['home_url'] ?? '');
+        $pageUrl = (string) ($seoLinks['canonical'] ?? $siteUrl);
+        $title = $this->firstFilled($content['seo_title'] ?? null, $content['title'] ?? null, $settings['seo_title'] ?? null, $siteName);
+        $description = $this->firstFilled($content['seo_description'] ?? null, $content['summary'] ?? null, $settings['seo_description'] ?? null);
+
+        if (!$content) {
+            $graph = [
+                [
+                    '@type' => 'WebSite',
+                    '@id' => $siteUrl . '#website',
+                    'url' => $siteUrl,
+                    'name' => $siteName,
+                    'description' => $description,
+                    'inLanguage' => (string) ($settings['locale'] ?? ''),
+                ],
+                [
+                    '@type' => 'Organization',
+                    '@id' => $siteUrl . '#organization',
+                    'name' => $siteName,
+                    'url' => $siteUrl,
+                    'logo' => $this->absoluteAssetUrl($this->baseFromUrl($siteUrl), (string) ($settings['logo'] ?? '')),
+                ],
+            ];
+
+            return $this->jsonLd(['@context' => 'https://schema.org', '@graph' => $this->cleanStructuredData($graph)]);
+        }
+
+        $base = [
+            '@id' => $pageUrl . '#primary',
+            'url' => $pageUrl,
+            'name' => $title,
+            'headline' => $title,
+            'description' => $description,
+            'inLanguage' => (string) ($content['lang_code'] ?? ''),
+            'mainEntityOfPage' => $pageUrl,
+        ];
+        if ($image !== '') {
+            $base['image'] = [$image];
+        }
+
+        if ($type === 'product') {
+            $primary = array_merge(['@type' => 'Product'], $base, [
+                'sku' => (string) ($content['sku'] ?? ''),
+                'brand' => [
+                    '@type' => 'Brand',
+                    'name' => $siteName,
+                ],
+            ]);
+            if ((float) ($content['price'] ?? 0) > 0) {
+                $primary['offers'] = [
+                    '@type' => 'Offer',
+                    'url' => $pageUrl,
+                    'priceCurrency' => (string) ($content['currency'] ?? 'USD'),
+                    'price' => (string) (float) ($content['price'] ?? 0),
+                    'availability' => ((int) ($content['stock'] ?? 0) > 0) ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+                ];
+            }
+        } elseif ($type === 'article') {
+            $primary = array_merge(['@type' => 'Article'], $base, [
+                'datePublished' => $this->dateIso($content['published_at'] ?? null),
+                'dateModified' => $this->dateIso($content['update_time'] ?? $content['published_at'] ?? null),
+                'author' => [
+                    '@type' => 'Organization',
+                    'name' => $siteName,
+                ],
+                'publisher' => [
+                    '@type' => 'Organization',
+                    'name' => $siteName,
+                ],
+            ]);
+        } else {
+            $primary = array_merge(['@type' => 'WebPage'], $base, [
+                'datePublished' => $this->dateIso($content['published_at'] ?? null),
+                'dateModified' => $this->dateIso($content['update_time'] ?? $content['published_at'] ?? null),
+            ]);
+        }
+
+        $graph = [
+            $primary,
+            [
+                '@type' => 'BreadcrumbList',
+                'itemListElement' => [
+                    [
+                        '@type' => 'ListItem',
+                        'position' => 1,
+                        'name' => $siteName,
+                        'item' => $siteUrl,
+                    ],
+                    [
+                        '@type' => 'ListItem',
+                        'position' => 2,
+                        'name' => (string) ($content['title'] ?? $title),
+                        'item' => $pageUrl,
+                    ],
+                ],
+            ],
+        ];
+
+        return $this->jsonLd(['@context' => 'https://schema.org', '@graph' => $this->cleanStructuredData($graph)]);
+    }
+
     private function matchedCommentFilter(string $nickname, string $email, string $comment): ?array
     {
         $rules = Db::table('b8cms_comment_filter')
@@ -753,7 +914,50 @@ class SiteService
 
     private function absoluteUrl(string $baseUrl, string $path): string
     {
+        if (preg_match('/^https?:\/\//i', $path)) {
+            return $path;
+        }
+        if (str_starts_with($path, '//')) {
+            return ($this->schemeFromUrl($baseUrl) ?: 'https') . ':' . $path;
+        }
+
         return $baseUrl === '' ? $path : rtrim($baseUrl, '/') . $path;
+    }
+
+    private function absoluteAssetUrl(string $baseUrl, string $url): string
+    {
+        $url = trim($url);
+        if ($url === '') {
+            return '';
+        }
+        if (preg_match('/^https?:\/\//i', $url)) {
+            return $url;
+        }
+        if (str_starts_with($url, '//')) {
+            return ($this->schemeFromUrl($baseUrl) ?: 'https') . ':' . $url;
+        }
+        if ($baseUrl === '') {
+            return $url;
+        }
+
+        return rtrim($baseUrl, '/') . '/' . ltrim($url, '/');
+    }
+
+    private function baseFromUrl(string $url): string
+    {
+        $scheme = parse_url($url, PHP_URL_SCHEME);
+        $host = parse_url($url, PHP_URL_HOST);
+        if (!$scheme || !$host) {
+            return '';
+        }
+
+        $port = parse_url($url, PHP_URL_PORT);
+        return $scheme . '://' . $host . ($port ? ':' . $port : '');
+    }
+
+    private function schemeFromUrl(string $url): string
+    {
+        return (string) parse_url($url, PHP_URL_SCHEME);
     }
 
     private function sitemapLastmod(mixed ...$values): string
@@ -783,6 +987,40 @@ class SiteService
         }
 
         return array_values($unique);
+    }
+
+    private function jsonLd(array $data): string
+    {
+        return json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '';
+    }
+
+    private function cleanStructuredData(array $value): array
+    {
+        $clean = [];
+        foreach ($value as $key => $item) {
+            if (is_array($item)) {
+                $item = $this->cleanStructuredData($item);
+                if ($item === []) {
+                    continue;
+                }
+                $clean[$key] = $item;
+                continue;
+            }
+
+            if ($item === null || $item === '') {
+                continue;
+            }
+
+            $clean[$key] = $item;
+        }
+
+        return array_is_list($value) ? array_values($clean) : $clean;
+    }
+
+    private function dateIso(mixed $value): string
+    {
+        $timestamp = strtotime((string) $value);
+        return $timestamp === false ? '' : date('c', $timestamp);
     }
 
     private function xmlEscape(string $value): string

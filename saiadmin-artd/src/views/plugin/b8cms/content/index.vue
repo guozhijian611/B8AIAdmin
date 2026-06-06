@@ -263,6 +263,52 @@
               <ElInput v-model="form.seo_description" type="textarea" :rows="2" />
             </ElFormItem>
           </ElCol>
+          <ElCol :span="24">
+            <ElDivider content-position="left">SEO 高级设置</ElDivider>
+          </ElCol>
+          <ElCol :span="8">
+            <ElFormItem label="收录策略">
+              <ElSelect v-model="seoAdvanced.robots" style="width: 100%">
+                <ElOption label="允许收录并跟踪链接" value="index,follow" />
+                <ElOption label="允许收录但不跟踪链接" value="index,nofollow" />
+                <ElOption label="不收录但跟踪链接" value="noindex,follow" />
+                <ElOption label="不收录且不跟踪链接" value="noindex,nofollow" />
+              </ElSelect>
+            </ElFormItem>
+          </ElCol>
+          <ElCol :span="8">
+            <ElFormItem label="Twitter 卡片">
+              <ElSelect v-model="seoAdvanced.twitter_card" style="width: 100%">
+                <ElOption label="大图卡片" value="summary_large_image" />
+                <ElOption label="摘要卡片" value="summary" />
+              </ElSelect>
+            </ElFormItem>
+          </ElCol>
+          <ElCol :span="8">
+            <ElFormItem label="结构化数据">
+              <ElSwitch v-model="seoAdvanced.schema_enabled" />
+            </ElFormItem>
+          </ElCol>
+          <ElCol :span="24">
+            <ElFormItem label="Canonical">
+              <ElInput v-model="seoAdvanced.canonical_url" placeholder="留空自动生成规范地址" />
+            </ElFormItem>
+          </ElCol>
+          <ElCol :span="12">
+            <ElFormItem label="OG 标题">
+              <ElInput v-model="seoAdvanced.og_title" placeholder="留空使用 SEO 标题" />
+            </ElFormItem>
+          </ElCol>
+          <ElCol :span="12">
+            <ElFormItem label="OG 图片">
+              <sa-image-upload v-model="seoAdvanced.og_image" :limit="1" :multiple="false" />
+            </ElFormItem>
+          </ElCol>
+          <ElCol :span="24">
+            <ElFormItem label="OG 描述">
+              <ElInput v-model="seoAdvanced.og_description" type="textarea" :rows="2" placeholder="留空使用 SEO 描述" />
+            </ElFormItem>
+          </ElCol>
           <ElCol :span="8">
             <ElFormItem label="排序" prop="sort">
               <ElInputNumber v-model="form.sort" :min="0" />
@@ -332,6 +378,15 @@
     precision?: number
     default?: any
   }
+  type SeoAdvanced = {
+    robots: string
+    canonical_url: string
+    og_title: string
+    og_description: string
+    og_image: string
+    twitter_card: string
+    schema_enabled: boolean
+  }
 
   const defaultProductParamSchema: ProductParamField[] = [
     { key: 'model', label: '产品型号', type: 'text', placeholder: 'B8CMS-PRO' },
@@ -352,6 +407,16 @@
   const productParamSchemaText = ref('')
   const productParamFields = ref<ProductParamField[]>([])
   const productParamValues = reactive<Record<string, any>>({})
+  const defaultSeoAdvanced: SeoAdvanced = {
+    robots: 'index,follow',
+    canonical_url: '',
+    og_title: '',
+    og_description: '',
+    og_image: '',
+    twitter_card: 'summary_large_image',
+    schema_enabled: true
+  }
+  const seoAdvanced = reactive<SeoAdvanced>({ ...defaultSeoAdvanced })
 
   const initialForm = {
     id: undefined as number | undefined,
@@ -440,6 +505,39 @@
       }
     }
     return typeof value === 'object' && !Array.isArray(value) ? { ...value } : {}
+  }
+
+  const resetSeoAdvanced = () => {
+    Object.assign(seoAdvanced, { ...defaultSeoAdvanced })
+  }
+
+  const setupSeoAdvanced = (extraValue: any = form.extra) => {
+    const extra = normalizeExtra(extraValue)
+    const seo = normalizeExtra(extra.seo)
+    Object.assign(seoAdvanced, {
+      ...defaultSeoAdvanced,
+      robots: String(seo.robots || defaultSeoAdvanced.robots),
+      canonical_url: String(seo.canonical_url || ''),
+      og_title: String(seo.og_title || ''),
+      og_description: String(seo.og_description || ''),
+      og_image: String(seo.og_image || ''),
+      twitter_card: String(seo.twitter_card || defaultSeoAdvanced.twitter_card),
+      schema_enabled: seo.schema_enabled !== false
+    })
+  }
+
+  const createSeoExtra = (extraValue: any) => {
+    const extra = normalizeExtra(extraValue)
+    extra.seo = {
+      robots: seoAdvanced.robots || defaultSeoAdvanced.robots,
+      canonical_url: seoAdvanced.canonical_url.trim(),
+      og_title: seoAdvanced.og_title.trim(),
+      og_description: seoAdvanced.og_description.trim(),
+      og_image: seoAdvanced.og_image,
+      twitter_card: seoAdvanced.twitter_card || defaultSeoAdvanced.twitter_card,
+      schema_enabled: seoAdvanced.schema_enabled
+    }
+    return extra
   }
 
   const normalizeProductOptions = (options: any): ProductParamOption[] => {
@@ -572,6 +670,7 @@
   const resetForm = () => {
     Object.assign(form, { ...initialForm, images: [], extra: {}, content_type: search.content_type })
     form.lang_code = languages.value[0]?.code || 'zh-CN'
+    resetSeoAdvanced()
     productParamFields.value = []
     productParamSchemaText.value = ''
     clearProductParamValues()
@@ -585,6 +684,7 @@
     if (row?.id) {
       const detail = await api.read(row.id)
       Object.assign(form, { ...detail, extra: normalizeExtra(detail.extra) })
+      setupSeoAdvanced(form.extra)
       const selectedTemplate = form.template_file
       await loadTemplateOptions(form.content_type)
       form.template_file = selectedTemplate || form.template_file
@@ -592,6 +692,7 @@
         setupProductExtraEditor(form.extra)
       }
     } else {
+      setupSeoAdvanced()
       await loadTemplateOptions(form.content_type)
     }
     dialogVisible.value = true
@@ -606,7 +707,7 @@
     }
     const payload = {
       ...JSON.parse(JSON.stringify(form)),
-      extra: form.content_type === 'product' ? createProductExtra(fields || []) : normalizeExtra(form.extra)
+      extra: createSeoExtra(form.content_type === 'product' ? createProductExtra(fields || []) : normalizeExtra(form.extra))
     }
     form.id ? await api.update(payload) : await api.save(payload)
     ElMessage.success('保存成功')

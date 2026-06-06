@@ -16,6 +16,10 @@ Route::group('/app/b8cms/api', function () {
 $sitePath = '/' . trim((string) config('plugin.b8cms.app.site_path', '/cms'), '/');
 $sitePath = $sitePath === '/' ? '' : $sitePath;
 
+Route::get('/robots.txt', [SiteViewController::class, 'robots']);
+if ($sitePath !== '') {
+    Route::get($sitePath . '/robots.txt', [SiteViewController::class, 'robots']);
+}
 Route::get($sitePath ?: '/', [SiteViewController::class, 'home']);
 Route::get($sitePath . '/{lang:[A-Za-z]{2}-[A-Za-z]{2}}', [SiteViewController::class, 'home']);
 Route::get($sitePath . '/sitemap.xml', [SiteViewController::class, 'sitemap']);

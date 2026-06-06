@@ -172,6 +172,8 @@ B8AIadmin 是父框架，B8CMS 前台默认挂载在 `/cms`，避免插件抢占
 | --- | --- |
 | `/cms` | 默认语言首页 |
 | `/cms/{lang}` | 指定语言首页 |
+| `/robots.txt` | 根路径 robots，指向当前 B8CMS sitemap |
+| `/cms/robots.txt` | 当前挂载路径下的 robots 调试入口 |
 | `/cms/sitemap.xml` | 全站多语言 sitemap |
 | `/cms/{lang}/sitemap.xml` | 指定语言 sitemap |
 | `/cms/article/{slug}.html` | 默认语言文章详情 |
@@ -190,6 +192,8 @@ B8AIadmin 是父框架，B8CMS 前台默认挂载在 `/cms`，避免插件抢占
 内容详情页的规范地址统一使用 `.html` 后缀；旧版无后缀详情地址会 301 跳转到对应 `.html` 地址，避免搜索引擎收录重复页面。
 
 `sitemap.xml` 只输出已启用语言、已发布且未删除的首页、文章、产品和页面 URL，详情页 URL 与 canonical 保持一致，统一带 `.html` 后缀。
+
+`robots.txt` 默认允许前台收录，屏蔽 `/admin`、`/app/`、`/apidoc/` 和 `/runtime/`，并输出当前站点的 `Sitemap` 地址。
 
 ## ThinkTemplate 模板开发
 
@@ -297,8 +301,30 @@ SEO 的优先级为：
 | `rel="canonical"` | 当前语言页面的规范地址 |
 | `rel="alternate" hreflang="语言编码"` | 同一内容在其他语言下的地址 |
 | `rel="alternate" hreflang="x-default"` | 默认语言地址 |
+| `meta name="robots"` | 当前页面收录策略 |
+| `og:*` | Open Graph 分享信息 |
+| `twitter:*` | Twitter Card 分享信息 |
+| `application/ld+json` | 结构化数据，首页输出 `WebSite/Organization`，文章输出 `Article`，产品输出 `Product`，页面输出 `WebPage` |
 
 详情页的多语言切换会优先指向同一个 `content_type + slug` 在其他语言下的详情页。例如中文产品 `/cms/product/b8cms-growth-suite.html` 会对应英文 `/cms/en-US/product/b8cms-growth-suite.html`。如果某个语言没有相同 slug 的已发布内容，则不会输出该语言的 alternate 链接，避免搜索引擎看到不存在的语言版本。
+
+后台内容管理的“SEO 高级设置”保存到 `extra.seo`，示例：
+
+```json
+{
+  "seo": {
+    "robots": "index,follow",
+    "canonical_url": "",
+    "og_title": "B8CMS Starter",
+    "og_description": "适合独立站起步的多语言 CMS 产品套件。",
+    "og_image": "/upload/b8cms/starter-og.png",
+    "twitter_card": "summary_large_image",
+    "schema_enabled": true
+  }
+}
+```
+
+`canonical_url` 留空时自动使用当前规范地址；`schema_enabled` 关闭后不会输出 JSON-LD。
 
 ## 多语言内容规则
 
@@ -410,4 +436,5 @@ curl 'http://127.0.0.1:8787/cms'
 curl 'http://127.0.0.1:8787/cms/product/b8cms-starter.html'
 curl -I 'http://127.0.0.1:8787/cms/product/b8cms-starter'
 curl 'http://127.0.0.1:8787/cms/sitemap.xml'
+curl 'http://127.0.0.1:8787/robots.txt'
 ```

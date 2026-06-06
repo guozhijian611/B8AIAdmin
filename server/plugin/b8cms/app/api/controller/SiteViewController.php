@@ -45,6 +45,13 @@ class SiteViewController
         ]);
     }
 
+    public function robots(Request $request): Response
+    {
+        return response($this->site->robotsTxt($request), 200, [
+            'Content-Type' => 'text/plain; charset=utf-8',
+        ]);
+    }
+
     private function content(Request $request, string $type): Response
     {
         $slug = preg_replace('/\.html$/i', '', (string) $request->route->param('slug', '')) ?: '';
