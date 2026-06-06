@@ -56,6 +56,11 @@ class Content extends BaseModel
 
     public function setExtraAttr($value): string
     {
+        if (is_string($value)) {
+            $decoded = json_decode($value, true);
+            $value = json_last_error() === JSON_ERROR_NONE && is_array($decoded) ? $decoded : [];
+        }
+
         return json_encode($value ?: [], JSON_UNESCAPED_UNICODE);
     }
 }

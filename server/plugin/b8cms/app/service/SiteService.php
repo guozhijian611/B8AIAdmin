@@ -73,6 +73,7 @@ class SiteService
 
         $content['images'] = json_decode((string) ($content['images'] ?? '[]'), true) ?: [];
         $content['extra'] = json_decode((string) ($content['extra'] ?? '{}'), true) ?: [];
+        $content['product_params'] = $this->productParams($content['extra']);
         return $content;
     }
 
@@ -369,6 +370,47 @@ class SiteService
         }
 
         return $url;
+    }
+
+    private function productParams(array $extra): array
+    {
+        $schema = $extra['product_params_schema'] ?? [];
+        $values = $extra['product_params'] ?? [];
+        if (!is_array($schema) || !is_array($values)) {
+            return [];
+        }
+
+        $params = [];
+        foreach ($schema as $field) {
+            if (!is_array($field)) {
+                continue;
+            }
+
+            $key = trim((string) ($field['key'] ?? ''));
+            if ($key === '' || !array_key_exists($key, $values)) {
+                continue;
+            }
+
+            $value = $values[$key];
+            if ($value === null || $value === '') {
+                continue;
+            }
+
+            if (is_bool($value)) {
+                $value = $value ? 'Yes' : 'No';
+            } elseif (is_array($value)) {
+                $value = implode(', ', array_filter(array_map('strval', $value)));
+            }
+
+            $params[] = [
+                'key' => $key,
+                'label' => (string) ($field['label'] ?? $key),
+                'value' => (string) $value,
+                'unit' => (string) ($field['unit'] ?? ''),
+            ];
+        }
+
+        return $params;
     }
 
     private function baseUrl(?Request $request): string

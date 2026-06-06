@@ -41,6 +41,11 @@
         <ElTableColumn prop="slug" label="访问别名" width="180" />
         <ElTableColumn prop="category" label="分类" width="120" />
         <ElTableColumn v-if="search.content_type === 'product'" prop="price" label="价格" width="120" />
+        <ElTableColumn v-if="search.content_type === 'product'" label="参数" width="100">
+          <template #default="{ row }">
+            <ElTag type="info">{{ getProductParamCount(row.extra) }} 项</ElTag>
+          </template>
+        </ElTableColumn>
         <ElTableColumn label="推荐" width="90">
           <template #default="{ row }">
             <ElTag :type="row.is_featured === 1 ? 'success' : 'info'">
@@ -157,6 +162,65 @@
                 <ElInput v-model="form.sku" />
               </ElFormItem>
             </ElCol>
+            <ElCol :span="24">
+              <ElDivider content-position="left">产品扩展参数</ElDivider>
+            </ElCol>
+            <ElCol :span="24">
+              <ElFormItem label="参数配置" prop="extra_schema">
+                <ElInput
+                  v-model="productParamSchemaText"
+                  type="textarea"
+                  :rows="7"
+                  placeholder='[{"key":"model","label":"型号","type":"text"},{"key":"lead_time","label":"交付周期","type":"text"}]'
+                />
+              </ElFormItem>
+            </ElCol>
+            <ElCol :span="24">
+              <ElFormItem label="动态表单">
+                <ElSpace wrap>
+                  <ElButton @click="parseProductParamSchema()">解析 JSON</ElButton>
+                  <ElButton @click="useDefaultProductParamSchema">使用默认参数</ElButton>
+                </ElSpace>
+              </ElFormItem>
+            </ElCol>
+            <ElCol v-for="field in productParamFields" :key="field.key" :span="field.type === 'textarea' ? 24 : 12">
+              <ElFormItem :label="field.label">
+                <ElInput
+                  v-if="field.type === 'textarea'"
+                  v-model="productParamValues[field.key]"
+                  type="textarea"
+                  :rows="3"
+                  :placeholder="field.placeholder"
+                />
+                <ElInputNumber
+                  v-else-if="field.type === 'number'"
+                  v-model="productParamValues[field.key]"
+                  :min="field.min"
+                  :max="field.max"
+                  :precision="field.precision"
+                  style="width: 100%"
+                />
+                <ElSwitch v-else-if="field.type === 'switch'" v-model="productParamValues[field.key]" />
+                <ElSelect
+                  v-else-if="field.type === 'select'"
+                  v-model="productParamValues[field.key]"
+                  clearable
+                  filterable
+                  :placeholder="field.placeholder"
+                  style="width: 100%"
+                >
+                  <ElOption
+                    v-for="option in field.options"
+                    :key="String(option.value)"
+                    :label="option.label"
+                    :value="option.value"
+                  />
+                </ElSelect>
+                <ElInput v-else v-model="productParamValues[field.key]" :placeholder="field.placeholder">
+                  <template v-if="field.unit" #append>{{ field.unit }}</template>
+                </ElInput>
+              </ElFormItem>
+            </ElCol>
           </template>
           <ElCol :span="24">
             <ElFormItem label="正文" prop="content">
@@ -236,6 +300,44 @@
   }
   const currentTypeLabel = computed(() => typeLabels[search.content_type] || '内容')
 
+  type ProductParamType = 'text' | 'textarea' | 'number' | 'select' | 'switch'
+  type ProductParamOption = {
+    label: string
+    value: string | number | boolean
+  }
+  type ProductParamField = {
+    key: string
+    label: string
+    type: ProductParamType
+    unit?: string
+    placeholder?: string
+    options?: ProductParamOption[]
+    min?: number
+    max?: number
+    precision?: number
+    default?: any
+  }
+
+  const defaultProductParamSchema: ProductParamField[] = [
+    { key: 'model', label: '产品型号', type: 'text', placeholder: 'B8CMS-PRO' },
+    { key: 'lead_time', label: '交付周期', type: 'text', placeholder: '7 个工作日' },
+    { key: 'min_order', label: '起订数量', type: 'number', unit: '套', min: 1, precision: 0, default: 1 },
+    {
+      key: 'deployment',
+      label: '部署方式',
+      type: 'select',
+      options: [
+        { label: 'SaaS 托管', value: 'SaaS 托管' },
+        { label: '私有化部署', value: '私有化部署' },
+        { label: '混合部署', value: '混合部署' }
+      ]
+    },
+    { key: 'seo_ready', label: '支持 SEO', type: 'switch', default: true }
+  ]
+  const productParamSchemaText = ref('')
+  const productParamFields = ref<ProductParamField[]>([])
+  const productParamValues = reactive<Record<string, any>>({})
+
   const initialForm = {
     id: undefined as number | undefined,
     content_type: 'article',
@@ -259,7 +361,7 @@
     seo_title: '',
     seo_keywords: '',
     seo_description: '',
-    extra: {}
+    extra: {} as Record<string, any>
   }
   const form = reactive({ ...initialForm })
 
@@ -298,28 +400,195 @@
     loadData()
   }
 
+  const normalizeExtra = (value: any): Record<string, any> => {
+    if (!value) return {}
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value)
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+      } catch {
+        return {}
+      }
+    }
+    return typeof value === 'object' && !Array.isArray(value) ? { ...value } : {}
+  }
+
+  const normalizeProductOptions = (options: any): ProductParamOption[] => {
+    if (!Array.isArray(options)) return []
+    return options
+      .map((option) => {
+        if (option && typeof option === 'object') {
+          const value = option.value ?? option.label
+          return {
+            label: String(option.label ?? value ?? ''),
+            value
+          }
+        }
+        return {
+          label: String(option),
+          value: option
+        }
+      })
+      .filter((option) => option.label !== '')
+  }
+
+  const toOptionalNumber = (value: any): number | undefined => {
+    if (value === undefined || value === null || value === '') return undefined
+    const numberValue = Number(value)
+    return Number.isFinite(numberValue) ? numberValue : undefined
+  }
+
+  const defaultValueByType = (type: ProductParamType) => {
+    if (type === 'number') return 0
+    if (type === 'switch') return false
+    return ''
+  }
+
+  const normalizeProductParamSchema = (value: any): ProductParamField[] => {
+    const source: Record<string, any>[] = Array.isArray(value) ? value : Array.isArray(value?.fields) ? value.fields : []
+    return source
+      .map((item: Record<string, any>): ProductParamField | null => {
+        if (!item || typeof item !== 'object') return null
+        const key = String(item.key ?? item.name ?? '').trim()
+        if (!key) return null
+        const type: ProductParamType = ['text', 'textarea', 'number', 'select', 'switch'].includes(item.type)
+          ? item.type
+          : 'text'
+        return {
+          key,
+          label: String(item.label ?? key),
+          type,
+          unit: item.unit ? String(item.unit) : undefined,
+          placeholder: item.placeholder ? String(item.placeholder) : undefined,
+          options: normalizeProductOptions(item.options),
+          min: toOptionalNumber(item.min),
+          max: toOptionalNumber(item.max),
+          precision: toOptionalNumber(item.precision),
+          default: item.default
+        }
+      })
+      .filter((item: ProductParamField | null): item is ProductParamField => Boolean(item))
+  }
+
+  const clearProductParamValues = () => {
+    Object.keys(productParamValues).forEach((key) => {
+      delete productParamValues[key]
+    })
+  }
+
+  const syncProductParamValues = (fields: ProductParamField[], values: Record<string, any> = {}) => {
+    clearProductParamValues()
+    fields.forEach((field) => {
+      if (Object.prototype.hasOwnProperty.call(values, field.key)) {
+        productParamValues[field.key] = values[field.key]
+        return
+      }
+      productParamValues[field.key] = field.default ?? defaultValueByType(field.type)
+    })
+  }
+
+  const setupProductExtraEditor = (extraValue: any = form.extra) => {
+    const extra = normalizeExtra(extraValue)
+    const schema = normalizeProductParamSchema(extra.product_params_schema)
+    const fields = schema.length > 0 ? schema : defaultProductParamSchema
+    productParamFields.value = fields
+    productParamSchemaText.value = JSON.stringify(fields, null, 2)
+    syncProductParamValues(fields, normalizeExtra(extra.product_params))
+    form.extra = extra
+  }
+
+  const parseProductParamSchema = (showMessage = true): ProductParamField[] | null => {
+    try {
+      const parsed = JSON.parse(productParamSchemaText.value || '[]')
+      const fields = normalizeProductParamSchema(parsed)
+      if (fields.length === 0) {
+        throw new Error('empty schema')
+      }
+      productParamFields.value = fields
+      syncProductParamValues(fields, { ...productParamValues })
+      if (showMessage) ElMessage.success('参数表单已生成')
+      return fields
+    } catch {
+      if (showMessage) ElMessage.error('参数配置 JSON 格式不正确')
+      return null
+    }
+  }
+
+  const useDefaultProductParamSchema = () => {
+    productParamSchemaText.value = JSON.stringify(defaultProductParamSchema, null, 2)
+    parseProductParamSchema()
+  }
+
+  const createProductExtra = (fields: ProductParamField[]) => {
+    const extra = normalizeExtra(form.extra)
+    const values: Record<string, any> = {}
+    fields.forEach((field) => {
+      const value = productParamValues[field.key]
+      if (value === undefined || value === null || value === '') return
+      values[field.key] = field.type === 'number' ? Number(value) : value
+    })
+    return {
+      ...extra,
+      product_params_schema: fields,
+      product_params: values
+    }
+  }
+
+  const getProductParamCount = (extraValue: any) => {
+    const extra = normalizeExtra(extraValue)
+    const values = normalizeExtra(extra.product_params)
+    return Object.values(values).filter((value) => value !== undefined && value !== null && value !== '').length
+  }
+
   const resetForm = () => {
-    Object.assign(form, { ...initialForm, content_type: search.content_type })
+    Object.assign(form, { ...initialForm, images: [], extra: {}, content_type: search.content_type })
     form.lang_code = languages.value[0]?.code || 'zh-CN'
     form.template_file = search.content_type
+    productParamFields.value = []
+    productParamSchemaText.value = ''
+    clearProductParamValues()
+    if (form.content_type === 'product') {
+      setupProductExtraEditor()
+    }
   }
 
   const openDialog = async (row?: any) => {
     resetForm()
     if (row?.id) {
       const detail = await api.read(row.id)
-      Object.assign(form, detail)
+      Object.assign(form, { ...detail, extra: normalizeExtra(detail.extra) })
+      if (form.content_type === 'product') {
+        setupProductExtraEditor(form.extra)
+      }
     }
     dialogVisible.value = true
   }
 
   const submit = async () => {
     await formRef.value?.validate()
-    form.id ? await api.update(form) : await api.save(form)
+    const fields = form.content_type === 'product' ? parseProductParamSchema(false) : []
+    if (form.content_type === 'product' && !fields) {
+      ElMessage.error('参数配置 JSON 格式不正确')
+      return
+    }
+    const payload = {
+      ...JSON.parse(JSON.stringify(form)),
+      extra: form.content_type === 'product' ? createProductExtra(fields || []) : normalizeExtra(form.extra)
+    }
+    form.id ? await api.update(payload) : await api.save(payload)
     ElMessage.success('保存成功')
     dialogVisible.value = false
     loadData()
   }
+
+  watch(
+    () => form.content_type,
+    (type) => {
+      if (type === 'product' && productParamFields.value.length === 0) {
+        setupProductExtraEditor()
+      }
+    }
+  )
 
   const changeStatus = async (id: number, status: number) => {
     await api.changeStatus({ id, status })

@@ -7,6 +7,19 @@
         <p class="summary">{$content.subtitle}</p>
         {/if}
         <div class="product-price">{$content.currency} {$content.price}</div>
+        {if !empty($content.product_params)}
+        <section class="product-specs">
+            <h2>{if $lang == 'en-US'}Specifications{else}产品参数{/if}</h2>
+            <div class="spec-grid">
+                {volist name="content.product_params" id="param"}
+                <div class="spec-item">
+                    <span>{$param.label}</span>
+                    <strong>{$param.value}{if !empty($param.unit)} {$param.unit}{/if}</strong>
+                </div>
+                {/volist}
+            </div>
+        </section>
+        {/if}
         <div class="article-content">
             {$content.content|raw}
         </div>

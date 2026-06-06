@@ -267,6 +267,53 @@ SEO 的优先级为：
 | `extra` | 产品扩展参数，JSON 对象 |
 | `is_featured` | 是否推荐到首页 |
 
+产品扩展参数保存到 `extra`，后台内容管理会读取 `extra.product_params_schema` 动态渲染表单，并把填写值保存到 `extra.product_params`：
+
+```json
+{
+  "product_params_schema": [
+    {
+      "key": "model",
+      "label": "产品型号",
+      "type": "text",
+      "placeholder": "B8CMS-PRO"
+    },
+    {
+      "key": "min_order",
+      "label": "起订数量",
+      "type": "number",
+      "unit": "套",
+      "min": 1,
+      "precision": 0,
+      "default": 1
+    },
+    {
+      "key": "deployment",
+      "label": "部署方式",
+      "type": "select",
+      "options": [
+        { "label": "SaaS 托管", "value": "SaaS 托管" },
+        { "label": "私有化部署", "value": "私有化部署" }
+      ]
+    },
+    {
+      "key": "seo_ready",
+      "label": "支持 SEO",
+      "type": "switch",
+      "default": true
+    }
+  ],
+  "product_params": {
+    "model": "B8CMS-PRO",
+    "min_order": 1,
+    "deployment": "SaaS 托管",
+    "seo_ready": true
+  }
+}
+```
+
+动态表单字段类型支持 `text`、`textarea`、`number`、`select`、`switch`。产品详情模板会把 `extra.product_params_schema` 和 `extra.product_params` 合并为 `content.product_params` 并展示。
+
 ## 维护注意事项
 
 1. 修改 PHP、路由、插件配置或 Composer 依赖后，需要 reload 或 restart Webman；Composer 新依赖需要 restart。
