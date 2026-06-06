@@ -37,6 +37,14 @@ class SiteViewController
         return $this->content($request, 'page');
     }
 
+    public function sitemap(Request $request): Response
+    {
+        $lang = (string) $request->route?->param('lang', '');
+        return response($this->site->sitemapXml($request, $lang ?: null), 200, [
+            'Content-Type' => 'application/xml; charset=utf-8',
+        ]);
+    }
+
     private function content(Request $request, string $type): Response
     {
         $slug = preg_replace('/\.html$/i', '', (string) $request->route->param('slug', '')) ?: '';

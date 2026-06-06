@@ -18,6 +18,8 @@ $sitePath = $sitePath === '/' ? '' : $sitePath;
 
 Route::get($sitePath ?: '/', [SiteViewController::class, 'home']);
 Route::get($sitePath . '/{lang:[A-Za-z]{2}-[A-Za-z]{2}}', [SiteViewController::class, 'home']);
+Route::get($sitePath . '/sitemap.xml', [SiteViewController::class, 'sitemap']);
+Route::get($sitePath . '/{lang:[A-Za-z]{2}-[A-Za-z]{2}}/sitemap.xml', [SiteViewController::class, 'sitemap']);
 Route::get($sitePath . '/article/{slug}.html', [SiteViewController::class, 'article']);
 Route::get($sitePath . '/product/{slug}.html', [SiteViewController::class, 'product']);
 Route::get($sitePath . '/page/{slug}.html', [SiteViewController::class, 'page']);

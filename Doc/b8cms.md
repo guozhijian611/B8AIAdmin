@@ -172,6 +172,8 @@ B8AIadmin 是父框架，B8CMS 前台默认挂载在 `/cms`，避免插件抢占
 | --- | --- |
 | `/cms` | 默认语言首页 |
 | `/cms/{lang}` | 指定语言首页 |
+| `/cms/sitemap.xml` | 全站多语言 sitemap |
+| `/cms/{lang}/sitemap.xml` | 指定语言 sitemap |
 | `/cms/article/{slug}.html` | 默认语言文章详情 |
 | `/cms/product/{slug}.html` | 默认语言产品详情 |
 | `/cms/page/{slug}.html` | 默认语言页面详情 |
@@ -186,6 +188,8 @@ B8AIadmin 是父框架，B8CMS 前台默认挂载在 `/cms`，避免插件抢占
 ```
 
 内容详情页的规范地址统一使用 `.html` 后缀；旧版无后缀详情地址会 301 跳转到对应 `.html` 地址，避免搜索引擎收录重复页面。
+
+`sitemap.xml` 只输出已启用语言、已发布且未删除的首页、文章、产品和页面 URL，详情页 URL 与 canonical 保持一致，统一带 `.html` 后缀。
 
 ## ThinkTemplate 模板开发
 
@@ -405,4 +409,5 @@ curl -I 'http://127.0.0.1:8787/'
 curl 'http://127.0.0.1:8787/cms'
 curl 'http://127.0.0.1:8787/cms/product/b8cms-starter.html'
 curl -I 'http://127.0.0.1:8787/cms/product/b8cms-starter'
+curl 'http://127.0.0.1:8787/cms/sitemap.xml'
 ```

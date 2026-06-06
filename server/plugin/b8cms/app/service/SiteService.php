@@ -108,6 +108,24 @@ class SiteService
         return $this->homePath($lang, $defaultLang);
     }
 
+    public function sitemapXml(Request $request, ?string $lang = null): string
+    {
+        $items = $this->sitemapItems($request, $lang);
+        $xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+        $xml .= "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n";
+
+        foreach ($items as $item) {
+            $xml .= "  <url>\n";
+            $xml .= '    <loc>' . $this->xmlEscape($item['loc']) . "</loc>\n";
+            if ($item['lastmod'] !== '') {
+                $xml .= '    <lastmod>' . $this->xmlEscape($item['lastmod']) . "</lastmod>\n";
+            }
+            $xml .= "  </url>\n";
+        }
+
+        return $xml . "</urlset>\n";
+    }
+
     public function submitContact(Request $request): int
     {
         $data = $request->post();
@@ -459,6 +477,64 @@ class SiteService
         ];
     }
 
+    private function sitemapItems(Request $request, ?string $lang): array
+    {
+        $languages = $this->languages();
+        $defaultLang = $this->defaultLang($languages);
+        $enabledLangs = array_values(array_filter(array_map(fn ($language) => (string) ($language['code'] ?? ''), $languages)));
+        $targetLangs = $lang ? [$this->normalizeLang($lang)] : $enabledLangs;
+        $targetLangs = array_values(array_intersect($targetLangs, $enabledLangs));
+        if ($targetLangs === []) {
+            $targetLangs = [$defaultLang];
+        }
+
+        $baseUrl = $this->baseUrl($request);
+        $rows = Db::table('b8cms_content')
+            ->whereIn('lang_code', $targetLangs)
+            ->where('status', 1)
+            ->whereNull('delete_time')
+            ->field('content_type,lang_code,slug,published_at,update_time')
+            ->order('lang_code', 'asc')
+            ->order('content_type', 'asc')
+            ->order('sort', 'asc')
+            ->order('published_at', 'desc')
+            ->select()
+            ->toArray();
+
+        $latestByLang = [];
+        foreach ($rows as $row) {
+            $rowLang = (string) ($row['lang_code'] ?? '');
+            $lastmod = $this->sitemapLastmod($row['update_time'] ?? null, $row['published_at'] ?? null);
+            if ($lastmod !== '' && (!isset($latestByLang[$rowLang]) || $lastmod > $latestByLang[$rowLang])) {
+                $latestByLang[$rowLang] = $lastmod;
+            }
+        }
+
+        $items = [];
+        foreach ($targetLangs as $targetLang) {
+            $items[] = [
+                'loc' => $this->absoluteUrl($baseUrl, $this->homePath($targetLang, $defaultLang)),
+                'lastmod' => $latestByLang[$targetLang] ?? '',
+            ];
+        }
+
+        foreach ($rows as $row) {
+            $type = (string) ($row['content_type'] ?? '');
+            $slug = (string) ($row['slug'] ?? '');
+            $rowLang = (string) ($row['lang_code'] ?? '');
+            if ($slug === '' || !in_array($type, ['article', 'product', 'page'], true)) {
+                continue;
+            }
+
+            $items[] = [
+                'loc' => $this->absoluteUrl($baseUrl, $this->contentPath($type, $slug, $rowLang, $defaultLang)),
+                'lastmod' => $this->sitemapLastmod($row['update_time'] ?? null, $row['published_at'] ?? null),
+            ];
+        }
+
+        return $this->uniqueSitemapItems($items);
+    }
+
     private function normalizeSiteUrl(string $url, string $lang, string $defaultLang): string
     {
         $url = trim($url);
@@ -678,6 +754,40 @@ class SiteService
     private function absoluteUrl(string $baseUrl, string $path): string
     {
         return $baseUrl === '' ? $path : rtrim($baseUrl, '/') . $path;
+    }
+
+    private function sitemapLastmod(mixed ...$values): string
+    {
+        foreach ($values as $value) {
+            $timestamp = strtotime((string) $value);
+            if ($timestamp !== false) {
+                return date('Y-m-d', $timestamp);
+            }
+        }
+
+        return '';
+    }
+
+    private function uniqueSitemapItems(array $items): array
+    {
+        $unique = [];
+        foreach ($items as $item) {
+            $loc = (string) ($item['loc'] ?? '');
+            if ($loc === '' || isset($unique[$loc])) {
+                continue;
+            }
+            $unique[$loc] = [
+                'loc' => $loc,
+                'lastmod' => (string) ($item['lastmod'] ?? ''),
+            ];
+        }
+
+        return array_values($unique);
+    }
+
+    private function xmlEscape(string $value): string
+    {
+        return htmlspecialchars($value, ENT_XML1 | ENT_COMPAT, 'UTF-8');
     }
 
     private function defaultLang(array $languages): string
