@@ -85,6 +85,24 @@ class SiteService
         return $context;
     }
 
+    public function canonicalPath(?string $lang = null, ?array $content = null, ?string $type = null): string
+    {
+        $languages = $this->languages();
+        $defaultLang = $this->defaultLang($languages);
+        $lang = $this->normalizeLang($lang);
+
+        if ($content) {
+            return $this->contentPath(
+                $type ?: (string) ($content['content_type'] ?? ''),
+                (string) ($content['slug'] ?? ''),
+                (string) ($content['lang_code'] ?? $lang),
+                $defaultLang
+            );
+        }
+
+        return $this->homePath($lang, $defaultLang);
+    }
+
     public function submitContact(Request $request): int
     {
         $data = $request->post();

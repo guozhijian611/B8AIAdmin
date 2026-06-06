@@ -14,6 +14,11 @@ class SiteViewController
 
     public function home(Request $request): Response
     {
+        $lang = (string) $request->route?->param('lang', $request->input('lang', ''));
+        if ($response = $this->redirectLegacyLangUrl($request, $this->site->canonicalPath($lang))) {
+            return $response;
+        }
+
         return $this->render($request, 'index');
     }
 
@@ -41,6 +46,10 @@ class SiteViewController
             return response('Page not found', 404);
         }
 
+        if ($response = $this->redirectLegacyLangUrl($request, $this->site->canonicalPath((string) $content['lang_code'], $content, $type))) {
+            return $response;
+        }
+
         $template = $content['template_file'] ?: $type;
         return $this->render($request, $template, $content, (string) $content['lang_code'], $type);
     }
@@ -63,5 +72,23 @@ class SiteViewController
 
         $templatePath = base_path() . "/plugin/b8cms/app/view/{$templateKey}/{$template}.html";
         return is_file($templatePath) ? $template : $fallback;
+    }
+
+    private function redirectLegacyLangUrl(Request $request, string $canonicalPath): ?Response
+    {
+        if ((string) $request->input('lang', '') === '') {
+            return null;
+        }
+
+        $query = [];
+        parse_str((string) $request->queryString(), $query);
+        unset($query['lang']);
+
+        $target = $canonicalPath;
+        if ($query !== []) {
+            $target .= '?' . http_build_query($query);
+        }
+
+        return redirect($target)->withStatus(301);
     }
 }
