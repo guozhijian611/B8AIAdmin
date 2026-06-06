@@ -74,6 +74,9 @@ class SiteService
         $content['images'] = json_decode((string) ($content['images'] ?? '[]'), true) ?: [];
         $content['extra'] = json_decode((string) ($content['extra'] ?? '{}'), true) ?: [];
         $content['product_params'] = $this->productParams($content['extra']);
+        $content['image_alt'] = $this->firstFilled($content['extra']['image_alt'] ?? null, $content['title'] ?? null);
+        $content['image_title'] = $this->firstFilled($content['extra']['image_title'] ?? null, $content['image_alt'] ?? null);
+        $content['image_caption'] = $this->firstFilled($content['extra']['image_caption'] ?? null, $content['summary'] ?? null);
         return $content;
     }
 
@@ -81,7 +84,7 @@ class SiteService
     {
         $context = $this->bootstrap($lang);
         $context['content'] = $content;
-        $context['seo_links'] = $this->seoLinks($context['languages'], $context['lang'], $content, $request, $type);
+        $context['seo_links'] = $this->seoLinks($context['languages'], $context['lang'], $content, $request, $type, $context['settings']);
         $context['seo'] = $this->seo($context['settings'], $content, $context['seo_links'], $request, $type);
         $defaultLang = $this->defaultLang($context['languages']);
         $context['all_products'] = $type === 'page' ? $this->contents('product', $context['lang'], 50, false, $defaultLang) : [];
@@ -112,13 +115,30 @@ class SiteService
     {
         $items = $this->sitemapItems($request, $lang);
         $xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
-        $xml .= "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n";
+        $xml .= "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\" xmlns:xhtml=\"http://www.w3.org/1999/xhtml\" xmlns:image=\"http://www.google.com/schemas/sitemap-image/1.1\">\n";
 
         foreach ($items as $item) {
             $xml .= "  <url>\n";
             $xml .= '    <loc>' . $this->xmlEscape($item['loc']) . "</loc>\n";
+            foreach ($item['alternates'] ?? [] as $alternate) {
+                $xml .= '    <xhtml:link rel="alternate" hreflang="' . $this->xmlEscape((string) ($alternate['hreflang'] ?? '')) . '" href="' . $this->xmlEscape((string) ($alternate['url'] ?? '')) . "\" />\n";
+            }
+            if (!empty($item['x_default'])) {
+                $xml .= '    <xhtml:link rel="alternate" hreflang="x-default" href="' . $this->xmlEscape((string) $item['x_default']) . "\" />\n";
+            }
             if ($item['lastmod'] !== '') {
                 $xml .= '    <lastmod>' . $this->xmlEscape($item['lastmod']) . "</lastmod>\n";
+            }
+            foreach ($item['images'] ?? [] as $image) {
+                $xml .= "    <image:image>\n";
+                $xml .= '      <image:loc>' . $this->xmlEscape((string) ($image['loc'] ?? '')) . "</image:loc>\n";
+                if (!empty($image['title'])) {
+                    $xml .= '      <image:title>' . $this->xmlEscape((string) $image['title']) . "</image:title>\n";
+                }
+                if (!empty($image['caption'])) {
+                    $xml .= '      <image:caption>' . $this->xmlEscape((string) $image['caption']) . "</image:caption>\n";
+                }
+                $xml .= "    </image:image>\n";
             }
             $xml .= "  </url>\n";
         }
@@ -129,7 +149,7 @@ class SiteService
     public function robotsTxt(Request $request): string
     {
         $settings = $this->settings($this->defaultLang($this->languages()));
-        $sitemapUrl = $this->absoluteUrl($this->baseUrl($request), $this->withSiteBase('/sitemap.xml'));
+        $sitemapUrl = $this->absoluteUrl($this->baseUrl($request, $settings), $this->withSiteBase('/sitemap.xml'));
         $lines = $this->robotsSettingLines($settings['robots_rules'] ?? '', $this->defaultRobotsRules());
         $lines = array_merge($lines, $this->robotsSettingLines($settings['robots_extra'] ?? ''));
         $lines = array_values(array_filter($lines, fn (string $line) => !preg_match('/^Sitemap\s*:/i', $line)));
@@ -405,37 +425,55 @@ class SiteService
 
     private function seo(array $settings, ?array $content, array $seoLinks, ?Request $request, ?string $type): array
     {
-        $baseUrl = $this->baseUrl($request);
+        $baseUrl = $this->baseUrl($request, $settings);
+        $siteName = $this->firstFilled($settings['og_site_name'] ?? null, $settings['site_name'] ?? null, 'B8CMS');
         $extraSeo = $this->contentSeoExtra($content);
         $title = $this->firstFilled($content['seo_title'] ?? null, $content['title'] ?? null, $settings['seo_title'] ?? null, $settings['site_name'] ?? null, 'B8CMS');
         $description = $this->firstFilled($content['seo_description'] ?? null, $content['summary'] ?? null, $settings['seo_description'] ?? null);
         $image = $this->absoluteAssetUrl($baseUrl, $this->firstFilled($extraSeo['og_image'] ?? null, $content['cover_image'] ?? null, $settings['og_image'] ?? null, $settings['logo'] ?? null));
         $ogTitle = $this->firstFilled($extraSeo['og_title'] ?? null, $title);
         $ogDescription = $this->firstFilled($extraSeo['og_description'] ?? null, $description);
+        $twitterTitle = $this->firstFilled($extraSeo['twitter_title'] ?? null, $ogTitle);
+        $twitterDescription = $this->firstFilled($extraSeo['twitter_description'] ?? null, $ogDescription);
+        $twitterImage = $this->absoluteAssetUrl($baseUrl, $this->firstFilled($extraSeo['twitter_image'] ?? null, $image));
         $twitterCard = $this->firstFilled($extraSeo['twitter_card'] ?? null, $image === '' ? 'summary' : 'summary_large_image');
         $schemaEnabled = ($extraSeo['schema_enabled'] ?? true) !== false;
+        $publishedAt = $this->dateIso($content['published_at'] ?? null);
+        $modifiedAt = $this->dateIso($content['update_time'] ?? $content['published_at'] ?? null);
 
         return [
             'title' => $title,
             'keywords' => $this->firstFilled($content['seo_keywords'] ?? null, $settings['seo_keywords'] ?? null),
             'description' => $description,
             'robots' => $this->firstFilled($extraSeo['robots'] ?? null, $settings['seo_robots'] ?? null, 'index,follow'),
+            'site_name' => $siteName,
+            'theme_color' => $this->firstFilled($settings['theme_color'] ?? null),
             'og_title' => $ogTitle,
             'og_description' => $ogDescription,
             'og_image' => $image,
             'og_url' => (string) ($seoLinks['canonical'] ?? ''),
             'og_type' => $type === 'article' ? 'article' : ($type === 'product' ? 'product' : 'website'),
+            'og_locale' => (string) ($seoLinks['locale'] ?? ''),
+            'og_locale_alternates' => $seoLinks['locale_alternates'] ?? [],
             'twitter_card' => $twitterCard,
-            'twitter_title' => $ogTitle,
-            'twitter_description' => $ogDescription,
-            'twitter_image' => $image,
+            'twitter_title' => $twitterTitle,
+            'twitter_description' => $twitterDescription,
+            'twitter_image' => $twitterImage,
+            'twitter_site' => $this->firstFilled($settings['twitter_site'] ?? null),
+            'twitter_creator' => $this->firstFilled($extraSeo['twitter_creator'] ?? null, $settings['twitter_creator'] ?? null),
+            'article_published_time' => $type === 'article' ? $publishedAt : '',
+            'article_modified_time' => $type === 'article' ? $modifiedAt : '',
+            'article_author' => $type === 'article' ? $this->firstFilled($extraSeo['author_name'] ?? null, $siteName) : '',
+            'product_price_amount' => $type === 'product' && (float) ($content['price'] ?? 0) > 0 ? (string) (float) ($content['price'] ?? 0) : '',
+            'product_price_currency' => $type === 'product' ? (string) ($content['currency'] ?? '') : '',
+            'product_availability' => $type === 'product' ? (((int) ($content['stock'] ?? 0) > 0) ? 'in stock' : 'out of stock') : '',
             'json_ld' => $schemaEnabled ? $this->structuredDataJson($settings, $content, $seoLinks, $type, $image) : '',
         ];
     }
 
-    private function seoLinks(array $languages, string $currentLang, ?array $content, ?Request $request, ?string $type): array
+    private function seoLinks(array $languages, string $currentLang, ?array $content, ?Request $request, ?string $type, array $settings = []): array
     {
-        $baseUrl = $this->baseUrl($request);
+        $baseUrl = $this->baseUrl($request, $settings);
         $defaultLang = $this->defaultLang($languages);
         $alternates = [];
 
@@ -464,6 +502,7 @@ class SiteService
                 'hreflang' => str_replace('_', '-', $lang),
                 'native_name' => $language['native_name'] ?? $lang,
                 'url' => $this->absoluteUrl($baseUrl, $path),
+                'locale' => $this->localeForLanguage($language),
                 'is_current' => $lang === $currentLang,
             ];
         }
@@ -491,6 +530,11 @@ class SiteService
             'x_default' => $xDefault,
             'home_url' => $this->absoluteUrl($baseUrl, $this->homePath($currentLang, $defaultLang)),
             'alternates' => $alternates,
+            'locale' => $this->localeForLang($languages, $currentLang),
+            'locale_alternates' => array_values(array_filter(array_map(
+                fn (array $alternate) => $alternate['lang'] === $currentLang ? null : (string) ($alternate['locale'] ?? ''),
+                $alternates
+            ))),
         ];
     }
 
@@ -527,18 +571,27 @@ class SiteService
             $targetLangs = [$defaultLang];
         }
 
-        $baseUrl = $this->baseUrl($request);
+        $settings = $this->settings($defaultLang);
+        $baseUrl = $this->baseUrl($request, $settings);
         $rows = Db::table('b8cms_content')
             ->whereIn('lang_code', $targetLangs)
             ->where('status', 1)
             ->whereNull('delete_time')
-            ->field('content_type,lang_code,slug,published_at,update_time')
+            ->field('content_type,lang_code,slug,title,summary,cover_image,images,extra,seo_title,published_at,update_time')
             ->order('lang_code', 'asc')
             ->order('content_type', 'asc')
             ->order('sort', 'asc')
             ->order('published_at', 'desc')
             ->select()
             ->toArray();
+        $alternateRows = Db::table('b8cms_content')
+            ->whereIn('lang_code', $enabledLangs)
+            ->where('status', 1)
+            ->whereNull('delete_time')
+            ->field('content_type,lang_code,slug')
+            ->select()
+            ->toArray();
+        $alternateIndex = $this->contentAlternateIndex($alternateRows);
 
         $latestByLang = [];
         foreach ($rows as $row) {
@@ -554,6 +607,9 @@ class SiteService
             $items[] = [
                 'loc' => $this->absoluteUrl($baseUrl, $this->homePath($targetLang, $defaultLang)),
                 'lastmod' => $latestByLang[$targetLang] ?? '',
+                'alternates' => $this->sitemapHomeAlternates($languages, $baseUrl, $defaultLang),
+                'x_default' => $this->absoluteUrl($baseUrl, $this->homePath($defaultLang, $defaultLang)),
+                'images' => [],
             ];
         }
 
@@ -568,10 +624,106 @@ class SiteService
             $items[] = [
                 'loc' => $this->absoluteUrl($baseUrl, $this->contentPath($type, $slug, $rowLang, $defaultLang)),
                 'lastmod' => $this->sitemapLastmod($row['update_time'] ?? null, $row['published_at'] ?? null),
+                'alternates' => $this->sitemapContentAlternates($languages, $alternateIndex, $baseUrl, $defaultLang, $type, $slug),
+                'x_default' => $this->sitemapContentXDefault($alternateIndex, $baseUrl, $defaultLang, $type, $slug),
+                'images' => $this->sitemapImagesForContent($row, $baseUrl),
             ];
         }
 
         return $this->uniqueSitemapItems($items);
+    }
+
+    private function contentAlternateIndex(array $rows): array
+    {
+        $index = [];
+        foreach ($rows as $row) {
+            $type = (string) ($row['content_type'] ?? '');
+            $slug = (string) ($row['slug'] ?? '');
+            $lang = (string) ($row['lang_code'] ?? '');
+            if ($type === '' || $slug === '' || $lang === '') {
+                continue;
+            }
+            $index[$type . ':' . $slug][$lang] = $slug;
+        }
+
+        return $index;
+    }
+
+    private function sitemapHomeAlternates(array $languages, string $baseUrl, string $defaultLang): array
+    {
+        $alternates = [];
+        foreach ($languages as $language) {
+            $lang = (string) ($language['code'] ?? '');
+            if ($lang === '') {
+                continue;
+            }
+            $alternates[] = [
+                'hreflang' => str_replace('_', '-', $lang),
+                'url' => $this->absoluteUrl($baseUrl, $this->homePath($lang, $defaultLang)),
+            ];
+        }
+
+        return $alternates;
+    }
+
+    private function sitemapContentAlternates(array $languages, array $alternateIndex, string $baseUrl, string $defaultLang, string $type, string $slug): array
+    {
+        $alternates = [];
+        $items = $alternateIndex[$type . ':' . $slug] ?? [];
+        foreach ($languages as $language) {
+            $lang = (string) ($language['code'] ?? '');
+            if ($lang === '' || !isset($items[$lang])) {
+                continue;
+            }
+            $alternates[] = [
+                'hreflang' => str_replace('_', '-', $lang),
+                'url' => $this->absoluteUrl($baseUrl, $this->contentPath($type, (string) $items[$lang], $lang, $defaultLang)),
+            ];
+        }
+
+        return $alternates;
+    }
+
+    private function sitemapContentXDefault(array $alternateIndex, string $baseUrl, string $defaultLang, string $type, string $slug): string
+    {
+        $items = $alternateIndex[$type . ':' . $slug] ?? [];
+        if (!isset($items[$defaultLang])) {
+            return '';
+        }
+
+        return $this->absoluteUrl($baseUrl, $this->contentPath($type, (string) $items[$defaultLang], $defaultLang, $defaultLang));
+    }
+
+    private function sitemapImagesForContent(array $row, string $baseUrl): array
+    {
+        $extra = json_decode((string) ($row['extra'] ?? '{}'), true) ?: [];
+        $seo = is_array($extra['seo'] ?? null) ? $extra['seo'] : [];
+        $images = [];
+        $sources = [
+            $row['cover_image'] ?? '',
+            $seo['og_image'] ?? '',
+            $seo['twitter_image'] ?? '',
+        ];
+        $gallery = json_decode((string) ($row['images'] ?? '[]'), true) ?: [];
+        foreach ($gallery as $image) {
+            $sources[] = is_array($image) ? ($image['url'] ?? '') : $image;
+        }
+
+        $title = $this->firstFilled($extra['image_title'] ?? null, $extra['image_alt'] ?? null, $row['seo_title'] ?? null, $row['title'] ?? null);
+        $caption = $this->firstFilled($extra['image_caption'] ?? null, $row['summary'] ?? null);
+        foreach ($sources as $source) {
+            $loc = $this->absoluteAssetUrl($baseUrl, (string) $source);
+            if ($loc === '' || isset($images[$loc])) {
+                continue;
+            }
+            $images[$loc] = [
+                'loc' => $loc,
+                'title' => $title,
+                'caption' => $caption,
+            ];
+        }
+
+        return array_values($images);
     }
 
     private function defaultRobotsRules(): string
@@ -724,7 +876,17 @@ class SiteService
             'og_title' => trim((string) ($seo['og_title'] ?? '')),
             'og_description' => trim((string) ($seo['og_description'] ?? '')),
             'og_image' => trim((string) ($seo['og_image'] ?? '')),
+            'twitter_title' => trim((string) ($seo['twitter_title'] ?? '')),
+            'twitter_description' => trim((string) ($seo['twitter_description'] ?? '')),
+            'twitter_image' => trim((string) ($seo['twitter_image'] ?? '')),
+            'twitter_creator' => trim((string) ($seo['twitter_creator'] ?? '')),
             'twitter_card' => trim((string) ($seo['twitter_card'] ?? '')),
+            'author_name' => trim((string) ($seo['author_name'] ?? '')),
+            'schema_type' => trim((string) ($seo['schema_type'] ?? '')),
+            'product_brand' => trim((string) ($seo['product_brand'] ?? '')),
+            'product_mpn' => trim((string) ($seo['product_mpn'] ?? '')),
+            'product_gtin' => trim((string) ($seo['product_gtin'] ?? '')),
+            'product_manufacturer' => trim((string) ($seo['product_manufacturer'] ?? '')),
             'schema_enabled' => !array_key_exists('schema_enabled', $seo) || $seo['schema_enabled'] !== false,
         ];
     }
@@ -736,6 +898,7 @@ class SiteService
         $pageUrl = (string) ($seoLinks['canonical'] ?? $siteUrl);
         $title = $this->firstFilled($content['seo_title'] ?? null, $content['title'] ?? null, $settings['seo_title'] ?? null, $siteName);
         $description = $this->firstFilled($content['seo_description'] ?? null, $content['summary'] ?? null, $settings['seo_description'] ?? null);
+        $organization = $this->organizationStructuredData($settings, $siteUrl, $siteName);
 
         if (!$content) {
             $graph = [
@@ -746,19 +909,15 @@ class SiteService
                     'name' => $siteName,
                     'description' => $description,
                     'inLanguage' => (string) ($settings['locale'] ?? ''),
+                    'publisher' => ['@id' => $siteUrl . '#organization'],
                 ],
-                [
-                    '@type' => 'Organization',
-                    '@id' => $siteUrl . '#organization',
-                    'name' => $siteName,
-                    'url' => $siteUrl,
-                    'logo' => $this->absoluteAssetUrl($this->baseFromUrl($siteUrl), (string) ($settings['logo'] ?? '')),
-                ],
+                $organization,
             ];
 
             return $this->jsonLd(['@context' => 'https://schema.org', '@graph' => $this->cleanStructuredData($graph)]);
         }
 
+        $extraSeo = $this->contentSeoExtra($content);
         $base = [
             '@id' => $pageUrl . '#primary',
             'url' => $pageUrl,
@@ -767,6 +926,7 @@ class SiteService
             'description' => $description,
             'inLanguage' => (string) ($content['lang_code'] ?? ''),
             'mainEntityOfPage' => $pageUrl,
+            'publisher' => ['@id' => $siteUrl . '#organization'],
         ];
         if ($image !== '') {
             $base['image'] = [$image];
@@ -775,10 +935,17 @@ class SiteService
         if ($type === 'product') {
             $primary = array_merge(['@type' => 'Product'], $base, [
                 'sku' => (string) ($content['sku'] ?? ''),
+                'mpn' => $extraSeo['product_mpn'] ?? '',
+                'gtin' => $extraSeo['product_gtin'] ?? '',
                 'brand' => [
                     '@type' => 'Brand',
-                    'name' => $siteName,
+                    'name' => $this->firstFilled($extraSeo['product_brand'] ?? null, $content['category'] ?? null, $siteName),
                 ],
+                'manufacturer' => [
+                    '@type' => 'Organization',
+                    'name' => $this->firstFilled($extraSeo['product_manufacturer'] ?? null, $siteName),
+                ],
+                'additionalProperty' => $this->productAdditionalProperties($content['product_params'] ?? []),
             ]);
             if ((float) ($content['price'] ?? 0) > 0) {
                 $primary['offers'] = [
@@ -790,26 +957,24 @@ class SiteService
                 ];
             }
         } elseif ($type === 'article') {
+            $authorName = $this->firstFilled($extraSeo['author_name'] ?? null, $siteName);
             $primary = array_merge(['@type' => 'Article'], $base, [
                 'datePublished' => $this->dateIso($content['published_at'] ?? null),
                 'dateModified' => $this->dateIso($content['update_time'] ?? $content['published_at'] ?? null),
                 'author' => [
-                    '@type' => 'Organization',
-                    'name' => $siteName,
-                ],
-                'publisher' => [
-                    '@type' => 'Organization',
-                    'name' => $siteName,
+                    '@type' => $authorName === $siteName ? 'Organization' : 'Person',
+                    'name' => $authorName,
                 ],
             ]);
         } else {
-            $primary = array_merge(['@type' => 'WebPage'], $base, [
+            $primary = array_merge(['@type' => $this->structuredPageType($extraSeo, $content)], $base, [
                 'datePublished' => $this->dateIso($content['published_at'] ?? null),
                 'dateModified' => $this->dateIso($content['update_time'] ?? $content['published_at'] ?? null),
             ]);
         }
 
         $graph = [
+            $organization,
             $primary,
             [
                 '@type' => 'BreadcrumbList',
@@ -831,6 +996,92 @@ class SiteService
         ];
 
         return $this->jsonLd(['@context' => 'https://schema.org', '@graph' => $this->cleanStructuredData($graph)]);
+    }
+
+    private function organizationStructuredData(array $settings, string $siteUrl, string $siteName): array
+    {
+        $baseUrl = $this->baseFromUrl($siteUrl);
+        return [
+            '@type' => 'Organization',
+            '@id' => $siteUrl . '#organization',
+            'name' => $siteName,
+            'legalName' => $this->firstFilled($settings['legal_name'] ?? null, $siteName),
+            'url' => $siteUrl,
+            'logo' => $this->absoluteAssetUrl($baseUrl, (string) ($settings['logo'] ?? '')),
+            'sameAs' => $this->socialLinkUrls($settings['social_links'] ?? []),
+            'contactPoint' => $this->contactPoint($settings),
+        ];
+    }
+
+    private function socialLinkUrls(mixed $links): array
+    {
+        if (!is_array($links)) {
+            return [];
+        }
+
+        $urls = [];
+        foreach ($links as $link) {
+            $url = is_array($link) ? (string) ($link['url'] ?? '') : (string) $link;
+            if ($url !== '' && preg_match('/^https?:\/\//i', $url)) {
+                $urls[] = $url;
+            }
+        }
+
+        return array_values(array_unique($urls));
+    }
+
+    private function contactPoint(array $settings): array
+    {
+        $phone = $this->firstFilled($settings['contact_phone'] ?? null);
+        $email = $this->firstFilled($settings['contact_email'] ?? null);
+        if ($phone === '' && $email === '') {
+            return [];
+        }
+
+        return [
+            '@type' => 'ContactPoint',
+            'telephone' => $phone,
+            'email' => $email,
+            'contactType' => $this->firstFilled($settings['business_contact_type'] ?? null, 'customer service'),
+        ];
+    }
+
+    private function productAdditionalProperties(mixed $params): array
+    {
+        if (!is_array($params)) {
+            return [];
+        }
+
+        $properties = [];
+        foreach ($params as $param) {
+            if (!is_array($param) || ($param['value'] ?? '') === '') {
+                continue;
+            }
+            $properties[] = [
+                '@type' => 'PropertyValue',
+                'name' => (string) ($param['label'] ?? $param['key'] ?? ''),
+                'value' => (string) $param['value'],
+                'unitText' => (string) ($param['unit'] ?? ''),
+            ];
+        }
+
+        return $properties;
+    }
+
+    private function structuredPageType(array $extraSeo, array $content): string
+    {
+        $allowed = ['WebPage', 'AboutPage', 'ContactPage', 'CollectionPage', 'FAQPage'];
+        $configured = $extraSeo['schema_type'] ?? '';
+        if (in_array($configured, $allowed, true)) {
+            return $configured;
+        }
+
+        return match ((string) ($content['slug'] ?? '')) {
+            'about' => 'AboutPage',
+            'contact' => 'ContactPage',
+            'products', 'news' => 'CollectionPage',
+            default => 'WebPage',
+        };
     }
 
     private function matchedCommentFilter(string $nickname, string $email, string $comment): ?array
@@ -933,7 +1184,28 @@ class SiteService
         return function_exists('mb_substr') ? mb_substr($text, 0, $length, 'UTF-8') : substr($text, 0, $length);
     }
 
-    private function baseUrl(?Request $request): string
+    public function preferredBaseRedirectUrl(Request $request): string
+    {
+        $settings = $this->settings($this->defaultLang($this->languages()));
+        $preferredBaseUrl = $this->baseUrl($request, $settings);
+        $requestBaseUrl = $this->requestBaseUrl($request);
+        if ($preferredBaseUrl === '' || $requestBaseUrl === '' || strcasecmp(rtrim($preferredBaseUrl, '/'), rtrim($requestBaseUrl, '/')) === 0) {
+            return '';
+        }
+
+        $path = '/' . ltrim($request->path(), '/');
+        $query = (string) $request->queryString();
+        return rtrim($preferredBaseUrl, '/') . $path . ($query === '' ? '' : '?' . $query);
+    }
+
+    private function baseUrl(?Request $request, array $settings = []): string
+    {
+        $configured = $this->normalizeBaseUrl((string) ($settings['site_url'] ?? ''));
+        $baseUrl = $configured !== '' ? $configured : $this->requestBaseUrl($request);
+        return $this->applyCanonicalBaseOptions($baseUrl, $settings);
+    }
+
+    private function requestBaseUrl(?Request $request): string
     {
         if (!$request) {
             return '';
@@ -942,6 +1214,65 @@ class SiteService
         $scheme = trim(explode(',', (string) $request->header('x-forwarded-proto', ''))[0]);
         $scheme = $scheme !== '' ? $scheme : 'http';
         return $scheme . '://' . $request->host();
+    }
+
+    private function normalizeBaseUrl(string $url): string
+    {
+        $url = trim($url);
+        if ($url === '') {
+            return '';
+        }
+        if (!preg_match('/^https?:\/\//i', $url)) {
+            $url = 'https://' . $url;
+        }
+
+        $scheme = parse_url($url, PHP_URL_SCHEME) ?: 'https';
+        $host = parse_url($url, PHP_URL_HOST);
+        if (!$host) {
+            return '';
+        }
+        $port = parse_url($url, PHP_URL_PORT);
+
+        return strtolower($scheme) . '://' . strtolower($host) . ($port ? ':' . $port : '');
+    }
+
+    private function applyCanonicalBaseOptions(string $baseUrl, array $settings): string
+    {
+        $baseUrl = $this->normalizeBaseUrl($baseUrl);
+        if ($baseUrl === '') {
+            return '';
+        }
+
+        $scheme = parse_url($baseUrl, PHP_URL_SCHEME) ?: 'http';
+        $host = parse_url($baseUrl, PHP_URL_HOST) ?: '';
+        $port = parse_url($baseUrl, PHP_URL_PORT);
+        if ($this->settingTruthy($settings['force_https'] ?? false)) {
+            $scheme = 'https';
+            if ($port === 80) {
+                $port = null;
+            }
+        }
+
+        $hostMode = (string) ($settings['canonical_host_mode'] ?? 'keep');
+        if ($hostMode === 'www' && !str_starts_with($host, 'www.')) {
+            $host = 'www.' . $host;
+        } elseif ($hostMode === 'non_www' && str_starts_with($host, 'www.')) {
+            $host = substr($host, 4);
+        }
+
+        return $scheme . '://' . $host . ($port ? ':' . $port : '');
+    }
+
+    private function settingTruthy(mixed $value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+        if (is_numeric($value)) {
+            return (int) $value === 1;
+        }
+
+        return in_array(strtolower(trim((string) $value)), ['1', 'true', 'yes', 'on'], true);
     }
 
     private function absoluteUrl(string $baseUrl, string $path): string
@@ -953,7 +1284,7 @@ class SiteService
             return ($this->schemeFromUrl($baseUrl) ?: 'https') . ':' . $path;
         }
 
-        return $baseUrl === '' ? $path : rtrim($baseUrl, '/') . $path;
+        return $baseUrl === '' ? $path : rtrim($baseUrl, '/') . '/' . ltrim($path, '/');
     }
 
     private function absoluteAssetUrl(string $baseUrl, string $url): string
@@ -1015,6 +1346,9 @@ class SiteService
             $unique[$loc] = [
                 'loc' => $loc,
                 'lastmod' => (string) ($item['lastmod'] ?? ''),
+                'alternates' => $item['alternates'] ?? [],
+                'x_default' => (string) ($item['x_default'] ?? ''),
+                'images' => $item['images'] ?? [],
             ];
         }
 
@@ -1071,9 +1405,33 @@ class SiteService
         return (string) ($languages[0]['code'] ?? 'zh-CN');
     }
 
-    private function firstFilled(?string ...$values): string
+    private function localeForLang(array $languages, string $lang): string
+    {
+        foreach ($languages as $language) {
+            if ((string) ($language['code'] ?? '') === $lang) {
+                return $this->localeForLanguage($language);
+            }
+        }
+
+        return str_replace('-', '_', $lang);
+    }
+
+    private function localeForLanguage(array $language): string
+    {
+        $locale = trim((string) ($language['locale'] ?? ''));
+        if ($locale !== '') {
+            return str_replace('-', '_', $locale);
+        }
+
+        return str_replace('-', '_', (string) ($language['code'] ?? ''));
+    }
+
+    private function firstFilled(mixed ...$values): string
     {
         foreach ($values as $value) {
+            if (is_array($value) || is_object($value)) {
+                continue;
+            }
             $value = trim((string) $value);
             if ($value !== '') {
                 return $value;

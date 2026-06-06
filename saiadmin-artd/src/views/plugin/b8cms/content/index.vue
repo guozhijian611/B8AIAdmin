@@ -31,10 +31,17 @@
             <template #icon><ArtSvgIcon icon="ri:add-fill" /></template>
             新增{{ currentTypeLabel }}
           </ElButton>
+          <ElButton :disabled="selectedIds.length === 0" @click="batchSetRobots('index,follow')">
+            批量收录
+          </ElButton>
+          <ElButton :disabled="selectedIds.length === 0" @click="batchSetRobots('noindex,nofollow')">
+            批量不收录
+          </ElButton>
         </template>
       </ArtTableHeader>
 
-      <ElTable v-loading="loading" :data="rows" row-key="id">
+      <ElTable v-loading="loading" :data="rows" row-key="id" @selection-change="handleSelectionChange">
+        <ElTableColumn type="selection" width="48" />
         <ElTableColumn prop="id" label="ID" width="90" />
         <ElTableColumn prop="lang_code" label="语言" width="110" />
         <ElTableColumn prop="title" label="标题" min-width="220" />
@@ -113,7 +120,11 @@
           </ElCol>
           <ElCol :span="8">
             <ElFormItem label="访问别名" prop="slug">
-              <ElInput v-model="form.slug" placeholder="about" />
+              <ElInput v-model="form.slug" placeholder="about">
+                <template #append>
+                  <ElButton @click="generateSlug">生成</ElButton>
+                </template>
+              </ElInput>
             </ElFormItem>
           </ElCol>
           <ElCol :span="24">
@@ -139,6 +150,21 @@
           <ElCol :span="24">
             <ElFormItem label="封面图" prop="cover_image">
               <sa-image-upload v-model="form.cover_image" :limit="1" :multiple="false" />
+            </ElFormItem>
+          </ElCol>
+          <ElCol :span="12">
+            <ElFormItem label="图片 Alt">
+              <ElInput v-model="imageSeo.image_alt" placeholder="留空使用标题" />
+            </ElFormItem>
+          </ElCol>
+          <ElCol :span="12">
+            <ElFormItem label="图片 Title">
+              <ElInput v-model="imageSeo.image_title" placeholder="留空使用 Alt" />
+            </ElFormItem>
+          </ElCol>
+          <ElCol :span="24">
+            <ElFormItem label="图片说明">
+              <ElInput v-model="imageSeo.image_caption" type="textarea" :rows="2" placeholder="用于图片 sitemap caption" />
             </ElFormItem>
           </ElCol>
           <template v-if="form.content_type === 'product'">
@@ -232,7 +258,11 @@
           </ElCol>
           <ElCol :span="24">
             <ElFormItem label="SEO 标题" prop="seo_title">
-              <ElInput v-model="form.seo_title" />
+              <ElInput v-model="form.seo_title">
+                <template #suffix>
+                  <span :class="seoTitleClass">{{ effectiveSeoTitle.length }}/60</span>
+                </template>
+              </ElInput>
             </ElFormItem>
           </ElCol>
           <ElCol :span="12">
@@ -261,7 +291,15 @@
           <ElCol :span="24">
             <ElFormItem label="SEO 描述" prop="seo_description">
               <ElInput v-model="form.seo_description" type="textarea" :rows="2" />
+              <div class="seo-count" :class="seoDescriptionClass">{{ effectiveSeoDescription.length }}/160</div>
             </ElFormItem>
+          </ElCol>
+          <ElCol :span="24">
+            <div class="seo-preview">
+              <div class="seo-preview-title">{{ effectiveSeoTitle }}</div>
+              <div class="seo-preview-url">{{ previewUrl }}</div>
+              <div class="seo-preview-desc">{{ effectiveSeoDescription }}</div>
+            </div>
           </ElCol>
           <ElCol :span="24">
             <ElDivider content-position="left">SEO 高级设置</ElDivider>
@@ -309,6 +347,64 @@
               <ElInput v-model="seoAdvanced.og_description" type="textarea" :rows="2" placeholder="留空使用 SEO 描述" />
             </ElFormItem>
           </ElCol>
+          <ElCol :span="12">
+            <ElFormItem label="Twitter 标题">
+              <ElInput v-model="seoAdvanced.twitter_title" placeholder="留空使用 OG 标题" />
+            </ElFormItem>
+          </ElCol>
+          <ElCol :span="12">
+            <ElFormItem label="Twitter 图片">
+              <sa-image-upload v-model="seoAdvanced.twitter_image" :limit="1" :multiple="false" />
+            </ElFormItem>
+          </ElCol>
+          <ElCol :span="12">
+            <ElFormItem label="Twitter 作者">
+              <ElInput v-model="seoAdvanced.twitter_creator" placeholder="@username" />
+            </ElFormItem>
+          </ElCol>
+          <ElCol :span="12">
+            <ElFormItem label="结构类型">
+              <ElSelect v-model="seoAdvanced.schema_type" clearable placeholder="自动识别" style="width: 100%">
+                <ElOption label="WebPage" value="WebPage" />
+                <ElOption label="AboutPage" value="AboutPage" />
+                <ElOption label="ContactPage" value="ContactPage" />
+                <ElOption label="CollectionPage" value="CollectionPage" />
+                <ElOption label="FAQPage" value="FAQPage" />
+              </ElSelect>
+            </ElFormItem>
+          </ElCol>
+          <ElCol :span="24">
+            <ElFormItem label="Twitter 描述">
+              <ElInput v-model="seoAdvanced.twitter_description" type="textarea" :rows="2" placeholder="留空使用 OG 描述" />
+            </ElFormItem>
+          </ElCol>
+          <ElCol v-if="form.content_type === 'article'" :span="12">
+            <ElFormItem label="文章作者">
+              <ElInput v-model="seoAdvanced.author_name" placeholder="留空使用站点名称" />
+            </ElFormItem>
+          </ElCol>
+          <template v-if="form.content_type === 'product'">
+            <ElCol :span="12">
+              <ElFormItem label="产品品牌">
+                <ElInput v-model="seoAdvanced.product_brand" placeholder="留空使用分类或站点名称" />
+              </ElFormItem>
+            </ElCol>
+            <ElCol :span="12">
+              <ElFormItem label="制造商">
+                <ElInput v-model="seoAdvanced.product_manufacturer" />
+              </ElFormItem>
+            </ElCol>
+            <ElCol :span="12">
+              <ElFormItem label="MPN">
+                <ElInput v-model="seoAdvanced.product_mpn" />
+              </ElFormItem>
+            </ElCol>
+            <ElCol :span="12">
+              <ElFormItem label="GTIN">
+                <ElInput v-model="seoAdvanced.product_gtin" />
+              </ElFormItem>
+            </ElCol>
+          </template>
           <ElCol :span="8">
             <ElFormItem label="排序" prop="sort">
               <ElInputNumber v-model="form.sort" :min="0" />
@@ -343,6 +439,7 @@
   const rows = ref<any[]>([])
   const languages = ref<any[]>([])
   const templateOptions = ref<any[]>([])
+  const selectedIds = ref<number[]>([])
   const loading = ref(false)
   const templateLoading = ref(false)
   const dialogVisible = ref(false)
@@ -360,6 +457,9 @@
     page: '页面'
   }
   const currentTypeLabel = computed(() => typeLabels[search.content_type] || '内容')
+  const defaultLangCode = computed(() => {
+    return languages.value.find((item) => Number(item.is_default) === 1)?.code || languages.value[0]?.code || 'zh-CN'
+  })
 
   type ProductParamType = 'text' | 'textarea' | 'number' | 'select' | 'switch'
   type ProductParamOption = {
@@ -384,8 +484,23 @@
     og_title: string
     og_description: string
     og_image: string
+    twitter_title: string
+    twitter_description: string
+    twitter_image: string
+    twitter_creator: string
     twitter_card: string
+    author_name: string
+    schema_type: string
+    product_brand: string
+    product_manufacturer: string
+    product_mpn: string
+    product_gtin: string
     schema_enabled: boolean
+  }
+  type ImageSeo = {
+    image_alt: string
+    image_title: string
+    image_caption: string
   }
 
   const defaultProductParamSchema: ProductParamField[] = [
@@ -413,10 +528,25 @@
     og_title: '',
     og_description: '',
     og_image: '',
+    twitter_title: '',
+    twitter_description: '',
+    twitter_image: '',
+    twitter_creator: '',
     twitter_card: 'summary_large_image',
+    author_name: '',
+    schema_type: '',
+    product_brand: '',
+    product_manufacturer: '',
+    product_mpn: '',
+    product_gtin: '',
     schema_enabled: true
   }
   const seoAdvanced = reactive<SeoAdvanced>({ ...defaultSeoAdvanced })
+  const imageSeo = reactive<ImageSeo>({
+    image_alt: '',
+    image_title: '',
+    image_caption: ''
+  })
 
   const initialForm = {
     id: undefined as number | undefined,
@@ -451,6 +581,22 @@
     slug: [{ required: true, message: '访问别名必填', trigger: 'blur' }],
     title: [{ required: true, message: '标题必填', trigger: 'blur' }]
   }
+
+  const effectiveSeoTitle = computed(() => (form.seo_title || form.title || '').trim())
+  const effectiveSeoDescription = computed(() => (form.seo_description || form.summary || '').trim())
+  const seoTitleClass = computed(() => ({
+    'seo-count-ok': effectiveSeoTitle.value.length > 0 && effectiveSeoTitle.value.length <= 60,
+    'seo-count-warn': effectiveSeoTitle.value.length > 60
+  }))
+  const seoDescriptionClass = computed(() => ({
+    'seo-count-ok': effectiveSeoDescription.value.length > 0 && effectiveSeoDescription.value.length <= 160,
+    'seo-count-warn': effectiveSeoDescription.value.length > 160
+  }))
+  const previewUrl = computed(() => {
+    const type = form.content_type || 'page'
+    const langPrefix = form.lang_code && form.lang_code !== defaultLangCode.value ? `/${form.lang_code}` : ''
+    return `/cms${langPrefix}/${type}/${form.slug || 'slug'}.html`
+  })
 
   const loadLanguages = async () => {
     const data = await languageApi.list({ saiType: 'all' })
@@ -509,6 +655,7 @@
 
   const resetSeoAdvanced = () => {
     Object.assign(seoAdvanced, { ...defaultSeoAdvanced })
+    Object.assign(imageSeo, { image_alt: '', image_title: '', image_caption: '' })
   }
 
   const setupSeoAdvanced = (extraValue: any = form.extra) => {
@@ -521,20 +668,48 @@
       og_title: String(seo.og_title || ''),
       og_description: String(seo.og_description || ''),
       og_image: String(seo.og_image || ''),
+      twitter_title: String(seo.twitter_title || ''),
+      twitter_description: String(seo.twitter_description || ''),
+      twitter_image: String(seo.twitter_image || ''),
+      twitter_creator: String(seo.twitter_creator || ''),
       twitter_card: String(seo.twitter_card || defaultSeoAdvanced.twitter_card),
+      author_name: String(seo.author_name || ''),
+      schema_type: String(seo.schema_type || ''),
+      product_brand: String(seo.product_brand || ''),
+      product_manufacturer: String(seo.product_manufacturer || ''),
+      product_mpn: String(seo.product_mpn || ''),
+      product_gtin: String(seo.product_gtin || ''),
       schema_enabled: seo.schema_enabled !== false
+    })
+    Object.assign(imageSeo, {
+      image_alt: String(extra.image_alt || ''),
+      image_title: String(extra.image_title || ''),
+      image_caption: String(extra.image_caption || '')
     })
   }
 
   const createSeoExtra = (extraValue: any) => {
     const extra = normalizeExtra(extraValue)
+    extra.image_alt = imageSeo.image_alt.trim()
+    extra.image_title = imageSeo.image_title.trim()
+    extra.image_caption = imageSeo.image_caption.trim()
     extra.seo = {
       robots: seoAdvanced.robots || defaultSeoAdvanced.robots,
       canonical_url: seoAdvanced.canonical_url.trim(),
       og_title: seoAdvanced.og_title.trim(),
       og_description: seoAdvanced.og_description.trim(),
       og_image: seoAdvanced.og_image,
+      twitter_title: seoAdvanced.twitter_title.trim(),
+      twitter_description: seoAdvanced.twitter_description.trim(),
+      twitter_image: seoAdvanced.twitter_image,
+      twitter_creator: seoAdvanced.twitter_creator.trim(),
       twitter_card: seoAdvanced.twitter_card || defaultSeoAdvanced.twitter_card,
+      author_name: seoAdvanced.author_name.trim(),
+      schema_type: seoAdvanced.schema_type,
+      product_brand: seoAdvanced.product_brand.trim(),
+      product_manufacturer: seoAdvanced.product_manufacturer.trim(),
+      product_mpn: seoAdvanced.product_mpn.trim(),
+      product_gtin: seoAdvanced.product_gtin.trim(),
       schema_enabled: seoAdvanced.schema_enabled
     }
     return extra
@@ -679,6 +854,29 @@
     }
   }
 
+  const handleSelectionChange = (selection: any[]) => {
+    selectedIds.value = selection.map((item) => Number(item.id)).filter(Boolean)
+  }
+
+  const batchSetRobots = async (robots: string) => {
+    if (selectedIds.value.length === 0) return
+    await api.batchSeoRobots({ ids: selectedIds.value, robots })
+    ElMessage.success('批量收录策略已更新')
+    selectedIds.value = []
+    loadData()
+  }
+
+  const generateSlug = () => {
+    const source = form.title || form.slug || form.content_type
+    const slug = source
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+    form.slug = slug || `${form.content_type}-${Date.now().toString(36)}`
+  }
+
   const openDialog = async (row?: any) => {
     resetForm()
     if (row?.id) {
@@ -745,3 +943,48 @@
     loadData()
   })
 </script>
+
+<style scoped>
+  .seo-preview {
+    margin: 0 0 18px 110px;
+    padding: 14px 16px;
+    border: 1px solid var(--el-border-color);
+    border-radius: 8px;
+    background: var(--el-fill-color-light);
+  }
+
+  .seo-preview-title {
+    color: #1a0dab;
+    font-size: 18px;
+    line-height: 1.4;
+  }
+
+  .seo-preview-url {
+    margin-top: 4px;
+    color: #188038;
+    font-size: 13px;
+    word-break: break-all;
+  }
+
+  .seo-preview-desc {
+    margin-top: 6px;
+    color: var(--el-text-color-regular);
+    line-height: 1.6;
+  }
+
+  .seo-count {
+    width: 100%;
+    margin-top: 4px;
+    color: var(--el-text-color-secondary);
+    font-size: 12px;
+    text-align: right;
+  }
+
+  .seo-count-ok {
+    color: var(--el-color-success);
+  }
+
+  .seo-count-warn {
+    color: var(--el-color-danger);
+  }
+</style>

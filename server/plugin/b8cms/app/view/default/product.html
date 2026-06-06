@@ -3,7 +3,10 @@
     <h1>{$content.title}</h1>
     <p class="summary">{$content.summary}</p>
     {if !empty($content.cover_image)}
-    <img src="{$content.cover_image}" alt="{$content.title}">
+    <img src="{$content.cover_image}" alt="{$content.image_alt}" title="{$content.image_title}">
+    {if !empty($content.image_caption)}
+    <p class="image-caption">{$content.image_caption}</p>
+    {/if}
     {/if}
     {if $content.price > 0}
     <div class="product-price">{$content.currency} {$content.price}</div>

@@ -191,7 +191,15 @@ B8AIadmin 是父框架，B8CMS 前台默认挂载在 `/cms`，避免插件抢占
 
 内容详情页的规范地址统一使用 `.html` 后缀；旧版无后缀详情地址会 301 跳转到对应 `.html` 地址，避免搜索引擎收录重复页面。
 
-`sitemap.xml` 只输出已启用语言、已发布且未删除的首页、文章、产品和页面 URL，详情页 URL 与 canonical 保持一致，统一带 `.html` 后缀。
+`sitemap.xml` 只输出已启用语言、已发布且未删除的首页、文章、产品和页面 URL，详情页 URL 与 canonical 保持一致，统一带 `.html` 后缀。Sitemap 会同时输出 `xhtml:link` 多语言替代链接和 `image:image` 图片条目，图片来自封面图、内容图片和 SEO 图片。
+
+前台 canonical、sitemap、robots、Open Graph URL 会优先使用后台“站点配置”中的正式站点域名：
+
+| 配置标识 | 说明 |
+| --- | --- |
+| `site_url` | 正式站点域名，留空时使用当前请求 Host |
+| `force_https` | 设置为 `1` 时强制输出 HTTPS，并对 HTTP 访问做 301 |
+| `canonical_host_mode` | `keep` 保持当前域名，`www` 统一 www，`non_www` 统一裸域 |
 
 `robots.txt` 从后台“站点配置”中的 `robots` 分组动态生成：
 
@@ -309,29 +317,42 @@ SEO 的优先级为：
 | `rel="alternate" hreflang="语言编码"` | 同一内容在其他语言下的地址 |
 | `rel="alternate" hreflang="x-default"` | 默认语言地址 |
 | `meta name="robots"` | 当前页面收录策略 |
-| `og:*` | Open Graph 分享信息 |
-| `twitter:*` | Twitter Card 分享信息 |
-| `application/ld+json` | 结构化数据，首页输出 `WebSite/Organization`，文章输出 `Article`，产品输出 `Product`，页面输出 `WebPage` |
+| `og:*` | Open Graph 分享信息，包含站点名、locale、文章时间和产品价格等扩展标签 |
+| `twitter:*` | Twitter Card 分享信息，支持站点账号、作者、独立标题、描述和图片 |
+| `application/ld+json` | 结构化数据，首页输出 `WebSite/Organization`，文章输出 `Article`，产品输出 `Product`，页面输出 `WebPage/AboutPage/ContactPage/CollectionPage` |
 
 详情页的多语言切换会优先指向同一个 `content_type + slug` 在其他语言下的详情页。例如中文产品 `/cms/product/b8cms-growth-suite.html` 会对应英文 `/cms/en-US/product/b8cms-growth-suite.html`。如果某个语言没有相同 slug 的已发布内容，则不会输出该语言的 alternate 链接，避免搜索引擎看到不存在的语言版本。
 
-后台内容管理的“SEO 高级设置”保存到 `extra.seo`，示例：
+后台内容管理会校验同语言、同内容类型下的 `slug` 不重复，并提供标题生成 slug、SEO 预览、标题与描述长度提示、批量收录策略、图片 Alt/Title/Caption、Twitter、文章作者和产品结构化字段。SEO 高级设置保存到 `extra.seo`，图片 SEO 保存到内容 `extra` 根节点，示例：
 
 ```json
 {
+  "image_alt": "B8CMS Starter 独立站套件界面",
+  "image_title": "B8CMS Starter 产品图",
+  "image_caption": "用于 B8CMS Starter 产品详情和图片 sitemap 的说明。",
   "seo": {
     "robots": "index,follow",
     "canonical_url": "",
     "og_title": "B8CMS Starter",
     "og_description": "适合独立站起步的多语言 CMS 产品套件。",
     "og_image": "/upload/b8cms/starter-og.png",
+    "twitter_title": "B8CMS Starter",
+    "twitter_description": "多语言独立站起步套件。",
+    "twitter_image": "/upload/b8cms/starter-twitter.png",
+    "twitter_creator": "@openb8",
     "twitter_card": "summary_large_image",
+    "author_name": "B8 Team",
+    "schema_type": "",
+    "product_brand": "B8CMS",
+    "product_manufacturer": "OpenB8",
+    "product_mpn": "B8CMS-STARTER",
+    "product_gtin": "",
     "schema_enabled": true
   }
 }
 ```
 
-`canonical_url` 留空时自动使用当前规范地址；`schema_enabled` 关闭后不会输出 JSON-LD。
+`canonical_url` 留空时自动使用当前规范地址；`schema_enabled` 关闭后不会输出 JSON-LD。产品页会把产品扩展参数转换成 `additionalProperty`，并把价格、库存、SKU、品牌、制造商、MPN/GTIN 写入结构化数据。
 
 ## 多语言内容规则
 

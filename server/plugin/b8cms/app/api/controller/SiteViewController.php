@@ -14,6 +14,10 @@ class SiteViewController
 
     public function home(Request $request): Response
     {
+        if ($response = $this->redirectPreferredBase($request)) {
+            return $response;
+        }
+
         $lang = (string) $request->route?->param('lang', $request->input('lang', ''));
         if ($response = $this->redirectLegacyLangUrl($request, $this->site->canonicalPath($lang))) {
             return $response;
@@ -39,6 +43,10 @@ class SiteViewController
 
     public function sitemap(Request $request): Response
     {
+        if ($response = $this->redirectPreferredBase($request)) {
+            return $response;
+        }
+
         $lang = (string) $request->route?->param('lang', '');
         return response($this->site->sitemapXml($request, $lang ?: null), 200, [
             'Content-Type' => 'application/xml; charset=utf-8',
@@ -47,6 +55,10 @@ class SiteViewController
 
     public function robots(Request $request): Response
     {
+        if ($response = $this->redirectPreferredBase($request)) {
+            return $response;
+        }
+
         return response($this->site->robotsTxt($request), 200, [
             'Content-Type' => 'text/plain; charset=utf-8',
         ]);
@@ -54,6 +66,10 @@ class SiteViewController
 
     private function content(Request $request, string $type): Response
     {
+        if ($response = $this->redirectPreferredBase($request)) {
+            return $response;
+        }
+
         $slug = preg_replace('/\.html$/i', '', (string) $request->route->param('slug', '')) ?: '';
         $lang = (string) $request->route->param('lang', $request->input('lang', ''));
         $content = $this->site->contentDetail($type, $slug, $lang);
@@ -87,6 +103,12 @@ class SiteViewController
 
         $templatePath = base_path() . "/plugin/b8cms/app/view/{$templateKey}/{$template}.html";
         return is_file($templatePath) ? $template : $fallback;
+    }
+
+    private function redirectPreferredBase(Request $request): ?Response
+    {
+        $target = $this->site->preferredBaseRedirectUrl($request);
+        return $target === '' ? null : redirect($target)->withStatus(301);
     }
 
     private function redirectLegacyLangUrl(Request $request, string $canonicalPath): ?Response
