@@ -172,7 +172,7 @@ B8AIadmin 是父框架，B8CMS 前台默认挂载在 `/cms`，避免插件抢占
 | --- | --- |
 | `/cms` | 默认语言首页 |
 | `/cms/{lang}` | 指定语言首页 |
-| `/robots.txt` | 根路径 robots，指向当前 B8CMS sitemap |
+| `/robots.txt` | 根路径 robots，从后台站点配置动态生成并指向当前 B8CMS sitemap |
 | `/cms/robots.txt` | 当前挂载路径下的 robots 调试入口 |
 | `/cms/sitemap.xml` | 全站多语言 sitemap |
 | `/cms/{lang}/sitemap.xml` | 指定语言 sitemap |
@@ -193,7 +193,14 @@ B8AIadmin 是父框架，B8CMS 前台默认挂载在 `/cms`，避免插件抢占
 
 `sitemap.xml` 只输出已启用语言、已发布且未删除的首页、文章、产品和页面 URL，详情页 URL 与 canonical 保持一致，统一带 `.html` 后缀。
 
-`robots.txt` 默认允许前台收录，屏蔽 `/admin`、`/app/`、`/apidoc/` 和 `/runtime/`，并输出当前站点的 `Sitemap` 地址。
+`robots.txt` 从后台“站点配置”中的 `robots` 分组动态生成：
+
+| 配置标识 | 说明 |
+| --- | --- |
+| `robots_rules` | robots 基础规则，多行文本，例如 `User-agent`、`Allow`、`Disallow` |
+| `robots_extra` | robots 附加规则，多行文本，用于补充 Crawl-delay、指定爬虫规则等 |
+
+系统会自动按当前域名和 B8CMS 挂载路径追加 `Sitemap` 地址，后台规则中即使填写了旧的 `Sitemap:` 行也会被前台生成时过滤，避免域名或路径变更后出现错误 sitemap。
 
 ## ThinkTemplate 模板开发
 

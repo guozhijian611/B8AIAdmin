@@ -128,17 +128,14 @@ class SiteService
 
     public function robotsTxt(Request $request): string
     {
+        $settings = $this->settings($this->defaultLang($this->languages()));
         $sitemapUrl = $this->absoluteUrl($this->baseUrl($request), $this->withSiteBase('/sitemap.xml'));
-        return implode("\n", [
-            'User-agent: *',
-            'Allow: /',
-            'Disallow: /admin',
-            'Disallow: /app/',
-            'Disallow: /apidoc/',
-            'Disallow: /runtime/',
-            'Sitemap: ' . $sitemapUrl,
-            '',
-        ]);
+        $lines = $this->robotsSettingLines($settings['robots_rules'] ?? '', $this->defaultRobotsRules());
+        $lines = array_merge($lines, $this->robotsSettingLines($settings['robots_extra'] ?? ''));
+        $lines = array_values(array_filter($lines, fn (string $line) => !preg_match('/^Sitemap\s*:/i', $line)));
+        $lines[] = 'Sitemap: ' . $sitemapUrl;
+
+        return implode("\n", $lines) . "\n";
     }
 
     public function submitContact(Request $request): int
@@ -575,6 +572,41 @@ class SiteService
         }
 
         return $this->uniqueSitemapItems($items);
+    }
+
+    private function defaultRobotsRules(): string
+    {
+        return implode("\n", [
+            'User-agent: *',
+            'Allow: /',
+            'Disallow: /admin',
+            'Disallow: /app/',
+            'Disallow: /apidoc/',
+            'Disallow: /runtime/',
+        ]);
+    }
+
+    private function robotsSettingLines(mixed $value, string $fallback = ''): array
+    {
+        if (is_array($value)) {
+            $text = implode("\n", array_map('strval', $value));
+        } else {
+            $text = trim((string) $value);
+        }
+
+        if ($text === '') {
+            $text = $fallback;
+        }
+
+        if ($text === '') {
+            return [];
+        }
+
+        $lines = preg_split('/\R/', $text) ?: [];
+        return array_values(array_filter(array_map(function (string $line) {
+            $line = trim($line);
+            return preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $line) ?: '';
+        }, $lines), fn (string $line) => $line !== ''));
     }
 
     private function normalizeSiteUrl(string $url, string $lang, string $defaultLang): string

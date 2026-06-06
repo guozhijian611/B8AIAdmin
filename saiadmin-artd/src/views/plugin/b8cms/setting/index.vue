@@ -10,6 +10,7 @@
             <ElOption label="联系" value="contact" />
             <ElOption label="媒体" value="media" />
             <ElOption label="底部" value="footer" />
+            <ElOption label="Robots" value="robots" />
           </ElSelect>
         </ElFormItem>
         <ElFormItem label="语言">
@@ -75,7 +76,7 @@
           <ElRow :gutter="18">
             <ElCol :span="12">
               <ElFormItem label="分组" prop="group_key">
-                <ElInput v-model="form.group_key" placeholder="brand/seo/home/contact/media/footer" />
+                <ElInput v-model="form.group_key" placeholder="brand/seo/home/contact/media/footer/robots" />
               </ElFormItem>
             </ElCol>
             <ElCol :span="12">
