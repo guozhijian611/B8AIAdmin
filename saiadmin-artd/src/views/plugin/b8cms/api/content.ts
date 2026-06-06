@@ -1,3 +1,11 @@
 import { createCrudApi } from './common'
+import request from '@/utils/http'
 
-export default createCrudApi('/app/b8cms/admin/Content')
+const baseUrl = '/app/b8cms/admin/Content'
+
+export default {
+  ...createCrudApi(baseUrl),
+  templateOptions(params: Record<string, any>) {
+    return request.get<any>({ url: `${baseUrl}/templateOptions`, params })
+  }
+}

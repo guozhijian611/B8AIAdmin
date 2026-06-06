@@ -242,7 +242,20 @@
           </ElCol>
           <ElCol :span="12">
             <ElFormItem label="模板文件" prop="template_file">
-              <ElInput v-model="form.template_file" placeholder="article/product/page" />
+              <ElSelect
+                v-model="form.template_file"
+                clearable
+                filterable
+                :loading="templateLoading"
+                placeholder="留空自动使用类型默认模板"
+              >
+                <ElOption
+                  v-for="item in templateOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
+              </ElSelect>
             </ElFormItem>
           </ElCol>
           <ElCol :span="24">
@@ -283,7 +296,9 @@
 
   const rows = ref<any[]>([])
   const languages = ref<any[]>([])
+  const templateOptions = ref<any[]>([])
   const loading = ref(false)
+  const templateLoading = ref(false)
   const dialogVisible = ref(false)
   const formRef = ref<FormInstance>()
   const search = reactive({
@@ -390,6 +405,20 @@
       pagination.total = data?.total || 0
     } finally {
       loading.value = false
+    }
+  }
+
+  const loadTemplateOptions = async (contentType = form.content_type) => {
+    templateLoading.value = true
+    try {
+      const data = await api.templateOptions({ content_type: contentType })
+      templateOptions.value = data?.options || []
+      if (!form.template_file) {
+        const preferred = templateOptions.value.find((item) => item.value === contentType)
+        form.template_file = preferred?.value || templateOptions.value[0]?.value || contentType
+      }
+    } finally {
+      templateLoading.value = false
     }
   }
 
@@ -543,7 +572,6 @@
   const resetForm = () => {
     Object.assign(form, { ...initialForm, images: [], extra: {}, content_type: search.content_type })
     form.lang_code = languages.value[0]?.code || 'zh-CN'
-    form.template_file = search.content_type
     productParamFields.value = []
     productParamSchemaText.value = ''
     clearProductParamValues()
@@ -557,9 +585,14 @@
     if (row?.id) {
       const detail = await api.read(row.id)
       Object.assign(form, { ...detail, extra: normalizeExtra(detail.extra) })
+      const selectedTemplate = form.template_file
+      await loadTemplateOptions(form.content_type)
+      form.template_file = selectedTemplate || form.template_file
       if (form.content_type === 'product') {
         setupProductExtraEditor(form.extra)
       }
+    } else {
+      await loadTemplateOptions(form.content_type)
     }
     dialogVisible.value = true
   }
@@ -583,7 +616,10 @@
 
   watch(
     () => form.content_type,
-    (type) => {
+    async (type) => {
+      if (!dialogVisible.value) return
+      form.template_file = ''
+      await loadTemplateOptions(type)
       if (type === 'product' && productParamFields.value.length === 0) {
         setupProductExtraEditor()
       }

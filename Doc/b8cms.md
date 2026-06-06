@@ -194,7 +194,7 @@ think_view($templateKey . '/' . $template, $context, '', 'b8cms')
 server/plugin/b8cms/app/view/default/product.html
 ```
 
-文章、产品、页面都可以在内容管理中单独填写“模板文件”。填写时不需要带 `.html` 后缀，例如：
+文章、产品、页面都可以在内容管理中单独选择“模板文件”。后台会从当前启用模板目录动态读取 `.html` 文件生成下拉选项，并排除 `public/*` 公共片段和 `index.html` 首页模板；保存时不需要带 `.html` 后缀，例如：
 
 | 内容类型 | 模板文件字段 | 实际加载文件 |
 | --- | --- | --- |
