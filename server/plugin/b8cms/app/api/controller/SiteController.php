@@ -59,6 +59,42 @@ class SiteController
         return $content ? ok($content) : fail('内容不存在', 404);
     }
 
+    #[Apidoc\Title('文章评论列表')]
+    #[Apidoc\Url('/app/b8cms/api/comment/list')]
+    #[Apidoc\Method('GET')]
+    #[Apidoc\Query('content_id', type: 'int', require: true, desc: '文章ID')]
+    public function commentList(Request $request): Response
+    {
+        $contentId = (int) $request->input('content_id', 0);
+        if ($contentId <= 0) {
+            return fail('文章ID必须填写');
+        }
+
+        return ok($this->site->commentList($contentId));
+    }
+
+    #[Apidoc\Title('提交文章评论')]
+    #[Apidoc\Url('/app/b8cms/api/comment/submit')]
+    #[Apidoc\Method('POST')]
+    #[Apidoc\Param('content_id', type: 'int', require: true, desc: '文章ID')]
+    #[Apidoc\Param('parent_id', type: 'int', require: false, desc: '父级评论ID')]
+    #[Apidoc\Param('nickname', type: 'string', require: true, desc: '昵称')]
+    #[Apidoc\Param('email', type: 'string', require: true, desc: '邮箱')]
+    #[Apidoc\Param('comment', type: 'string', require: true, desc: '评论内容')]
+    #[Apidoc\Param('website', type: 'string', require: false, desc: '个人网站')]
+    #[Apidoc\Param('browser_fingerprint', type: 'string', require: false, desc: '浏览器指纹')]
+    #[Apidoc\Param('source_url', type: 'string', require: false, desc: '来源页面')]
+    public function submitComment(Request $request): Response
+    {
+        try {
+            $result = $this->site->submitComment($request);
+        } catch (\InvalidArgumentException $exception) {
+            return fail($exception->getMessage());
+        }
+
+        return ok($result, $result['status'] === 3 ? '评论已提交，因命中规则暂不展示' : '评论提交成功');
+    }
+
     #[Apidoc\Title('提交联系表单')]
     #[Apidoc\Url('/app/b8cms/api/contact/submit')]
     #[Apidoc\Method('POST')]

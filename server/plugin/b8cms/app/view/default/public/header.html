@@ -52,6 +52,29 @@
         .article h1 { font-size: clamp(34px, 5vw, 56px); line-height: 1.08; margin: 0 0 16px; }
         .article .summary { color: var(--muted); font-size: 18px; line-height: 1.8; }
         .article-content { margin-top: 32px; line-height: 1.9; font-size: 17px; }
+        .comment-section { margin-top: 46px; padding-top: 32px; border-top: 1px solid var(--line); }
+        .comment-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 20px; }
+        .comment-head h2 { margin: 0 0 8px; font-size: 26px; }
+        .comment-head p { margin: 0; color: var(--muted); line-height: 1.7; }
+        .comment-refresh, .comment-actions button, .comment-replying button { border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--brand); padding: 8px 12px; font: inherit; cursor: pointer; }
+        .comment-list { display: grid; gap: 14px; color: var(--muted); }
+        .comment-item { margin-left: calc(var(--comment-level, 0) * 24px); border: 1px solid var(--line); border-radius: 8px; padding: 16px; background: #fff; }
+        .comment-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; }
+        .comment-meta strong { color: var(--ink); font-size: 15px; }
+        .comment-body { margin: 10px 0 12px; color: var(--ink); line-height: 1.8; white-space: pre-wrap; }
+        .comment-actions { display: flex; gap: 10px; }
+        .comment-actions button { padding: 6px 10px; font-size: 13px; }
+        .comment-children { display: grid; gap: 12px; margin-top: 14px; }
+        .comment-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 24px; padding: 18px; border: 1px solid var(--line); border-radius: 8px; background: #f9fafb; }
+        .comment-form label { display: grid; gap: 6px; color: var(--muted); font-size: 14px; }
+        .comment-form input, .comment-form textarea { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 12px 13px; background: #fff; color: var(--ink); font: inherit; outline: none; }
+        .comment-form input:focus, .comment-form textarea:focus { border-color: var(--brand); }
+        .comment-form textarea, .comment-form .full, .comment-replying { grid-column: 1 / -1; }
+        .comment-form button[type="submit"] { justify-self: start; border: 0; border-radius: 8px; padding: 12px 22px; color: #fff; background: var(--brand); font-weight: 700; cursor: pointer; }
+        .comment-form button[disabled] { opacity: .65; cursor: wait; }
+        .comment-replying { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); }
+        .comment-replying[hidden] { display: none; }
+        .comment-message { min-height: 24px; color: var(--brand); }
         .product-price { color: var(--brand); font-size: 28px; font-weight: 800; margin: 16px 0; }
         .product-specs { margin-top: 30px; padding: 24px; border: 1px solid var(--line); border-radius: 8px; background: #f9fafb; }
         .product-specs h2 { margin: 0 0 18px; font-size: 24px; }
@@ -74,7 +97,9 @@
         .contact-box { line-height: 1.9; }
         @media (max-width: 840px) {
             .site-nav { align-items: flex-start; flex-direction: column; padding: 18px 0; }
-            .grid, .feature-grid, .spec-grid, .contact-form, .footer-grid { grid-template-columns: 1fr; }
+            .grid, .feature-grid, .spec-grid, .contact-form, .comment-form, .footer-grid { grid-template-columns: 1fr; }
+            .comment-head { flex-direction: column; }
+            .comment-item { margin-left: 0; }
             .hero { padding: 56px 0; }
         }
     </style>

@@ -16,6 +16,8 @@
 | 导航管理 | 支持头部、底部等导航位置，导航标题按语言分别维护 |
 | 站点设置 | 支持站点名称、Logo、favicon、首页文案、媒体链接、联系方式和 footer 配置 |
 | 联系表单 | 前台提交留言，后台查看、处理和备注 |
+| 文章评论 | 前台免登录提交评论和无限级回复，后台审核、屏蔽和审计访客信息 |
+| 评论屏蔽规则 | 预设并管理屏蔽词、屏蔽邮箱和临时邮箱域名 |
 | ThinkTemplate 视图 | 前台页面使用 `topthink/think-template` 渲染，并按当前启用模板加载视图 |
 
 ## 安装和迁移
@@ -52,8 +54,10 @@ Database/migrations/20260606151515_add_b_8cms_plugin.php
 | `b8cms_navigation` | 多语言导航 |
 | `b8cms_site_setting` | 站点设置 |
 | `b8cms_contact_message` | 联系表单留言 |
+| `b8cms_comment` | 文章评论、回复层级和访客审计信息 |
+| `b8cms_comment_filter` | 评论屏蔽词、邮箱和域名规则 |
 
-迁移同时会预设 `zh-CN`、`en-US` 两种语言，内置 `default` 模板，写入示例文章、产品、页面、导航、站点设置和后台菜单权限。
+迁移同时会预设 `zh-CN`、`en-US` 两种语言，内置 `default` 模板，写入示例文章、产品、页面、导航、站点设置、评论屏蔽词、屏蔽邮箱和后台菜单权限。
 
 ## 后台管理模块
 
@@ -67,6 +71,8 @@ Database/migrations/20260606151515_add_b_8cms_plugin.php
 | 导航管理 | `/plugin/b8cms/navigation` | 维护头部和底部导航 |
 | 站点设置 | `/plugin/b8cms/setting` | 维护 Logo、媒体链接、联系方式、首页和 footer 文案 |
 | 联系留言 | `/plugin/b8cms/contact` | 查看、删除、处理联系表单留言 |
+| 评论管理 | `/plugin/b8cms/comment` | 查看评论、通过评论、屏蔽评论、审计访客信息 |
+| 屏蔽规则 | `/plugin/b8cms/comment-filter` | 维护屏蔽词、屏蔽邮箱和临时邮箱域名 |
 
 后台控制器位于：
 
@@ -91,6 +97,8 @@ server/plugin/b8cms/app/validate
 | `/app/b8cms/api/site/bootstrap` | GET | 获取站点启动数据，包括语言、模板、设置、导航和推荐内容 |
 | `/app/b8cms/api/content/list` | GET | 获取文章、产品或页面列表 |
 | `/app/b8cms/api/content/detail` | GET | 获取文章、产品或页面详情 |
+| `/app/b8cms/api/comment/list` | GET | 获取文章已通过评论树 |
+| `/app/b8cms/api/comment/submit` | POST | 免登录提交文章评论或回复 |
 | `/app/b8cms/api/contact/submit` | POST | 提交联系表单 |
 
 ### 内容列表参数
@@ -111,6 +119,36 @@ server/plugin/b8cms/app/validate
 | `type` | 是 | 内容类型：`article`、`product`、`page` |
 | `slug` | 是 | 访问别名 |
 | `lang` | 否 | 语言编码 |
+
+### 评论列表参数
+
+| 参数 | 必填 | 说明 |
+| --- | --- | --- |
+| `content_id` | 是 | 文章 ID |
+
+评论列表只返回 `status = 1` 的已通过评论，并按 `parent_id/root_id/path` 组织为树形结构。屏蔽或待审核评论不会出现在前台。
+
+### 评论提交参数
+
+| 参数 | 必填 | 说明 |
+| --- | --- | --- |
+| `content_id` | 是 | 文章 ID，只允许评论已发布文章 |
+| `parent_id` | 否 | 父级评论 ID，传 `0` 表示一级评论 |
+| `nickname` | 是 | 昵称 |
+| `email` | 是 | 邮箱，前台必填但不会公开展示 |
+| `comment` | 是 | 评论内容 |
+| `website` | 否 | 个人网站 |
+| `browser_fingerprint` | 否 | 前台采集的浏览器指纹摘要 |
+| `source_url` | 否 | 来源页面 URL |
+
+评论不要求登录。系统会保存 `ip`、`user_agent`、`browser_fingerprint`、`source_url`、邮箱和命中规则，便于后台审计。提交时会即时匹配 `b8cms_comment_filter` 中启用的规则：
+
+| 规则类型 | 匹配方式 | 说明 |
+| --- | --- | --- |
+| `word` | `contains`、`exact`、`regex` | 匹配昵称和评论正文 |
+| `email` | `contains`、`exact`、`domain`、`regex` | 匹配邮箱地址，`domain` 会匹配主域名和子域名 |
+
+命中规则的评论会保存为 `status = 3` 已屏蔽，并记录 `block_reason` 与 `matched_rule`；未命中的评论默认保存为 `status = 1` 已通过。
 
 ### 联系表单参数
 
@@ -221,6 +259,9 @@ server/plugin/b8cms/app/view/default/product.html
 | `pages` | 当前语言页面列表 |
 | `content` | 当前详情页内容，首页为空 |
 | `seo` | 当前页面 SEO 信息 |
+| `seo_links` | canonical、alternate、x-default 和首页地址 |
+
+默认 `article.html` 已接入评论展示与提交。模板通过 `/app/b8cms/api/comment/list` 获取评论树，通过 `/app/b8cms/api/comment/submit` 提交评论，并在提交时采集浏览器指纹摘要和来源 URL。
 
 SEO 的优先级为：
 

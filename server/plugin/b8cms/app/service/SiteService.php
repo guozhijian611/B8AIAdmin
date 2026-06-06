@@ -128,6 +128,122 @@ class SiteService
         ]);
     }
 
+    public function commentList(int $contentId): array
+    {
+        $rows = Db::table('b8cms_comment')
+            ->where('content_id', $contentId)
+            ->where('status', 1)
+            ->whereNull('delete_time')
+            ->field('id,content_id,parent_id,root_id,level,path,nickname,website,comment,create_time')
+            ->order('root_id', 'asc')
+            ->order('path', 'asc')
+            ->select()
+            ->toArray();
+
+        return $this->buildCommentTree($rows);
+    }
+
+    public function submitComment(Request $request): array
+    {
+        $data = $request->post();
+        $contentId = (int) ($data['content_id'] ?? 0);
+        $parentId = (int) ($data['parent_id'] ?? 0);
+        $nickname = trim((string) ($data['nickname'] ?? ''));
+        $email = strtolower(trim((string) ($data['email'] ?? '')));
+        $comment = trim((string) ($data['comment'] ?? ''));
+
+        if ($contentId <= 0) {
+            throw new \InvalidArgumentException('文章ID必须填写');
+        }
+        if ($nickname === '' || $email === '' || $comment === '') {
+            throw new \InvalidArgumentException('昵称、邮箱和评论内容必须填写');
+        }
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            throw new \InvalidArgumentException('邮箱格式不正确');
+        }
+
+        $content = Db::table('b8cms_content')
+            ->where('id', $contentId)
+            ->where('content_type', 'article')
+            ->where('status', 1)
+            ->whereNull('delete_time')
+            ->find();
+        if (!$content) {
+            throw new \InvalidArgumentException('文章不存在或未发布');
+        }
+
+        $parent = null;
+        if ($parentId > 0) {
+            $parent = Db::table('b8cms_comment')
+                ->where('id', $parentId)
+                ->where('content_id', $contentId)
+                ->where('status', 1)
+                ->whereNull('delete_time')
+                ->find();
+            if (!$parent) {
+                throw new \InvalidArgumentException('回复的评论不存在或不可回复');
+            }
+        }
+
+        $matched = $this->matchedCommentFilter($nickname, $email, $comment);
+        $status = $matched ? 3 : 1;
+        $now = date('Y-m-d H:i:s');
+        $level = $parent ? ((int) $parent['level'] + 1) : 1;
+        $rootId = $parent ? (int) $parent['root_id'] : 0;
+        $parentPath = $parent ? (string) $parent['path'] : '';
+
+        $id = Db::transaction(function () use ($contentId, $parentId, $rootId, $level, $content, $nickname, $email, $data, $comment, $status, $matched, $request, $now, $parentPath) {
+            $id = Db::table('b8cms_comment')->insertGetId([
+                'content_id' => $contentId,
+                'parent_id' => $parentId,
+                'root_id' => $rootId,
+                'level' => $level,
+                'path' => '',
+                'content_type' => (string) ($content['content_type'] ?? 'article'),
+                'content_slug' => (string) ($content['slug'] ?? ''),
+                'content_title' => (string) ($content['title'] ?? ''),
+                'lang_code' => (string) ($content['lang_code'] ?? ''),
+                'nickname' => $this->limitText($nickname, 80),
+                'email' => $this->limitText($email, 160),
+                'website' => $this->limitText(trim((string) ($data['website'] ?? '')), 255),
+                'comment' => $comment,
+                'status' => $status,
+                'block_reason' => $matched['reason'] ?? '',
+                'matched_rule' => $matched['rule'] ?? '',
+                'ip' => substr((string) $request->getRealIp(), 0, 45),
+                'user_agent' => substr((string) $request->header('user-agent', ''), 0, 500),
+                'browser_fingerprint' => substr(trim((string) ($data['browser_fingerprint'] ?? '')), 0, 255),
+                'source_url' => substr(trim((string) ($data['source_url'] ?? '')), 0, 500),
+                'reviewed_by' => null,
+                'reviewed_at' => null,
+                'remark' => '',
+                'created_by' => null,
+                'updated_by' => null,
+                'create_time' => $now,
+                'update_time' => $now,
+                'delete_time' => null,
+            ]);
+
+            $nextRootId = $rootId > 0 ? $rootId : $id;
+            $path = trim($parentPath . '/' . $this->commentPathSegment((int) $id), '/');
+            Db::table('b8cms_comment')
+                ->where('id', $id)
+                ->update([
+                    'root_id' => $nextRootId,
+                    'path' => $path,
+                    'update_time' => $now,
+                ]);
+
+            return $id;
+        });
+
+        return [
+            'id' => $id,
+            'status' => $status,
+            'is_blocked' => $status === 3,
+        ];
+    }
+
     public function normalizeLang(?string $lang): string
     {
         $lang = trim((string) $lang);
@@ -411,6 +527,106 @@ class SiteService
         }
 
         return $params;
+    }
+
+    private function matchedCommentFilter(string $nickname, string $email, string $comment): ?array
+    {
+        $rules = Db::table('b8cms_comment_filter')
+            ->where('status', 1)
+            ->whereNull('delete_time')
+            ->field('rule_type,match_type,value')
+            ->select()
+            ->toArray();
+        $text = $nickname . "\n" . $comment;
+        $emailDomain = strtolower(substr(strrchr($email, '@') ?: '', 1));
+
+        foreach ($rules as $rule) {
+            $ruleType = (string) ($rule['rule_type'] ?? '');
+            $matchType = (string) ($rule['match_type'] ?? 'contains');
+            $value = trim((string) ($rule['value'] ?? ''));
+            if ($value === '') {
+                continue;
+            }
+
+            if ($ruleType === 'email' && $this->matchesEmailRule($email, $emailDomain, $matchType, $value)) {
+                return [
+                    'reason' => '邮箱命中屏蔽规则',
+                    'rule' => "{$ruleType}:{$matchType}:{$value}",
+                ];
+            }
+
+            if ($ruleType === 'word' && $this->matchesTextRule($text, $matchType, $value)) {
+                return [
+                    'reason' => '评论命中屏蔽词',
+                    'rule' => "{$ruleType}:{$matchType}:{$value}",
+                ];
+            }
+        }
+
+        return null;
+    }
+
+    private function matchesEmailRule(string $email, string $domain, string $matchType, string $value): bool
+    {
+        $email = strtolower($email);
+        $value = strtolower($value);
+
+        return match ($matchType) {
+            'exact' => $email === $value,
+            'domain' => $domain === $value || str_ends_with($domain, '.' . $value),
+            'regex' => @preg_match($value, $email) === 1,
+            default => str_contains($email, $value),
+        };
+    }
+
+    private function matchesTextRule(string $text, string $matchType, string $value): bool
+    {
+        $target = $this->lowerText($text);
+        $rule = $this->lowerText($value);
+
+        return match ($matchType) {
+            'exact' => $target === $rule,
+            'regex' => @preg_match($value, $text) === 1,
+            default => str_contains($target, $rule),
+        };
+    }
+
+    private function buildCommentTree(array $rows): array
+    {
+        $items = [];
+        foreach ($rows as $row) {
+            $row['children'] = [];
+            $items[(int) $row['id']] = $row;
+        }
+
+        $tree = [];
+        foreach ($items as $id => &$item) {
+            $parentId = (int) ($item['parent_id'] ?? 0);
+            if ($parentId > 0 && isset($items[$parentId])) {
+                $items[$parentId]['children'][] = &$item;
+                continue;
+            }
+
+            $tree[] = &$item;
+        }
+        unset($item);
+
+        return $tree;
+    }
+
+    private function commentPathSegment(int $id): string
+    {
+        return str_pad((string) $id, 10, '0', STR_PAD_LEFT);
+    }
+
+    private function lowerText(string $text): string
+    {
+        return function_exists('mb_strtolower') ? mb_strtolower($text, 'UTF-8') : strtolower($text);
+    }
+
+    private function limitText(string $text, int $length): string
+    {
+        return function_exists('mb_substr') ? mb_substr($text, 0, $length, 'UTF-8') : substr($text, 0, $length);
     }
 
     private function baseUrl(?Request $request): string

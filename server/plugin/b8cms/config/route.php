@@ -8,6 +8,8 @@ Route::group('/app/b8cms/api', function () {
     Route::get('/site/bootstrap', [SiteController::class, 'bootstrap']);
     Route::get('/content/list', [SiteController::class, 'contentList']);
     Route::get('/content/detail', [SiteController::class, 'contentDetail']);
+    Route::get('/comment/list', [SiteController::class, 'commentList']);
+    Route::post('/comment/submit', [SiteController::class, 'submitComment']);
     Route::post('/contact/submit', [SiteController::class, 'submitContact']);
 });
 

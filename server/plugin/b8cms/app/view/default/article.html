@@ -8,5 +8,199 @@
     <article class="article-content">
         {$content.content|raw}
     </article>
+
+    <section class="comment-section" data-b8cms-comments data-content-id="{$content.id}" data-lang="{$lang}">
+        <div class="comment-head">
+            <div>
+                {if $lang == 'en-US'}
+                <h2>Comments</h2>
+                <p>Join the discussion. Email is required for audit and will not be shown publicly.</p>
+                {else}
+                <h2>文章评论</h2>
+                <p>参与讨论。邮箱仅用于审计，不会在前台公开展示。</p>
+                {/if}
+            </div>
+            <button type="button" class="comment-refresh" data-comment-refresh>
+                {if $lang == 'en-US'}Refresh{else}刷新{/if}
+            </button>
+        </div>
+        <div class="comment-list" data-comment-list></div>
+        <form class="comment-form" data-comment-form>
+            <input type="hidden" name="content_id" value="{$content.id}">
+            <input type="hidden" name="parent_id" value="0">
+            <input type="hidden" name="browser_fingerprint" value="">
+            <input type="hidden" name="source_url" value="">
+            <div class="comment-replying" data-comment-replying hidden>
+                <span data-comment-replying-text></span>
+                <button type="button" data-comment-cancel-reply>{if $lang == 'en-US'}Cancel{else}取消回复{/if}</button>
+            </div>
+            <label>
+                {if $lang == 'en-US'}Nickname{else}昵称{/if}
+                <input name="nickname" required maxlength="80">
+            </label>
+            <label>
+                {if $lang == 'en-US'}Email{else}邮箱{/if}
+                <input name="email" type="email" required maxlength="160">
+            </label>
+            <label class="full">
+                {if $lang == 'en-US'}Website{else}个人网站{/if}
+                <input name="website" maxlength="255" placeholder="https://">
+            </label>
+            <label class="full">
+                {if $lang == 'en-US'}Comment{else}评论内容{/if}
+                <textarea name="comment" required rows="5" maxlength="3000"></textarea>
+            </label>
+            <button type="submit">{if $lang == 'en-US'}Post comment{else}提交评论{/if}</button>
+            <div class="comment-message" data-comment-message></div>
+        </form>
+    </section>
 </main>
+<script>
+(() => {
+    const root = document.querySelector('[data-b8cms-comments]');
+    if (!root || root.dataset.ready === '1') {
+        return;
+    }
+    root.dataset.ready = '1';
+    const lang = root.dataset.lang || 'zh-CN';
+    const isEn = lang === 'en-US';
+    const contentId = root.dataset.contentId;
+    const list = root.querySelector('[data-comment-list]');
+    const form = root.querySelector('[data-comment-form]');
+    const message = root.querySelector('[data-comment-message]');
+    const button = form.querySelector('button[type="submit"]');
+    const parentInput = form.querySelector('[name="parent_id"]');
+    const fingerprintInput = form.querySelector('[name="browser_fingerprint"]');
+    const sourceInput = form.querySelector('[name="source_url"]');
+    const replying = root.querySelector('[data-comment-replying]');
+    const replyingText = root.querySelector('[data-comment-replying-text]');
+
+    const text = {
+        loading: isEn ? 'Loading comments...' : '正在加载评论...',
+        empty: isEn ? 'No comments yet.' : '还没有评论，欢迎第一个留言。',
+        reply: isEn ? 'Reply' : '回复',
+        submit: isEn ? 'Submitting...' : '正在提交...',
+        ok: isEn ? 'Comment posted.' : '评论提交成功。',
+        blocked: isEn ? 'Comment submitted, but it is hidden because it matched moderation rules.' : '评论已提交，但因命中屏蔽规则暂不展示。',
+        failed: isEn ? 'Submit failed.' : '提交失败，请稍后再试。',
+        replying: isEn ? 'Replying to' : '正在回复',
+    };
+
+    const escapeDate = (value) => value || '';
+    const fingerprint = () => {
+        const screenSize = window.screen ? `${window.screen.width}x${window.screen.height}` : '';
+        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+        return [
+            navigator.userAgent,
+            navigator.language,
+            navigator.platform,
+            screenSize,
+            timezone,
+            navigator.hardwareConcurrency || '',
+        ].join('|').slice(0, 255);
+    };
+
+    const renderItem = (item) => {
+        const node = document.createElement('article');
+        node.className = 'comment-item';
+        node.style.setProperty('--comment-level', Math.min(Number(item.level || 1) - 1, 8));
+
+        const meta = document.createElement('div');
+        meta.className = 'comment-meta';
+        const author = document.createElement('strong');
+        author.textContent = item.nickname || 'Guest';
+        const time = document.createElement('time');
+        time.textContent = escapeDate(item.create_time);
+        meta.append(author, time);
+
+        const body = document.createElement('p');
+        body.className = 'comment-body';
+        body.textContent = item.comment || '';
+
+        const actions = document.createElement('div');
+        actions.className = 'comment-actions';
+        const replyButton = document.createElement('button');
+        replyButton.type = 'button';
+        replyButton.textContent = text.reply;
+        replyButton.addEventListener('click', () => {
+            parentInput.value = item.id;
+            replying.hidden = false;
+            replyingText.textContent = `${text.replying} ${item.nickname || 'Guest'}`;
+            form.querySelector('[name="comment"]').focus();
+        });
+        actions.append(replyButton);
+
+        node.append(meta, body, actions);
+        if (Array.isArray(item.children) && item.children.length > 0) {
+            const children = document.createElement('div');
+            children.className = 'comment-children';
+            item.children.forEach((child) => children.appendChild(renderItem(child)));
+            node.appendChild(children);
+        }
+
+        return node;
+    };
+
+    const loadComments = async () => {
+        list.textContent = text.loading;
+        try {
+            const response = await fetch(`/app/b8cms/api/comment/list?content_id=${encodeURIComponent(contentId)}`);
+            const result = await response.json();
+            if (result.code !== 200) {
+                throw new Error(result.message || text.failed);
+            }
+            const rows = Array.isArray(result.data) ? result.data : [];
+            list.innerHTML = '';
+            if (rows.length === 0) {
+                list.textContent = text.empty;
+                return;
+            }
+            rows.forEach((item) => list.appendChild(renderItem(item)));
+        } catch (error) {
+            list.textContent = error.message || text.failed;
+        }
+    };
+
+    root.querySelector('[data-comment-refresh]').addEventListener('click', loadComments);
+    root.querySelector('[data-comment-cancel-reply]').addEventListener('click', () => {
+        parentInput.value = '0';
+        replying.hidden = true;
+        replyingText.textContent = '';
+    });
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        fingerprintInput.value = fingerprint();
+        sourceInput.value = window.location.href;
+        const data = Object.fromEntries(new FormData(form).entries());
+        button.disabled = true;
+        message.textContent = text.submit;
+        try {
+            const response = await fetch('/app/b8cms/api/comment/submit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+            const result = await response.json();
+            if (result.code !== 200) {
+                throw new Error(result.message || text.failed);
+            }
+            form.reset();
+            form.querySelector('[name="content_id"]').value = contentId;
+            parentInput.value = '0';
+            replying.hidden = true;
+            message.textContent = result.data?.is_blocked ? text.blocked : text.ok;
+            if (!result.data?.is_blocked) {
+                await loadComments();
+            }
+        } catch (error) {
+            message.textContent = error.message || text.failed;
+        } finally {
+            button.disabled = false;
+        }
+    });
+
+    loadComments();
+})();
+</script>
 {include file="default/public/footer" /}
