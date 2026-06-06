@@ -1,0 +1,80 @@
+<section class="section contact-section">
+    <div class="site-wrap">
+        <div class="section-head">
+            <div>
+                {if $lang == 'en-US'}
+                <h2>Contact us</h2>
+                <p>Tell us about your website, product catalog, localization, or SEO plan. The message will be stored in B8CMS contact messages.</p>
+                {else}
+                <h2>联系咨询</h2>
+                <p>告诉我们你的独立站、产品目录、多语言或 SEO 需求。提交后会进入 B8CMS 后台联系留言。</p>
+                {/if}
+            </div>
+        </div>
+        <form class="contact-form" data-b8cms-contact-form>
+            <input type="hidden" name="lang_code" value="{$lang}">
+            <label>
+                {if $lang == 'en-US'}Name{else}姓名{/if}
+                <input name="name" required maxlength="120">
+            </label>
+            <label>
+                {if $lang == 'en-US'}Email{else}邮箱{/if}
+                <input name="email" type="email" required maxlength="180">
+            </label>
+            <label>
+                {if $lang == 'en-US'}Phone{else}电话{/if}
+                <input name="phone" maxlength="80">
+            </label>
+            <label>
+                {if $lang == 'en-US'}Company{else}公司{/if}
+                <input name="company" maxlength="180">
+            </label>
+            <label class="full">
+                {if $lang == 'en-US'}Subject{else}主题{/if}
+                <input name="subject" maxlength="255">
+            </label>
+            <label class="full">
+                {if $lang == 'en-US'}Message{else}留言内容{/if}
+                <textarea name="message" required rows="5"></textarea>
+            </label>
+            <input type="hidden" name="source" value="b8cms-template">
+            <button type="submit">{if $lang == 'en-US'}Submit inquiry{else}提交咨询{/if}</button>
+            <div class="contact-message" data-b8cms-contact-message></div>
+        </form>
+    </div>
+</section>
+<script>
+(() => {
+    const form = document.querySelector('[data-b8cms-contact-form]');
+    if (!form || form.dataset.ready === '1') {
+        return;
+    }
+    form.dataset.ready = '1';
+    const message = form.querySelector('[data-b8cms-contact-message]');
+    const button = form.querySelector('button[type="submit"]');
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const data = Object.fromEntries(new FormData(form).entries());
+        button.disabled = true;
+        message.textContent = '{$lang}' === 'en-US' ? 'Submitting...' : '正在提交...';
+        try {
+            const response = await fetch('/app/b8cms/api/contact/submit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+            const result = await response.json();
+            if (result.code !== 200) {
+                throw new Error(result.message || 'Submit failed');
+            }
+            form.reset();
+            form.querySelector('[name="lang_code"]').value = '{$lang}';
+            message.textContent = '{$lang}' === 'en-US' ? 'Submitted successfully.' : '提交成功，我们会尽快联系你。';
+        } catch (error) {
+            message.textContent = error.message || ('{$lang}' === 'en-US' ? 'Submit failed.' : '提交失败，请稍后再试。');
+        } finally {
+            button.disabled = false;
+        }
+    });
+})();
+</script>

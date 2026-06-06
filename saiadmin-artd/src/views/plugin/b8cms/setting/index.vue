@@ -1,7 +1,7 @@
 <template>
-  <div class="art-full-height">
-    <ElCard class="art-table-card" shadow="never">
-      <ElForm :model="search" inline class="mb-4">
+  <div class="art-full-height b8cms-setting-page">
+    <ElCard class="art-table-card b8cms-setting-card" shadow="never">
+      <ElForm :model="search" inline class="b8cms-setting-search">
         <ElFormItem label="分组">
           <ElSelect v-model="search.group_key" clearable placeholder="全部" style="width: 150px">
             <ElOption label="品牌" value="brand" />
@@ -36,7 +36,7 @@
         </template>
       </ArtTableHeader>
 
-      <ElTable v-loading="loading" :data="rows" row-key="id">
+      <ElTable v-loading="loading" :data="rows" row-key="id" :height="tableHeight">
         <ElTableColumn prop="group_key" label="分组" width="120" />
         <ElTableColumn prop="setting_key" label="标识" width="180" />
         <ElTableColumn prop="lang_code" label="语言" width="110">
@@ -61,70 +61,80 @@
       </ElTable>
     </ElCard>
 
-    <ElDialog v-model="dialogVisible" :title="form.id ? '编辑配置' : '新增配置'" width="760px">
-      <ElForm ref="formRef" :model="form" :rules="rules" label-width="110px">
-        <ElRow :gutter="18">
-          <ElCol :span="12">
-            <ElFormItem label="分组" prop="group_key">
-              <ElInput v-model="form.group_key" placeholder="brand/seo/home/contact/media/footer" />
-            </ElFormItem>
-          </ElCol>
-          <ElCol :span="12">
-            <ElFormItem label="标识" prop="setting_key">
-              <ElInput v-model="form.setting_key" />
-            </ElFormItem>
-          </ElCol>
-          <ElCol :span="12">
-            <ElFormItem label="语言" prop="lang_code">
-              <ElSelect v-model="form.lang_code" clearable>
-                <ElOption label="全局" value="" />
-                <ElOption v-for="item in languages" :key="item.code" :label="item.native_name" :value="item.code" />
-              </ElSelect>
-            </ElFormItem>
-          </ElCol>
-          <ElCol :span="12">
-            <ElFormItem label="组件" prop="input_type">
-              <ElSelect v-model="form.input_type">
-                <ElOption label="输入框" value="input" />
-                <ElOption label="多行文本" value="textarea" />
-                <ElOption label="图片" value="image" />
-                <ElOption label="JSON" value="json" />
-              </ElSelect>
-            </ElFormItem>
-          </ElCol>
-          <ElCol :span="24">
-            <ElFormItem label="标题" prop="title">
-              <ElInput v-model="form.title" />
-            </ElFormItem>
-          </ElCol>
-          <ElCol :span="24">
-            <ElFormItem label="配置值" prop="value">
-              <sa-image-upload
-                v-if="form.input_type === 'image'"
-                v-model="imageValue"
-                :limit="1"
-                :multiple="false"
-              />
-              <ElInput
-                v-else
-                v-model="textValue"
-                :type="form.input_type === 'input' ? 'text' : 'textarea'"
-                :rows="form.input_type === 'input' ? undefined : 5"
-              />
-            </ElFormItem>
-          </ElCol>
-          <ElCol :span="12">
-            <ElFormItem label="排序" prop="sort">
-              <ElInputNumber v-model="form.sort" :min="0" />
-            </ElFormItem>
-          </ElCol>
-          <ElCol :span="12">
-            <ElFormItem label="状态" prop="status">
-              <SaRadio v-model="form.status" dict="data_status" />
-            </ElFormItem>
-          </ElCol>
-        </ElRow>
-      </ElForm>
+    <ElDialog
+      v-model="dialogVisible"
+      :title="form.id ? '编辑配置' : '新增配置'"
+      width="760px"
+      top="6vh"
+      append-to-body
+      destroy-on-close
+      class="b8cms-setting-dialog"
+    >
+      <ElScrollbar max-height="calc(88vh - 168px)">
+        <ElForm ref="formRef" :model="form" :rules="rules" label-width="110px" class="b8cms-setting-form">
+          <ElRow :gutter="18">
+            <ElCol :span="12">
+              <ElFormItem label="分组" prop="group_key">
+                <ElInput v-model="form.group_key" placeholder="brand/seo/home/contact/media/footer" />
+              </ElFormItem>
+            </ElCol>
+            <ElCol :span="12">
+              <ElFormItem label="标识" prop="setting_key">
+                <ElInput v-model="form.setting_key" />
+              </ElFormItem>
+            </ElCol>
+            <ElCol :span="12">
+              <ElFormItem label="语言" prop="lang_code">
+                <ElSelect v-model="form.lang_code" clearable>
+                  <ElOption label="全局" value="" />
+                  <ElOption v-for="item in languages" :key="item.code" :label="item.native_name" :value="item.code" />
+                </ElSelect>
+              </ElFormItem>
+            </ElCol>
+            <ElCol :span="12">
+              <ElFormItem label="组件" prop="input_type">
+                <ElSelect v-model="form.input_type">
+                  <ElOption label="输入框" value="input" />
+                  <ElOption label="多行文本" value="textarea" />
+                  <ElOption label="图片" value="image" />
+                  <ElOption label="JSON" value="json" />
+                </ElSelect>
+              </ElFormItem>
+            </ElCol>
+            <ElCol :span="24">
+              <ElFormItem label="标题" prop="title">
+                <ElInput v-model="form.title" />
+              </ElFormItem>
+            </ElCol>
+            <ElCol :span="24">
+              <ElFormItem label="配置值" prop="value">
+                <sa-image-upload
+                  v-if="form.input_type === 'image'"
+                  v-model="imageValue"
+                  :limit="1"
+                  :multiple="false"
+                />
+                <ElInput
+                  v-else
+                  v-model="textValue"
+                  :type="form.input_type === 'input' ? 'text' : 'textarea'"
+                  :rows="form.input_type === 'input' ? undefined : 7"
+                />
+              </ElFormItem>
+            </ElCol>
+            <ElCol :span="12">
+              <ElFormItem label="排序" prop="sort">
+                <ElInputNumber v-model="form.sort" :min="0" />
+              </ElFormItem>
+            </ElCol>
+            <ElCol :span="12">
+              <ElFormItem label="状态" prop="status">
+                <SaRadio v-model="form.status" dict="data_status" />
+              </ElFormItem>
+            </ElCol>
+          </ElRow>
+        </ElForm>
+      </ElScrollbar>
       <template #footer>
         <ElButton @click="dialogVisible = false">取消</ElButton>
         <ElButton type="primary" @click="submit">提交</ElButton>
@@ -144,6 +154,7 @@
   const loading = ref(false)
   const dialogVisible = ref(false)
   const formRef = ref<FormInstance>()
+  const tableHeight = 'calc(100vh - 280px)'
   const search = reactive({ group_key: '', setting_key: '', lang_code: '' })
   const textValue = ref('')
   const imageValue = ref('')
@@ -243,3 +254,42 @@
     loadData()
   })
 </script>
+
+<style scoped>
+  .b8cms-setting-page {
+    min-height: 0;
+  }
+
+  .b8cms-setting-card {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .b8cms-setting-card :deep(.el-card__body) {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .b8cms-setting-search {
+    flex-shrink: 0;
+    margin-bottom: 16px;
+  }
+
+  .b8cms-setting-card :deep(#art-table-header) {
+    flex-shrink: 0;
+    margin-bottom: 12px;
+  }
+
+  .b8cms-setting-form {
+    padding-right: 12px;
+  }
+
+  @media (max-width: 768px) {
+    .b8cms-setting-card {
+      height: auto;
+      overflow: visible;
+    }
+  }
+</style>

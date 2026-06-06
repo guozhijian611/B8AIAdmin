@@ -6,4 +6,7 @@
         {$content.content|raw}
     </article>
 </main>
+{if $content.slug == 'contact'}
+{include file="default/public/contact-form" /}
+{/if}
 {include file="default/public/footer" /}

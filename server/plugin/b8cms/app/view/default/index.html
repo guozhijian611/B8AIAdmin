@@ -10,6 +10,32 @@
     <section class="section">
         <div class="site-wrap">
             <div class="section-head">
+                <h2>{if $lang == 'en-US'}Feature Preview{else}功能展示预览{/if}</h2>
+            </div>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <strong>{if $lang == 'en-US'}Multilingual CMS{else}多语言 CMS{/if}</strong>
+                    <p>{if $lang == 'en-US'}Manage articles, pages, products, navigation, and site settings per language.{else}按语言管理文章、页面、产品、导航和站点配置。{/if}</p>
+                </div>
+                <div class="feature-card">
+                    <strong>{if $lang == 'en-US'}Product Showcase{else}产品展示{/if}</strong>
+                    <p>{if $lang == 'en-US'}Publish pricing, SKU, stock, summary, product SEO, and custom templates.{else}支持价格、SKU、库存、摘要、产品 SEO 和单品模板。{/if}</p>
+                </div>
+                <div class="feature-card">
+                    <strong>{if $lang == 'en-US'}Template Switching{else}模板切换{/if}</strong>
+                    <p>{if $lang == 'en-US'}Switch the active ThinkTemplate theme and override template files per content item.{else}可切换启用模板，也可给单篇内容指定模板文件。{/if}</p>
+                </div>
+                <div class="feature-card">
+                    <strong>{if $lang == 'en-US'}SEO Signals{else}SEO 信号{/if}</strong>
+                    <p>{if $lang == 'en-US'}Generate canonical, hreflang, x-default, title, keywords, and description tags.{else}输出 canonical、hreflang、x-default、标题、关键词和描述。{/if}</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="section">
+        <div class="site-wrap">
+            <div class="section-head">
                 <h2>Products</h2>
                 <a href="/page/products?lang={$lang}">View all</a>
             </div>
@@ -46,5 +72,7 @@
             </div>
         </div>
     </section>
+
+    {include file="default/public/contact-form" /}
 </main>
 {include file="default/public/footer" /}

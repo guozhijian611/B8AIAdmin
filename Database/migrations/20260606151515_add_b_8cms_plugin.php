@@ -306,7 +306,7 @@ final class AddB8cmsPlugin extends AbstractMigration
         $this->insertMenu('B8CMS', '模板管理', 'B8CMSTemplate', 'template', '/plugin/b8cms/template/index', 'ri:layout-5-line', 90);
         $this->insertMenu('B8CMS', '导航管理', 'B8CMSNavigation', 'navigation', '/plugin/b8cms/navigation/index', 'ri:menu-4-line', 85);
         $this->insertMenu('B8CMS', '站点配置', 'B8CMSSetting', 'setting', '/plugin/b8cms/setting/index', 'ri:settings-3-line', 80);
-        $this->insertMenu('B8CMS', '联系留言', 'B8CMSContact', 'contact', '/plugin/b8cms/contact/index', 'ri:mail-3-line', 75);
+        $this->insertMenu('B8CMS', '联系留言', 'B8CMSContact', 'contact', '/plugin/b8cms/contact/index', 'ri:message-3-line', 75);
 
         foreach ([
             'content' => '内容',
