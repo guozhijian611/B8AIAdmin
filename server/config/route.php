@@ -18,6 +18,7 @@ use support\Request;
 use Webman\Route;
 
 Route::get('/apidoc/openapi/{appKey}', [app\controller\ApidocOpenapiController::class, 'show']);
+Route::get('/', [app\controller\IndexController::class, 'index']);
 Route::get('/admin', [app\controller\IndexController::class, 'admin']);
 Route::get('/admin/', [app\controller\IndexController::class, 'admin']);
 Route::get('/h5', [app\controller\IndexController::class, 'h5']);

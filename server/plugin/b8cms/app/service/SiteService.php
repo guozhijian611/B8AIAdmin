@@ -440,12 +440,12 @@ class SiteService
     private function contentPath(string $type, string $slug, string $lang, string $defaultLang): string
     {
         $type = in_array($type, ['article', 'product', 'page'], true) ? $type : 'page';
-        return $lang === $defaultLang ? "/{$type}/{$slug}" : "/{$lang}/{$type}/{$slug}";
+        return $this->withSiteBase($lang === $defaultLang ? "/{$type}/{$slug}" : "/{$lang}/{$type}/{$slug}");
     }
 
     private function homePath(string $lang, string $defaultLang): string
     {
-        return $lang === $defaultLang ? '/' : '/' . rawurlencode($lang);
+        return $this->withSiteBase($lang === $defaultLang ? '/' : '/' . rawurlencode($lang));
     }
 
     private function siteLinks(string $lang, string $defaultLang): array
@@ -476,9 +476,14 @@ class SiteService
             parse_str($parts['query'], $query);
         }
         $targetLang = isset($query['lang']) && is_string($query['lang']) && $query['lang'] !== '' ? $query['lang'] : $lang;
+        $path = $this->stripSiteBasePath($path);
 
         if ($path === '/' || $path === '') {
             return $this->homePath($targetLang, $defaultLang);
+        }
+
+        if (preg_match('~^/([A-Za-z]{2}-[A-Za-z]{2})$~', $path, $matches)) {
+            return $this->homePath($matches[1], $defaultLang);
         }
 
         if (preg_match('~^/([A-Za-z]{2}-[A-Za-z]{2})/(article|product|page)/([^/?#]+)$~', $path, $matches)) {
@@ -490,6 +495,32 @@ class SiteService
         }
 
         return $url;
+    }
+
+    private function siteBasePath(): string
+    {
+        $path = '/' . trim((string) config('plugin.b8cms.app.site_path', '/cms'), '/');
+        return $path === '/' ? '' : $path;
+    }
+
+    private function withSiteBase(string $path): string
+    {
+        $base = $this->siteBasePath();
+        if ($base === '') {
+            return $path;
+        }
+
+        return $path === '/' ? $base : $base . $path;
+    }
+
+    private function stripSiteBasePath(string $path): string
+    {
+        $base = $this->siteBasePath();
+        if ($base === '' || $path === $base) {
+            return $path === $base ? '/' : $path;
+        }
+
+        return str_starts_with($path, $base . '/') ? substr($path, strlen($base)) : $path;
     }
 
     private function productParams(array $extra): array

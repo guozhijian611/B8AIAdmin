@@ -13,11 +13,14 @@ Route::group('/app/b8cms/api', function () {
     Route::post('/contact/submit', [SiteController::class, 'submitContact']);
 });
 
-Route::get('/', [SiteViewController::class, 'home']);
-Route::get('/{lang:[A-Za-z]{2}-[A-Za-z]{2}}', [SiteViewController::class, 'home']);
-Route::get('/article/{slug}', [SiteViewController::class, 'article']);
-Route::get('/product/{slug}', [SiteViewController::class, 'product']);
-Route::get('/page/{slug}', [SiteViewController::class, 'page']);
-Route::get('/{lang}/article/{slug}', [SiteViewController::class, 'article']);
-Route::get('/{lang}/product/{slug}', [SiteViewController::class, 'product']);
-Route::get('/{lang}/page/{slug}', [SiteViewController::class, 'page']);
+$sitePath = '/' . trim((string) config('plugin.b8cms.app.site_path', '/cms'), '/');
+$sitePath = $sitePath === '/' ? '' : $sitePath;
+
+Route::get($sitePath ?: '/', [SiteViewController::class, 'home']);
+Route::get($sitePath . '/{lang:[A-Za-z]{2}-[A-Za-z]{2}}', [SiteViewController::class, 'home']);
+Route::get($sitePath . '/article/{slug}', [SiteViewController::class, 'article']);
+Route::get($sitePath . '/product/{slug}', [SiteViewController::class, 'product']);
+Route::get($sitePath . '/page/{slug}', [SiteViewController::class, 'page']);
+Route::get($sitePath . '/{lang}/article/{slug}', [SiteViewController::class, 'article']);
+Route::get($sitePath . '/{lang}/product/{slug}', [SiteViewController::class, 'product']);
+Route::get($sitePath . '/{lang}/page/{slug}', [SiteViewController::class, 'page']);
