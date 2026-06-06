@@ -519,9 +519,7 @@
       : Array.isArray(configPage)
         ? configPage
         : []
-    realtimeConfigs.value = list.filter((item: RealtimeConfig) =>
-      ['realtime', 'aliyun_realtime'].includes(item.type)
-    )
+    realtimeConfigs.value = list.filter((item: RealtimeConfig) => item.type === 'realtime')
     selectedConfigId.value = realtimeConfigs.value[0]?.id
   }
 

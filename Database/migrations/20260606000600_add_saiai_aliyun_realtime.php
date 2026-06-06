@@ -23,13 +23,13 @@ final class AddSaiaiAliyunRealtime extends AbstractMigration
 
         $this->execute(
             "INSERT INTO `saiai_config` (`name`, `type`, `ai_url`, `ai_key`, `model`, `options`, `is_default`, `status`, `remark`, `created_by`, `updated_by`, `create_time`, `update_time`, `delete_time`)
-            SELECT '阿里云实时语音（北京）', 'aliyun_realtime', 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime', '', 'qwen3-omni-flash-realtime-2025-12-01',
-                   '{\"region\":\"cn-beijing\",\"compatible_base_url\":\"https://dashscope.aliyuncs.com/compatible-mode/v1\",\"modalities\":[\"text\",\"audio\"],\"voice\":\"Ethan\"}',
+            SELECT '阿里云实时语音（北京）', 'realtime', 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime', '', 'qwen3-omni-flash-realtime-2025-12-01',
+                   '{\"provider\":\"aliyun_qwen\",\"region\":\"cn-beijing\",\"compatible_base_url\":\"https://dashscope.aliyuncs.com/compatible-mode/v1\",\"modalities\":[\"text\",\"audio\"],\"voice\":\"Ethan\"}',
                    2, 2, '" . self::REMARK . "', 1, 1, NOW(), NOW(), NULL
             WHERE EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'saiai_config')
               AND NOT EXISTS (
                 SELECT 1 FROM `saiai_config`
-                WHERE `type` = 'aliyun_realtime'
+                WHERE `type` = 'realtime'
                   AND `model` = 'qwen3-omni-flash-realtime-2025-12-01'
                   AND `delete_time` IS NULL
               )"
@@ -44,7 +44,7 @@ final class AddSaiaiAliyunRealtime extends AbstractMigration
         $this->execute("DELETE FROM `sa_system_menu` WHERE `remark` = '" . self::REMARK . "'");
         $this->execute(
             "DELETE FROM `saiai_config`
-            WHERE `type` = 'aliyun_realtime'
+            WHERE `type` = 'realtime'
               AND `model` = 'qwen3-omni-flash-realtime-2025-12-01'
               AND `ai_key` = ''
               AND `remark` = '" . self::REMARK . "'"

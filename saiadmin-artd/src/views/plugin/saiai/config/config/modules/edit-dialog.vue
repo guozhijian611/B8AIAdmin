@@ -24,7 +24,7 @@
             />
           </el-form-item>
         </el-col>
-        <el-col :span="24" v-if="['generic', 'realtime', 'aliyun_realtime'].includes(formData.type)">
+        <el-col :span="24" v-if="['generic', 'realtime'].includes(formData.type)">
           <el-form-item label="接口地址" prop="ai_url">
             <el-input
               v-model="formData.ai_url"
@@ -52,7 +52,7 @@
             <sa-radio v-model="formData.is_default" dict="yes_or_no" />
           </el-form-item>
         </el-col>
-        <el-col :span="24" v-if="['realtime', 'aliyun_realtime'].includes(formData.type)">
+        <el-col :span="24" v-if="formData.type === 'realtime'">
           <el-form-item label="扩展配置" prop="options">
             <el-input
               v-model="formData.options"

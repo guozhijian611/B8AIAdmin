@@ -22,7 +22,7 @@
 | 字段 | 说明 |
 | --- | --- |
 | `name` | 配置名称。 |
-| `type` | 平台类型。实时模型固定为 `realtime`，旧数据 `aliyun_realtime` 仅作为兼容别名读取。 |
+| `type` | 平台类型。实时模型固定为 `realtime`。 |
 | `ai_url` | 上游地址。实时模型使用 `wss://dashscope.aliyuncs.com/api-ws/v1/realtime`。 |
 | `ai_key` | 阿里云 DashScope API Key。也可留空并使用环境变量 `DASHSCOPE_API_KEY`。 |
 | `model` | 模型名，当前默认 `qwen3-omni-flash-realtime-2025-12-01`。 |
@@ -330,7 +330,7 @@ interface RealtimeProviderAdapterInterface
 
 1. 后台测试台连接本地代理：`ws://<host>:8791/v1/realtime?model=<model>&token=<admin_token>&config_id=<id>`。
 2. 代理校验 SaiAdmin JWT，确认 `plat=saiadmin`。
-3. 代理读取 `saiai_config` 中的 `realtime` 配置；旧 `aliyun_realtime` 仍可兼容读取。
+3. 代理读取 `saiai_config` 中的 `realtime` 配置。
 4. 代理选择 provider adapter，当前默认 `aliyun_qwen`。
 5. Adapter 连接阿里云实时端点，并用 `Authorization: Bearer <api_key>` 放在服务端请求头中。
 6. 前端只与本地代理通信，不直接暴露阿里云 API Key。

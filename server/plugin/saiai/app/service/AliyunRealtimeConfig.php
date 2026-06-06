@@ -11,17 +11,16 @@ class AliyunRealtimeConfig
     public const DEFAULT_URL = 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime';
     public const DEFAULT_VOICE = 'Cherry';
     public const PLATFORM_TYPE = 'realtime';
-    public const LEGACY_PLATFORM_TYPE = 'aliyun_realtime';
     public const DEFAULT_PROVIDER = 'aliyun_qwen';
 
     public static function resolve(?int $configId = null): array
     {
         if ($configId) {
-            $config = AiConfig::whereIn('type', [self::PLATFORM_TYPE, self::LEGACY_PLATFORM_TYPE])
+            $config = AiConfig::where('type', self::PLATFORM_TYPE)
                 ->where('id', $configId)
                 ->findOrEmpty();
         } else {
-            $query = AiConfig::whereIn('type', [self::PLATFORM_TYPE, self::LEGACY_PLATFORM_TYPE])->where('status', 1);
+            $query = AiConfig::where('type', self::PLATFORM_TYPE)->where('status', 1);
             $config = (clone $query)->where('is_default', 1)->findOrEmpty();
 
             if ($config->isEmpty()) {

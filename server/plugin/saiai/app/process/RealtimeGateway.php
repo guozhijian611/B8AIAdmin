@@ -184,7 +184,7 @@ class RealtimeGateway
         $provider = trim((string) ($query['provider'] ?? ''));
         $model = trim((string) ($query['model'] ?? ''));
 
-        if ($provider !== '' && !in_array(strtolower($provider), ['aliyun', 'aliyun_realtime', 'aliyun_qwen', 'qwen', 'qwen_omni'], true)) {
+        if ($provider !== '' && !in_array(strtolower($provider), ['aliyun', 'aliyun_qwen', 'qwen', 'qwen_omni'], true)) {
             $adapter = RealtimeAdapterFactory::make($provider);
             return [[
                 'provider' => $adapter->name(),
