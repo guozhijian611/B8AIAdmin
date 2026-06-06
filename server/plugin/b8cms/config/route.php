@@ -12,6 +12,7 @@ Route::group('/app/b8cms/api', function () {
 });
 
 Route::get('/', [SiteViewController::class, 'home']);
+Route::get('/{lang:[A-Za-z]{2}-[A-Za-z]{2}}', [SiteViewController::class, 'home']);
 Route::get('/article/{slug}', [SiteViewController::class, 'article']);
 Route::get('/product/{slug}', [SiteViewController::class, 'product']);
 Route::get('/page/{slug}', [SiteViewController::class, 'page']);

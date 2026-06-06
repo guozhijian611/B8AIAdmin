@@ -37,11 +37,11 @@
         <div class="site-wrap">
             <div class="section-head">
                 <h2>Products</h2>
-                <a href="/page/products?lang={$lang}">View all</a>
+                <a href="{$links.products}">View all</a>
             </div>
             <div class="grid">
                 {volist name="featured_products" id="item"}
-                <a class="card" href="/product/{$item.slug}?lang={$lang}">
+                <a class="card" href="{$item.url}">
                     {if !empty($item.cover_image)}<img class="card-media" src="{$item.cover_image}" alt="{$item.title}">{/if}
                     <div class="card-body">
                         <h3>{$item.title}</h3>
@@ -57,11 +57,11 @@
         <div class="site-wrap">
             <div class="section-head">
                 <h2>Insights</h2>
-                <a href="/page/news?lang={$lang}">View all</a>
+                <a href="{$links.news}">View all</a>
             </div>
             <div class="grid">
                 {volist name="featured_articles" id="item"}
-                <a class="card" href="/article/{$item.slug}?lang={$lang}">
+                <a class="card" href="{$item.url}">
                     {if !empty($item.cover_image)}<img class="card-media" src="{$item.cover_image}" alt="{$item.title}">{/if}
                     <div class="card-body">
                         <h3>{$item.title}</h3>

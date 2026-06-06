@@ -11,17 +11,20 @@ class SiteService
     {
         $lang = $this->normalizeLang($lang);
         $template = $this->activeTemplate();
+        $languages = $this->languages();
+        $defaultLang = $this->defaultLang($languages);
 
         return [
             'lang' => $lang,
-            'languages' => $this->languages(),
+            'languages' => $languages,
             'template' => $template,
             'settings' => $this->settings($lang),
-            'header_nav' => $this->navigations($lang, 'header'),
-            'footer_nav' => $this->navigations($lang, 'footer'),
-            'featured_articles' => $this->contents('article', $lang, 6, true),
-            'featured_products' => $this->contents('product', $lang, 6, true),
-            'pages' => $this->contents('page', $lang, 20),
+            'links' => $this->siteLinks($lang, $defaultLang),
+            'header_nav' => $this->navigations($lang, 'header', $defaultLang),
+            'footer_nav' => $this->navigations($lang, 'footer', $defaultLang),
+            'featured_articles' => $this->contents('article', $lang, 6, true, $defaultLang),
+            'featured_products' => $this->contents('product', $lang, 6, true, $defaultLang),
+            'pages' => $this->contents('page', $lang, 20, false, $defaultLang),
         ];
     }
 
@@ -183,9 +186,9 @@ class SiteService
         return $settings;
     }
 
-    private function navigations(string $lang, string $position): array
+    private function navigations(string $lang, string $position, string $defaultLang): array
     {
-        return Db::table('b8cms_navigation')
+        $rows = Db::table('b8cms_navigation')
             ->where('lang_code', $lang)
             ->where('position', $position)
             ->where('status', 1)
@@ -194,9 +197,16 @@ class SiteService
             ->order('sort', 'asc')
             ->select()
             ->toArray();
+
+        foreach ($rows as &$row) {
+            $row['url'] = $this->normalizeSiteUrl((string) $row['url'], $lang, $defaultLang);
+        }
+        unset($row);
+
+        return $rows;
     }
 
-    private function contents(string $type, string $lang, int $limit, bool $featured = false): array
+    private function contents(string $type, string $lang, int $limit, bool $featured = false, ?string $defaultLang = null): array
     {
         $query = Db::table('b8cms_content')
             ->where('content_type', $type)
@@ -208,12 +218,20 @@ class SiteService
             $query->where('is_featured', 1);
         }
 
-        return $query->field($this->publicContentFields())
+        $rows = $query->field($this->publicContentFields())
             ->order('sort', 'asc')
             ->order('published_at', 'desc')
             ->limit($limit)
             ->select()
             ->toArray();
+
+        $defaultLang = $defaultLang ?: $this->defaultLang($this->languages());
+        foreach ($rows as &$row) {
+            $row['url'] = $this->contentPath((string) $row['content_type'], (string) $row['slug'], $lang, $defaultLang);
+        }
+        unset($row);
+
+        return $rows;
     }
 
     private function seo(array $settings, ?array $content): array
@@ -288,7 +306,51 @@ class SiteService
 
     private function homePath(string $lang, string $defaultLang): string
     {
-        return $lang === $defaultLang ? '/' : '/?lang=' . rawurlencode($lang);
+        return $lang === $defaultLang ? '/' : '/' . rawurlencode($lang);
+    }
+
+    private function siteLinks(string $lang, string $defaultLang): array
+    {
+        return [
+            'home' => $this->homePath($lang, $defaultLang),
+            'products' => $this->contentPath('page', 'products', $lang, $defaultLang),
+            'news' => $this->contentPath('page', 'news', $lang, $defaultLang),
+            'about' => $this->contentPath('page', 'about', $lang, $defaultLang),
+            'contact' => $this->contentPath('page', 'contact', $lang, $defaultLang),
+        ];
+    }
+
+    private function normalizeSiteUrl(string $url, string $lang, string $defaultLang): string
+    {
+        $url = trim($url);
+        if ($url === '') {
+            return '#';
+        }
+        if (preg_match('/^(https?:)?\/\//', $url) || preg_match('/^(mailto|tel):/i', $url) || str_starts_with($url, '#')) {
+            return $url;
+        }
+
+        $parts = parse_url($url);
+        $path = $parts['path'] ?? '/';
+        $query = [];
+        if (!empty($parts['query'])) {
+            parse_str($parts['query'], $query);
+        }
+        $targetLang = isset($query['lang']) && is_string($query['lang']) && $query['lang'] !== '' ? $query['lang'] : $lang;
+
+        if ($path === '/' || $path === '') {
+            return $this->homePath($targetLang, $defaultLang);
+        }
+
+        if (preg_match('~^/([A-Za-z]{2}-[A-Za-z]{2})/(article|product|page)/([^/?#]+)$~', $path, $matches)) {
+            return $this->contentPath($matches[2], $matches[3], $matches[1], $defaultLang);
+        }
+
+        if (preg_match('~^/(article|product|page)/([^/?#]+)$~', $path, $matches)) {
+            return $this->contentPath($matches[1], $matches[2], $targetLang, $defaultLang);
+        }
+
+        return $url;
     }
 
     private function baseUrl(?Request $request): string

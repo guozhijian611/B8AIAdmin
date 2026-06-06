@@ -270,24 +270,24 @@ final class AddB8cmsPlugin extends AbstractMigration
     private function seedNavigations(): void
     {
         $zh = [
-            ['header', '首页', '/?lang=zh-CN', 10],
-            ['header', '产品中心', '/page/products?lang=zh-CN', 20],
-            ['header', '文章资讯', '/page/news?lang=zh-CN', 30],
-            ['header', '关于我们', '/page/about?lang=zh-CN', 40],
-            ['header', '联系我们', '/page/contact?lang=zh-CN', 50],
-            ['footer', '产品中心', '/page/products?lang=zh-CN', 10],
-            ['footer', '文章资讯', '/page/news?lang=zh-CN', 20],
-            ['footer', '联系我们', '/page/contact?lang=zh-CN', 30],
+            ['header', '首页', '/', 10],
+            ['header', '产品中心', '/page/products', 20],
+            ['header', '文章资讯', '/page/news', 30],
+            ['header', '关于我们', '/page/about', 40],
+            ['header', '联系我们', '/page/contact', 50],
+            ['footer', '产品中心', '/page/products', 10],
+            ['footer', '文章资讯', '/page/news', 20],
+            ['footer', '联系我们', '/page/contact', 30],
         ];
         $en = [
-            ['header', 'Home', '/?lang=en-US', 10],
-            ['header', 'Products', '/page/products?lang=en-US', 20],
-            ['header', 'Insights', '/page/news?lang=en-US', 30],
-            ['header', 'About', '/page/about?lang=en-US', 40],
-            ['header', 'Contact', '/page/contact?lang=en-US', 50],
-            ['footer', 'Products', '/page/products?lang=en-US', 10],
-            ['footer', 'Insights', '/page/news?lang=en-US', 20],
-            ['footer', 'Contact', '/page/contact?lang=en-US', 30],
+            ['header', 'Home', '/en-US', 10],
+            ['header', 'Products', '/en-US/page/products', 20],
+            ['header', 'Insights', '/en-US/page/news', 30],
+            ['header', 'About', '/en-US/page/about', 40],
+            ['header', 'Contact', '/en-US/page/contact', 50],
+            ['footer', 'Products', '/en-US/page/products', 10],
+            ['footer', 'Insights', '/en-US/page/news', 20],
+            ['footer', 'Contact', '/en-US/page/contact', 30],
         ];
 
         foreach ($zh as [$position, $title, $url, $sort]) {

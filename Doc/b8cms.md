@@ -142,7 +142,7 @@ server/plugin/b8cms/app/validate
 首页也支持通过查询参数切换语言：
 
 ```text
-/?lang=en-US
+/en-US
 ```
 
 ## ThinkTemplate 模板开发
@@ -251,7 +251,7 @@ SEO 的优先级为：
 
 语言切换时，如果传入的语言不存在或已停用，系统会回退到默认语言。默认语言由 `b8cms_language.is_default = 1` 决定。
 
-首页当前使用 `/?lang=en-US` 形式切换非默认语言；详情页使用路径形式切换语言，默认语言不带语言前缀，非默认语言带 `/{lang}` 前缀。
+首页和详情页都使用路径形式切换语言，默认语言不带语言前缀，非默认语言带 `/{lang}` 前缀，例如 `/en-US`、`/en-US/page/contact`。
 
 ## 产品字段
 
