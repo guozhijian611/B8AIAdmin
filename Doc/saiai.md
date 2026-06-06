@@ -344,6 +344,53 @@ php start.php start -d
 php start.php status | rg "saiai_realtime|8791|exit_status|exit_count"
 ```
 
+### Nginx 反向代理
+
+生产环境对外使用标准端点：
+
+```text
+wss://{host}/v1/realtime?model={model}
+```
+
+Nginx 必须把 `/v1/realtime` 代理到实时 WebSocket 进程端口 `8791`，不能落到普通 Webman HTTP 入口。宝塔站点里通常把 `location` 放在当前站点配置中，并确保它位于通用 `/` 代理规则之前。
+
+`map` 需要放在 Nginx 的 `http` 作用域，不能放进单个 `server` 作用域：
+
+```nginx
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    '' close;
+}
+```
+
+站点 `server` 配置中加入：
+
+```nginx
+location /v1/realtime {
+    proxy_pass http://127.0.0.1:8791;
+    proxy_http_version 1.1;
+
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+    proxy_buffering off;
+}
+```
+
+本地开发可以直接连：
+
+```text
+ws://127.0.0.1:8791/v1/realtime?model={model}&token={admin_token}&config_id={id}
+```
+
+线上浏览器页面必须通过 HTTPS 站点发起 `wss://` 连接，由 Nginx 完成 TLS 终止和 WebSocket Upgrade。
+
 ## 后台实时测试台
 
 入口：后台菜单 `SAIAI 管理中心 -> 实时测试`。
@@ -434,6 +481,8 @@ php start.php status | rg "saiai_realtime|8791|exit_status|exit_count"
 ```
 
 如果进程不存在或退出，重启 Webman，并查看 `server/runtime/logs/workerman.log`。
+
+生产环境还需要检查 Nginx 是否已把 `/v1/realtime` 代理到 `127.0.0.1:8791`，并且 WebSocket Upgrade 头没有被通用 HTTP 代理规则覆盖。
 
 ### 上游连接失败
 
