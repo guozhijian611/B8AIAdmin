@@ -1,0 +1,12 @@
+{include file="default/public/header" /}
+<main class="article">
+    <h1>{$content.title}</h1>
+    <p class="summary">{$content.summary}</p>
+    {if !empty($content.cover_image)}
+    <img src="{$content.cover_image}" alt="{$content.title}">
+    {/if}
+    <article class="article-content">
+        {$content.content|raw}
+    </article>
+</main>
+{include file="default/public/footer" /}

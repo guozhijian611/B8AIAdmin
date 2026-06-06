@@ -1,0 +1,9 @@
+{include file="default/public/header" /}
+<main class="article">
+    <h1>{$content.title}</h1>
+    <p class="summary">{$content.summary}</p>
+    <article class="article-content">
+        {$content.content|raw}
+    </article>
+</main>
+{include file="default/public/footer" /}

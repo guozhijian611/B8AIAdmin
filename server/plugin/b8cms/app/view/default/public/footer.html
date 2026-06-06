@@ -1,0 +1,20 @@
+<footer class="site-footer">
+    <div class="site-wrap footer-grid">
+        <div>
+            <strong>{$settings.site_name}</strong>
+            <p>{$settings.footer_text}</p>
+        </div>
+        <nav class="contact-box">
+            {volist name="footer_nav" id="nav"}
+            <div><a href="{$nav.url}" target="{$nav.target}">{$nav.title}</a></div>
+            {/volist}
+        </nav>
+        <div class="contact-box">
+            <div>{$settings.contact_email}</div>
+            <div>{$settings.contact_phone}</div>
+            <div>{$settings.contact_address}</div>
+        </div>
+    </div>
+</footer>
+</body>
+</html>
