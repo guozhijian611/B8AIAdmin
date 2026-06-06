@@ -73,11 +73,12 @@ class SiteService
         return $content;
     }
 
-    public function pageContext(?string $lang = null, ?array $content = null): array
+    public function pageContext(?string $lang = null, ?array $content = null, ?Request $request = null, ?string $type = null): array
     {
         $context = $this->bootstrap($lang);
         $context['content'] = $content;
         $context['seo'] = $this->seo($context['settings'], $content);
+        $context['seo_links'] = $this->seoLinks($context['languages'], $context['lang'], $content, $request, $type);
         return $context;
     }
 
@@ -218,10 +219,115 @@ class SiteService
     private function seo(array $settings, ?array $content): array
     {
         return [
-            'title' => $content['seo_title'] ?? $content['title'] ?? $settings['seo_title'] ?? $settings['site_name'] ?? 'B8CMS',
-            'keywords' => $content['seo_keywords'] ?? $settings['seo_keywords'] ?? '',
-            'description' => $content['seo_description'] ?? $content['summary'] ?? $settings['seo_description'] ?? '',
+            'title' => $this->firstFilled($content['seo_title'] ?? null, $content['title'] ?? null, $settings['seo_title'] ?? null, $settings['site_name'] ?? null, 'B8CMS'),
+            'keywords' => $this->firstFilled($content['seo_keywords'] ?? null, $settings['seo_keywords'] ?? null),
+            'description' => $this->firstFilled($content['seo_description'] ?? null, $content['summary'] ?? null, $settings['seo_description'] ?? null),
         ];
+    }
+
+    private function seoLinks(array $languages, string $currentLang, ?array $content, ?Request $request, ?string $type): array
+    {
+        $baseUrl = $this->baseUrl($request);
+        $defaultLang = $this->defaultLang($languages);
+        $alternates = [];
+
+        foreach ($languages as $language) {
+            $lang = (string) ($language['code'] ?? '');
+            if ($lang === '') {
+                continue;
+            }
+
+            $path = $content ? $this->contentPath($type ?: (string) ($content['content_type'] ?? ''), (string) ($content['slug'] ?? ''), $lang, $defaultLang) : $this->homePath($lang, $defaultLang);
+            if ($content) {
+                $exists = Db::table('b8cms_content')
+                    ->where('content_type', $type ?: (string) ($content['content_type'] ?? ''))
+                    ->where('slug', $content['slug'])
+                    ->where('lang_code', $lang)
+                    ->where('status', 1)
+                    ->whereNull('delete_time')
+                    ->value('id');
+                if (!$exists) {
+                    continue;
+                }
+            }
+
+            $alternates[] = [
+                'lang' => $lang,
+                'hreflang' => str_replace('_', '-', $lang),
+                'native_name' => $language['native_name'] ?? $lang,
+                'url' => $this->absoluteUrl($baseUrl, $path),
+                'is_current' => $lang === $currentLang,
+            ];
+        }
+
+        $canonicalPath = $content
+            ? $this->contentPath($type ?: (string) ($content['content_type'] ?? ''), (string) ($content['slug'] ?? ''), $currentLang, $defaultLang)
+            : $this->homePath($currentLang, $defaultLang);
+
+        $xDefault = null;
+        foreach ($alternates as $alternate) {
+            if ($alternate['lang'] === $defaultLang) {
+                $xDefault = $alternate['url'];
+                break;
+            }
+        }
+
+        return [
+            'canonical' => $this->absoluteUrl($baseUrl, $canonicalPath),
+            'x_default' => $xDefault,
+            'home_url' => $this->absoluteUrl($baseUrl, $this->homePath($currentLang, $defaultLang)),
+            'alternates' => $alternates,
+        ];
+    }
+
+    private function contentPath(string $type, string $slug, string $lang, string $defaultLang): string
+    {
+        $type = in_array($type, ['article', 'product', 'page'], true) ? $type : 'page';
+        return $lang === $defaultLang ? "/{$type}/{$slug}" : "/{$lang}/{$type}/{$slug}";
+    }
+
+    private function homePath(string $lang, string $defaultLang): string
+    {
+        return $lang === $defaultLang ? '/' : '/?lang=' . rawurlencode($lang);
+    }
+
+    private function baseUrl(?Request $request): string
+    {
+        if (!$request) {
+            return '';
+        }
+
+        $scheme = trim(explode(',', (string) $request->header('x-forwarded-proto', ''))[0]);
+        $scheme = $scheme !== '' ? $scheme : 'http';
+        return $scheme . '://' . $request->host();
+    }
+
+    private function absoluteUrl(string $baseUrl, string $path): string
+    {
+        return $baseUrl === '' ? $path : rtrim($baseUrl, '/') . $path;
+    }
+
+    private function defaultLang(array $languages): string
+    {
+        foreach ($languages as $language) {
+            if ((int) ($language['is_default'] ?? 2) === 1 && !empty($language['code'])) {
+                return (string) $language['code'];
+            }
+        }
+
+        return (string) ($languages[0]['code'] ?? 'zh-CN');
+    }
+
+    private function firstFilled(?string ...$values): string
+    {
+        foreach ($values as $value) {
+            $value = trim((string) $value);
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return '';
     }
 
     private function publicContentFields(): string

@@ -168,6 +168,7 @@ server/plugin/b8cms/app/view/default
 | `index.html` | 首页 |
 | `article.html` | 文章详情 |
 | `product.html` | 产品详情 |
+| `product-feature.html` | 产品强调页示例，可用于单个产品的专用展示 |
 | `page.html` | 普通页面 |
 
 新增模板时，推荐按以下结构创建：
@@ -192,6 +193,16 @@ think_view($templateKey . '/' . $template, $context, '', 'b8cms')
 ```text
 server/plugin/b8cms/app/view/default/product.html
 ```
+
+文章、产品、页面都可以在内容管理中单独填写“模板文件”。填写时不需要带 `.html` 后缀，例如：
+
+| 内容类型 | 模板文件字段 | 实际加载文件 |
+| --- | --- | --- |
+| 产品 | `product-feature` | `server/plugin/b8cms/app/view/default/product-feature.html` |
+| 文章 | `article` | `server/plugin/b8cms/app/view/default/article.html` |
+| 页面 | `page` | `server/plugin/b8cms/app/view/default/page.html` |
+
+模板文件只允许字母、数字、下划线、短横线和目录分隔符，不能使用 `..` 或绝对路径。目标模板不存在时，系统会自动回退到内容类型默认模板：文章回退 `article`，产品回退 `product`，页面回退 `page`。
 
 ## 模板可用变量
 
@@ -218,6 +229,16 @@ SEO 的优先级为：
 3. 站点设置中的 `seo_title`、`seo_keywords`、`seo_description`。
 4. 站点名称或 `B8CMS`。
 
+公共头部会输出多语言 SEO 链接：
+
+| 标签 | 说明 |
+| --- | --- |
+| `rel="canonical"` | 当前语言页面的规范地址 |
+| `rel="alternate" hreflang="语言编码"` | 同一内容在其他语言下的地址 |
+| `rel="alternate" hreflang="x-default"` | 默认语言地址 |
+
+详情页的多语言切换会优先指向同一个 `content_type + slug` 在其他语言下的详情页。例如中文产品 `/product/b8cms-growth-suite` 会对应英文 `/en-US/product/b8cms-growth-suite`。如果某个语言没有相同 slug 的已发布内容，则不会输出该语言的 alternate 链接，避免搜索引擎看到不存在的语言版本。
+
 ## 多语言内容规则
 
 内容、导航和本地化站点设置都通过语言编码隔离。
@@ -229,6 +250,8 @@ SEO 的优先级为：
 | 站点设置 | `lang_code` | 空字符串表示全局设置，具体语言会覆盖全局设置 |
 
 语言切换时，如果传入的语言不存在或已停用，系统会回退到默认语言。默认语言由 `b8cms_language.is_default = 1` 决定。
+
+首页当前使用 `/?lang=en-US` 形式切换非默认语言；详情页使用路径形式切换语言，默认语言不带语言前缀，非默认语言带 `/{lang}` 前缀。
 
 ## 产品字段
 

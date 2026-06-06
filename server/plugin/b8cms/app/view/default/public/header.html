@@ -6,6 +6,15 @@
     <title>{$seo.title}</title>
     <meta name="keywords" content="{$seo.keywords}">
     <meta name="description" content="{$seo.description}">
+    {if !empty($seo_links.canonical)}
+    <link rel="canonical" href="{$seo_links.canonical}">
+    {/if}
+    {volist name="seo_links.alternates" id="alternate"}
+    <link rel="alternate" hreflang="{$alternate.hreflang}" href="{$alternate.url}">
+    {/volist}
+    {if !empty($seo_links.x_default)}
+    <link rel="alternate" hreflang="x-default" href="{$seo_links.x_default}">
+    {/if}
     {if !empty($settings.favicon)}
     <link rel="icon" href="{$settings.favicon}">
     {/if}
@@ -53,7 +62,7 @@
 <body>
 <header class="site-header">
     <div class="site-wrap site-nav">
-        <a class="brand" href="/?lang={$lang}">
+        <a class="brand" href="{$seo_links.home_url}">
             {if !empty($settings.logo)}
             <img src="{$settings.logo}" alt="{$settings.site_name}">
             {/if}
@@ -65,8 +74,8 @@
             {/volist}
         </nav>
         <div class="language-links">
-            {volist name="languages" id="language"}
-            <a href="/?lang={$language.code}">{$language.native_name}</a>
+            {volist name="seo_links.alternates" id="alternate"}
+            <a href="{$alternate.url}" hreflang="{$alternate.hreflang}">{$alternate.native_name}</a>
             {/volist}
         </div>
     </div>

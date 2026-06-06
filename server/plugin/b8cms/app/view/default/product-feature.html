@@ -1,0 +1,23 @@
+{include file="default/public/header" /}
+<main>
+    <article class="article">
+        <p class="summary">{$content.category}</p>
+        <h1>{$content.title}</h1>
+        {if !empty($content.subtitle)}
+        <p class="summary">{$content.subtitle}</p>
+        {/if}
+        <div class="product-price">{$content.currency} {$content.price}</div>
+        <div class="article-content">
+            {$content.content|raw}
+        </div>
+        <section class="section">
+            <div class="card">
+                <div class="card-body">
+                    <h3>SKU: {$content.sku}</h3>
+                    <p>{$content.summary}</p>
+                </div>
+            </div>
+        </section>
+    </article>
+</main>
+{include file="default/public/footer" /}
