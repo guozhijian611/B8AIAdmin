@@ -1,10 +1,149 @@
 {include file="default/public/header" /}
-<main class="article">
-    <h1>{$content.title}</h1>
-    <p class="summary">{$content.summary}</p>
-    <article class="article-content">
-        {$content.content|raw}
-    </article>
+<main>
+    <section class="page-hero">
+        <div class="site-wrap">
+            <p class="eyebrow">{$content.category}</p>
+            <h1>{$content.title}</h1>
+            <p>{$content.summary}</p>
+        </div>
+    </section>
+
+    <section class="section">
+        <div class="site-wrap content-band">
+            <article class="article-content">
+                {$content.content|raw}
+            </article>
+        </div>
+    </section>
+
+    {if $content.slug == 'products'}
+    <section class="section surface-section">
+        <div class="site-wrap">
+            <div class="section-head">
+                <div>
+                    <h2>{if $lang == 'en-US'}Product Catalog{else}产品目录{/if}</h2>
+                    <p>{if $lang == 'en-US'}Published products are pulled from B8CMS content records, including price, SKU, and product SEO links.{else}这里直接读取 B8CMS 已发布产品，展示价格、SKU、摘要和真实产品详情链接。{/if}</p>
+                </div>
+            </div>
+            {if !empty($all_products)}
+            <div class="grid">
+                {volist name="all_products" id="item"}
+                <a class="card listing-card" href="{$item.url}">
+                    {if !empty($item.cover_image)}
+                    <img class="card-media" src="{$item.cover_image}" alt="{$item.title}">
+                    {else}
+                    <div class="card-media media-placeholder">{$item.category}</div>
+                    {/if}
+                    <div class="card-body">
+                        <div class="listing-meta">
+                            <span>{$item.category}</span>
+                            <span>{$item.sku}</span>
+                        </div>
+                        <h3>{$item.title}</h3>
+                        <p>{$item.summary}</p>
+                        <div class="listing-price">{$item.currency} {$item.price}</div>
+                    </div>
+                </a>
+                {/volist}
+            </div>
+            {else}
+            <p class="empty-state">{if $lang == 'en-US'}No products published yet.{else}暂无已发布产品。{/if}</p>
+            {/if}
+        </div>
+    </section>
+    {/if}
+
+    {if $content.slug == 'news'}
+    <section class="section surface-section">
+        <div class="site-wrap">
+            <div class="section-head">
+                <div>
+                    <h2>{if $lang == 'en-US'}Latest Insights{else}最新文章{/if}</h2>
+                    <p>{if $lang == 'en-US'}Articles below are rendered from published multilingual article records with SEO-friendly detail URLs.{else}下方文章来自后台已发布的多语言文章记录，并链接到 SEO 友好的文章详情页。{/if}</p>
+                </div>
+            </div>
+            {if !empty($all_articles)}
+            <div class="article-list">
+                {volist name="all_articles" id="item"}
+                <a class="article-row" href="{$item.url}">
+                    <div>
+                        <div class="listing-meta">
+                            <span>{$item.category}</span>
+                            <time>{$item.published_at}</time>
+                        </div>
+                        <h3>{$item.title}</h3>
+                        <p>{$item.summary}</p>
+                    </div>
+                    <span>{if $lang == 'en-US'}Read{else}阅读{/if}</span>
+                </a>
+                {/volist}
+            </div>
+            {else}
+            <p class="empty-state">{if $lang == 'en-US'}No articles published yet.{else}暂无已发布文章。{/if}</p>
+            {/if}
+        </div>
+    </section>
+    {/if}
+
+    {if $content.slug == 'about'}
+    <section class="section surface-section">
+        <div class="site-wrap">
+            <div class="section-head">
+                <div>
+                    <h2>{if $lang == 'en-US'}Site Profile{else}站点资料{/if}</h2>
+                    <p>{if $lang == 'en-US'}These blocks are rendered from site settings, published pages, and active template data.{else}这些信息来自站点配置、已发布页面和当前启用模板。{/if}</p>
+                </div>
+            </div>
+            <div class="info-grid">
+                <div class="info-panel">
+                    <span>{if $lang == 'en-US'}Brand{else}品牌{/if}</span>
+                    <strong>{$settings.site_name}</strong>
+                    <p>{$settings.footer_text}</p>
+                </div>
+                <div class="info-panel">
+                    <span>{if $lang == 'en-US'}Template{else}当前模板{/if}</span>
+                    <strong>{$template.name}</strong>
+                    <p>{$template.description}</p>
+                </div>
+                <div class="info-panel">
+                    <span>{if $lang == 'en-US'}Contact{else}联系方式{/if}</span>
+                    <strong>{$settings.contact_email}</strong>
+                    <p>{$settings.contact_phone}<br>{$settings.contact_address}</p>
+                </div>
+            </div>
+            {if !empty($settings.social_links)}
+            <div class="media-links">
+                {volist name="settings.social_links" id="social"}
+                <a href="{$social.url}" target="_blank" rel="noopener">{$social.label}</a>
+                {/volist}
+            </div>
+            {/if}
+            <div class="link-list">
+                {volist name="all_pages" id="item"}
+                <a href="{$item.url}">{$item.title}</a>
+                {/volist}
+            </div>
+        </div>
+    </section>
+    {/if}
+
+    {if $content.slug == 'contact'}
+    <section class="section surface-section">
+        <div class="site-wrap">
+            <div class="section-head">
+                <div>
+                    <h2>{if $lang == 'en-US'}Contact Details{else}联系信息{/if}</h2>
+                    <p>{if $lang == 'en-US'}Contact settings are rendered directly from B8CMS site configuration.{else}联系信息直接读取 B8CMS 站点配置，表单提交会进入后台联系留言。{/if}</p>
+                </div>
+            </div>
+            <div class="data-strip">
+                <div><span>Email</span><strong>{$settings.contact_email}</strong></div>
+                <div><span>{if $lang == 'en-US'}Phone{else}电话{/if}</span><strong>{$settings.contact_phone}</strong></div>
+                <div><span>{if $lang == 'en-US'}Address{else}地址{/if}</span><strong>{$settings.contact_address}</strong></div>
+            </div>
+        </div>
+    </section>
+    {/if}
 </main>
 {if $content.slug == 'contact'}
 {include file="default/public/contact-form" /}

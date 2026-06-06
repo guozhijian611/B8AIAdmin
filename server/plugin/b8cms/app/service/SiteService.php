@@ -83,6 +83,10 @@ class SiteService
         $context['content'] = $content;
         $context['seo'] = $this->seo($context['settings'], $content);
         $context['seo_links'] = $this->seoLinks($context['languages'], $context['lang'], $content, $request, $type);
+        $defaultLang = $this->defaultLang($context['languages']);
+        $context['all_products'] = $type === 'page' ? $this->contents('product', $context['lang'], 50, false, $defaultLang) : [];
+        $context['all_articles'] = $type === 'page' ? $this->contents('article', $context['lang'], 50, false, $defaultLang) : [];
+        $context['all_pages'] = $type === 'page' ? $this->contents('page', $context['lang'], 50, false, $defaultLang) : [];
         return $context;
     }
 

@@ -257,11 +257,23 @@ server/plugin/b8cms/app/view/default/product.html
 | `featured_articles` | 当前语言推荐文章 |
 | `featured_products` | 当前语言推荐产品 |
 | `pages` | 当前语言页面列表 |
+| `all_products` | 页面模板可用的当前语言已发布产品列表 |
+| `all_articles` | 页面模板可用的当前语言已发布文章列表 |
+| `all_pages` | 页面模板可用的当前语言已发布页面列表 |
 | `content` | 当前详情页内容，首页为空 |
 | `seo` | 当前页面 SEO 信息 |
 | `seo_links` | canonical、alternate、x-default 和首页地址 |
 
 默认 `article.html` 已接入评论展示与提交。模板通过 `/app/b8cms/api/comment/list` 获取评论树，通过 `/app/b8cms/api/comment/submit` 提交评论，并在提交时采集浏览器指纹摘要和来源 URL。
+
+默认 `page.html` 会根据页面 `slug` 渲染动态内容：
+
+| 页面 slug | 渲染内容 |
+| --- | --- |
+| `products` | 读取 `all_products` 展示当前语言全部已发布产品、价格、SKU 和详情链接 |
+| `news` | 读取 `all_articles` 展示当前语言全部已发布文章和详情链接 |
+| `about` | 读取站点配置、当前模板、社交媒体链接和已发布页面入口 |
+| `contact` | 读取联系方式配置，并接入联系表单 |
 
 SEO 的优先级为：
 

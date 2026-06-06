@@ -36,16 +36,25 @@
     <section class="section">
         <div class="site-wrap">
             <div class="section-head">
-                <h2>Products</h2>
-                <a href="{$links.products}">View all</a>
+                <h2>{if $lang == 'en-US'}Products{else}产品中心{/if}</h2>
+                <a href="{$links.products}">{if $lang == 'en-US'}View all{else}查看全部{/if}</a>
             </div>
             <div class="grid">
                 {volist name="featured_products" id="item"}
                 <a class="card" href="{$item.url}">
-                    {if !empty($item.cover_image)}<img class="card-media" src="{$item.cover_image}" alt="{$item.title}">{/if}
+                    {if !empty($item.cover_image)}
+                    <img class="card-media" src="{$item.cover_image}" alt="{$item.title}">
+                    {else}
+                    <div class="card-media media-placeholder">{$item.category}</div>
+                    {/if}
                     <div class="card-body">
+                        <div class="listing-meta">
+                            <span>{$item.category}</span>
+                            <span>{$item.sku}</span>
+                        </div>
                         <h3>{$item.title}</h3>
                         <p>{$item.summary}</p>
+                        <div class="listing-price">{$item.currency} {$item.price}</div>
                     </div>
                 </a>
                 {/volist}
@@ -56,14 +65,22 @@
     <section class="section">
         <div class="site-wrap">
             <div class="section-head">
-                <h2>Insights</h2>
-                <a href="{$links.news}">View all</a>
+                <h2>{if $lang == 'en-US'}Insights{else}文章资讯{/if}</h2>
+                <a href="{$links.news}">{if $lang == 'en-US'}View all{else}查看全部{/if}</a>
             </div>
             <div class="grid">
                 {volist name="featured_articles" id="item"}
                 <a class="card" href="{$item.url}">
-                    {if !empty($item.cover_image)}<img class="card-media" src="{$item.cover_image}" alt="{$item.title}">{/if}
+                    {if !empty($item.cover_image)}
+                    <img class="card-media" src="{$item.cover_image}" alt="{$item.title}">
+                    {else}
+                    <div class="card-media media-placeholder">{$item.category}</div>
+                    {/if}
                     <div class="card-body">
+                        <div class="listing-meta">
+                            <span>{$item.category}</span>
+                            <time>{$item.published_at}</time>
+                        </div>
                         <h3>{$item.title}</h3>
                         <p>{$item.summary}</p>
                     </div>
