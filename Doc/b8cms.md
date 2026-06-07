@@ -13,6 +13,7 @@
 | 内容管理 | 统一管理文章、产品和页面，按 `content_type` 区分 |
 | 产品管理 | 产品使用内容表保存，额外支持价格、币种、库存、SKU、相册和扩展参数 |
 | SEO 设置 | 每条文章、产品、页面都可配置 SEO 标题、关键词和描述 |
+| 轮播图管理 | 按语言维护首页轮播图，支持桌面图、移动图、图片 Alt、主/次按钮和排序 |
 | 导航管理 | 支持头部、底部等导航位置，导航标题按语言分别维护 |
 | 站点设置 | 支持站点名称、Logo、favicon、首页文案、媒体链接、联系方式和 footer 配置 |
 | 联系表单 | 前台提交留言，后台查看、处理和备注 |
@@ -42,6 +43,7 @@ php webman b8:migrate
 
 ```text
 Database/migrations/20260606151515_add_b_8cms_plugin.php
+Database/migrations/20260607023154_add_b_8cms_carousel.php
 ```
 
 迁移会创建并初始化以下表：
@@ -51,13 +53,14 @@ Database/migrations/20260606151515_add_b_8cms_plugin.php
 | `b8cms_language` | 语言配置 |
 | `b8cms_template` | 模板配置 |
 | `b8cms_content` | 文章、产品、页面内容 |
+| `b8cms_carousel` | 首页多语言轮播图 |
 | `b8cms_navigation` | 多语言导航 |
 | `b8cms_site_setting` | 站点设置 |
 | `b8cms_contact_message` | 联系表单留言 |
 | `b8cms_comment` | 文章评论、回复层级和访客审计信息 |
 | `b8cms_comment_filter` | 评论屏蔽词、邮箱和域名规则 |
 
-迁移同时会预设 `zh-CN`、`en-US` 两种语言，内置 `default` 模板，写入示例文章、产品、页面、导航、站点设置、评论屏蔽词、屏蔽邮箱和后台菜单权限。
+迁移同时会预设 `zh-CN`、`en-US` 两种语言，内置 `default` 模板，写入示例文章、产品、页面、首页轮播图、导航、站点设置、评论屏蔽词、屏蔽邮箱和后台菜单权限。
 
 ## 后台管理模块
 
@@ -68,6 +71,7 @@ Database/migrations/20260606151515_add_b_8cms_plugin.php
 | 内容管理 | `/plugin/b8cms/content` | 管理文章、产品、页面和 SEO |
 | 语言管理 | `/plugin/b8cms/language` | 新增语言、启停语言、设置默认语言 |
 | 模板管理 | `/plugin/b8cms/template` | 管理模板信息、启用模板 |
+| 轮播图 | `/plugin/b8cms/carousel` | 维护首页多语言轮播图、图片、按钮和排序 |
 | 导航管理 | `/plugin/b8cms/navigation` | 维护头部和底部导航 |
 | 站点设置 | `/plugin/b8cms/setting` | 维护 Logo、媒体链接、联系方式、首页和 footer 文案 |
 | 联系留言 | `/plugin/b8cms/contact` | 查看、删除、处理联系表单留言 |
@@ -94,7 +98,7 @@ server/plugin/b8cms/app/validate
 
 | 接口 | 方法 | 说明 |
 | --- | --- | --- |
-| `/app/b8cms/api/site/bootstrap` | GET | 获取站点启动数据，包括语言、模板、设置、导航和推荐内容 |
+| `/app/b8cms/api/site/bootstrap` | GET | 获取站点启动数据，包括语言、模板、设置、导航、轮播图和推荐内容 |
 | `/app/b8cms/api/content/list` | GET | 获取文章、产品或页面列表 |
 | `/app/b8cms/api/content/detail` | GET | 获取文章、产品或页面详情 |
 | `/app/b8cms/api/comment/list` | GET | 获取文章已通过评论树 |
@@ -281,6 +285,7 @@ server/plugin/b8cms/app/view/default/product.html
 | `settings` | 当前语言合并后的站点设置 |
 | `header_nav` | 当前语言头部导航 |
 | `footer_nav` | 当前语言底部导航 |
+| `carousels` | 当前语言首页轮播图，缺省时回退默认语言 |
 | `featured_articles` | 当前语言推荐文章 |
 | `featured_products` | 当前语言推荐产品 |
 | `pages` | 当前语言页面列表 |
@@ -290,6 +295,8 @@ server/plugin/b8cms/app/view/default/product.html
 | `content` | 当前详情页内容，首页为空 |
 | `seo` | 当前页面 SEO 信息 |
 | `seo_links` | canonical、alternate、x-default 和首页地址 |
+
+默认 `index.html` 会优先渲染 `carousels`。每条轮播支持 `title`、`subtitle`、`description`、`image`、`mobile_image`、`image_alt`、`button_text`、`button_url`、`secondary_button_text`、`secondary_button_url` 和 `target`，按钮链接会按当前语言统一规范成 B8CMS 路径。
 
 默认 `article.html` 已接入评论展示与提交。模板通过 `/app/b8cms/api/comment/list` 获取评论树，通过 `/app/b8cms/api/comment/submit` 提交评论，并在提交时采集浏览器指纹摘要和来源 URL。
 
@@ -362,6 +369,7 @@ SEO 的优先级为：
 | --- | --- | --- |
 | 内容 | `lang_code` | 同一个 `slug` 可以在不同语言下各建一条 |
 | 导航 | `lang_code` | 每种语言单独维护导航标题和链接 |
+| 轮播图 | `lang_code` | 每种语言单独维护首页轮播文案、图片和按钮 |
 | 站点设置 | `lang_code` | 空字符串表示全局设置，具体语言会覆盖全局设置 |
 
 语言切换时，如果传入的语言不存在或已停用，系统会回退到默认语言。默认语言由 `b8cms_language.is_default = 1` 决定。
@@ -446,6 +454,7 @@ php -l ../Database/migrations/20260606151515_add_b_8cms_plugin.php
 php webman route:list | rg 'b8cms|/cms|\.html|/article|/product|/page'
 php webman b8:migrate:status
 php webman b8:migrate --dry-run
+php -l ../Database/migrations/20260607023154_add_b_8cms_carousel.php
 ```
 
 管理端变更后：

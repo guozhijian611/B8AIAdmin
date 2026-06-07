@@ -22,6 +22,7 @@ class SiteService
             'links' => $this->siteLinks($lang, $defaultLang),
             'header_nav' => $this->navigations($lang, 'header', $defaultLang),
             'footer_nav' => $this->navigations($lang, 'footer', $defaultLang),
+            'carousels' => $this->carousels($lang, 'home', $defaultLang),
             'featured_articles' => $this->contents('article', $lang, 6, true, $defaultLang),
             'featured_products' => $this->contents('product', $lang, 6, true, $defaultLang),
             'pages' => $this->contents('page', $lang, 20, false, $defaultLang),
@@ -389,6 +390,40 @@ class SiteService
 
         foreach ($rows as &$row) {
             $row['url'] = $this->normalizeSiteUrl((string) $row['url'], $lang, $defaultLang);
+        }
+        unset($row);
+
+        return $rows;
+    }
+
+    private function carousels(string $lang, string $position, string $defaultLang): array
+    {
+        $rows = Db::table('b8cms_carousel')
+            ->where('lang_code', $lang)
+            ->where('position', $position)
+            ->where('status', 1)
+            ->whereNull('delete_time')
+            ->field('id,lang_code,position,title,subtitle,description,image,mobile_image,image_alt,button_text,button_url,secondary_button_text,secondary_button_url,target,sort')
+            ->order('sort', 'asc')
+            ->select()
+            ->toArray();
+
+        if ($rows === [] && $lang !== $defaultLang) {
+            $rows = Db::table('b8cms_carousel')
+                ->where('lang_code', $defaultLang)
+                ->where('position', $position)
+                ->where('status', 1)
+                ->whereNull('delete_time')
+                ->field('id,lang_code,position,title,subtitle,description,image,mobile_image,image_alt,button_text,button_url,secondary_button_text,secondary_button_url,target,sort')
+                ->order('sort', 'asc')
+                ->select()
+                ->toArray();
+        }
+
+        foreach ($rows as &$row) {
+            $row['button_url'] = $this->normalizeSiteUrl((string) $row['button_url'], $lang, $defaultLang);
+            $row['secondary_button_url'] = $this->normalizeSiteUrl((string) $row['secondary_button_url'], $lang, $defaultLang);
+            $row['image_alt'] = $this->firstFilled($row['image_alt'] ?? null, $row['title'] ?? null);
         }
         unset($row);
 

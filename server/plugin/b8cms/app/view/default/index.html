@@ -1,11 +1,59 @@
 {include file="default/public/header" /}
 <main>
+    {if !empty($carousels)}
+    <section class="hero carousel-hero" data-b8cms-carousel>
+        <div class="carousel-track" data-carousel-track>
+            {volist name="carousels" id="slide" key="index"}
+            <article class="carousel-slide{if $index == 1} is-active{/if}" data-carousel-slide>
+                <div class="site-wrap carousel-layout">
+                    <div class="carousel-copy">
+                        {if !empty($slide.subtitle)}
+                        <p class="carousel-kicker">{$slide.subtitle}</p>
+                        {/if}
+                        <h1>{$slide.title}</h1>
+                        <p>{$slide.description}</p>
+                        <div class="carousel-actions">
+                            {if !empty($slide.button_text)}
+                            <a class="primary-link" href="{$slide.button_url}" target="{$slide.target}">{$slide.button_text}</a>
+                            {/if}
+                            {if !empty($slide.secondary_button_text)}
+                            <a class="secondary-link" href="{$slide.secondary_button_url}" target="{$slide.target}">{$slide.secondary_button_text}</a>
+                            {/if}
+                        </div>
+                    </div>
+                    <div class="carousel-media">
+                        {if !empty($slide.image)}
+                        <picture>
+                            {if !empty($slide.mobile_image)}
+                            <source media="(max-width: 720px)" srcset="{$slide.mobile_image}">
+                            {/if}
+                            <img src="{$slide.image}" alt="{$slide.image_alt}">
+                        </picture>
+                        {else}
+                        <div class="carousel-placeholder">
+                            <span>{$slide.lang_code}</span>
+                            <strong>{$slide.title}</strong>
+                        </div>
+                        {/if}
+                    </div>
+                </div>
+            </article>
+            {/volist}
+        </div>
+        <div class="site-wrap carousel-controls" data-carousel-controls>
+            <button type="button" data-carousel-prev aria-label="Previous slide">‹</button>
+            <div class="carousel-dots" data-carousel-dots></div>
+            <button type="button" data-carousel-next aria-label="Next slide">›</button>
+        </div>
+    </section>
+    {else}
     <section class="hero">
         <div class="site-wrap">
             <h1>{$settings.hero_title}</h1>
             <p>{$settings.hero_subtitle}</p>
         </div>
     </section>
+    {/if}
 
     <section class="section">
         <div class="site-wrap">
@@ -92,4 +140,59 @@
 
     {include file="default/public/contact-form" /}
 </main>
+<script>
+(() => {
+    const root = document.querySelector('[data-b8cms-carousel]');
+    if (!root || root.dataset.ready === '1') {
+        return;
+    }
+    root.dataset.ready = '1';
+    const slides = Array.from(root.querySelectorAll('[data-carousel-slide]'));
+    const controls = root.querySelector('[data-carousel-controls]');
+    const dotsRoot = root.querySelector('[data-carousel-dots]');
+    const prev = root.querySelector('[data-carousel-prev]');
+    const next = root.querySelector('[data-carousel-next]');
+    if (slides.length <= 1) {
+        controls?.remove();
+        return;
+    }
+
+    const dots = dotsRoot ? slides.map((slide, slideIndex) => {
+        const dot = document.createElement('button');
+        dot.type = 'button';
+        dot.dataset.carouselDot = String(slideIndex);
+        dot.setAttribute('aria-label', `Slide ${slideIndex + 1}`);
+        dotsRoot.appendChild(dot);
+        return dot;
+    }) : [];
+    let active = Math.max(0, slides.findIndex((slide) => slide.classList.contains('is-active')));
+    let timer = null;
+    const show = (index) => {
+        active = (index + slides.length) % slides.length;
+        slides.forEach((slide, slideIndex) => slide.classList.toggle('is-active', slideIndex === active));
+        dots.forEach((dot, dotIndex) => dot.classList.toggle('is-active', dotIndex === active));
+    };
+    const start = () => {
+        window.clearInterval(timer);
+        timer = window.setInterval(() => show(active + 1), 5200);
+    };
+
+    prev?.addEventListener('click', () => {
+        show(active - 1);
+        start();
+    });
+    next?.addEventListener('click', () => {
+        show(active + 1);
+        start();
+    });
+    dots.forEach((dot) => dot.addEventListener('click', () => {
+        show(Number(dot.dataset.carouselDot || 0));
+        start();
+    }));
+    root.addEventListener('mouseenter', () => window.clearInterval(timer));
+    root.addEventListener('mouseleave', start);
+    show(active);
+    start();
+})();
+</script>
 {include file="default/public/footer" /}
