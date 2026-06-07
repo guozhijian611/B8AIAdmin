@@ -195,6 +195,8 @@ B8AIadmin 是父框架，B8CMS 前台默认挂载在 `/cms`，避免插件抢占
 
 内容详情页的规范地址统一使用 `.html` 后缀；旧版无后缀详情地址会 301 跳转到对应 `.html` 地址，避免搜索引擎收录重复页面。
 
+前台路径统一使用无尾斜杠形式。`/cms/`、`/cms/{lang}/` 以及详情页尾斜杠地址会 301 跳转到对应规范地址，避免搜索引擎把同一页面识别为重复 URL。
+
 `sitemap.xml` 只输出已启用语言、已发布且未删除的首页、文章、产品和页面 URL，详情页 URL 与 canonical 保持一致，统一带 `.html` 后缀。Sitemap 会同时输出 `xhtml:link` 多语言替代链接和 `image:image` 图片条目，图片来自封面图、内容图片和 SEO 图片。
 
 前台 canonical、sitemap、robots、Open Graph URL 会优先使用后台“站点配置”中的正式站点域名：

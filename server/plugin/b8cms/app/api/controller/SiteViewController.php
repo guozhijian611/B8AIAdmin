@@ -41,6 +41,18 @@ class SiteViewController
         return $this->content($request, 'page');
     }
 
+    public function redirectWithoutTrailingSlash(Request $request): Response
+    {
+        $path = '/' . ltrim($request->path(), '/');
+        $target = rtrim($path, '/') ?: '/';
+        $queryString = (string) $request->queryString();
+        if ($queryString !== '') {
+            $target .= '?' . $queryString;
+        }
+
+        return redirect($target)->withStatus(301);
+    }
+
     public function sitemap(Request $request): Response
     {
         if ($response = $this->redirectPreferredBase($request)) {
