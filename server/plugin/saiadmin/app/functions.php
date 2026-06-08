@@ -93,11 +93,12 @@ if (!function_exists('getConfigGroup')) {
     /**
      * 读取配置组
      * @param $group
+     * @param bool $toKeyValue 是否展开为 key => value
      * @return array
      */
-    function getConfigGroup($group): array
+    function getConfigGroup($group, bool $toKeyValue = false): array
     {
-        return ConfigCache::getConfig($group);
+        return ConfigCache::getConfig($group, $toKeyValue);
     }
 }
 

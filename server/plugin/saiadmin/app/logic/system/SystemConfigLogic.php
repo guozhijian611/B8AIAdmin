@@ -99,9 +99,9 @@ class SystemConfigLogic extends BaseLogic
     /**
      * 获取配置组
      */
-    public function getGroup($config): array
+    public function getGroup($config, bool $toKeyValue = false): array
     {
-        return ConfigCache::getConfig($config);
+        return ConfigCache::getConfig($config, $toKeyValue);
     }
 
 }

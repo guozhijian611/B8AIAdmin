@@ -32,7 +32,7 @@ class ConfigCache
     /**
      * 获取配置信息
      */
-    public static function getConfig(string $code = ''): array
+    public static function getConfig(string $code = '', bool $toKeyValue = false): array
     {
         if (empty($code)) {
             return [];
@@ -41,16 +41,31 @@ class ConfigCache
         // 直接从缓存获取
         $config = Cache::get($cache['prefix'] . md5($code));
         if ($config) {
-            return $config;
+            return $toKeyValue ? static::toKeyValue($config) : $config;
         }
 
         // 设置配置并获取
         $config = static::setConfig($code);
         if ($config) {
-            return $config;
+            return $toKeyValue ? static::toKeyValue($config) : $config;
         }
 
         return [];
+    }
+
+    /**
+     * 将配置项列表展开为 key => value。
+     */
+    public static function toKeyValue(array $config): array
+    {
+        $result = [];
+        foreach ($config as $item) {
+            if (!is_array($item) || !array_key_exists('key', $item)) {
+                continue;
+            }
+            $result[(string)$item['key']] = array_key_exists('value', $item) ? $item['value'] : '';
+        }
+        return $result;
     }
 
     /**
