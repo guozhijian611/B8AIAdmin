@@ -51,8 +51,7 @@ class QueueExecutorService
 
         try {
             if (!empty($model->created_by)) {
-                $userInfoCache = new UserInfoCache((int) $model->created_by);
-                Context::set('adminInfo', $userInfoCache->getUserInfo());
+                Context::set('adminInfo', UserInfoCache::getUserInfo((int) $model->created_by));
             }
 
             $ref = new \ReflectionMethod($class, $method);
