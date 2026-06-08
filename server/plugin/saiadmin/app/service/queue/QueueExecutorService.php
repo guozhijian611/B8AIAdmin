@@ -17,6 +17,8 @@ use support\Context;
  */
 class QueueExecutorService
 {
+    private const ADMIN_SOURCE = 'saiadmin';
+
     public function consume(int $id): bool
     {
         $model = QueueTask::findOrEmpty($id);
@@ -50,7 +52,7 @@ class QueueExecutorService
         $model->save();
 
         try {
-            if (!empty($model->created_by)) {
+            if ($this->shouldRestoreAdminContext($model)) {
                 Context::set('adminInfo', UserInfoCache::getUserInfo((int) $model->created_by));
             }
 
@@ -77,6 +79,12 @@ class QueueExecutorService
         }
 
         return true;
+    }
+
+    private function shouldRestoreAdminContext(QueueTask $model): bool
+    {
+        return !empty($model->created_by)
+            && strtolower(trim((string) $model->source)) === self::ADMIN_SOURCE;
     }
 
     private function saveRuntime(QueueTask $model, float $startTime, int $startMemory): void

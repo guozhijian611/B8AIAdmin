@@ -148,7 +148,8 @@ if (!function_exists('redis_send')) {
         array $arguments = [],
         int $delay = 0,
         string $queueName = 'fast_queue',
-        string $connection = 'default'
+        string $connection = 'default',
+        string $source = 'saiadmin'
     ): bool {
         if ($class === null) {
             throw new \plugin\saiadmin\exception\ApiException('请填写执行类');
@@ -161,7 +162,7 @@ if (!function_exists('redis_send')) {
         if ($config->isEmpty()) {
             throw new \plugin\saiadmin\exception\ApiException('Redis队列配置不存在或未启用');
         }
-        return queue_send((int) $config->id, $class, $method, $arguments, $delay, 'redis');
+        return queue_send((int) $config->id, $class, $method, $arguments, $delay, $source);
     }
 }
 
@@ -175,7 +176,8 @@ if (!function_exists('rabbitmq_send')) {
         array $arguments = [],
         int $delay = 0,
         string $queueName = 'fast_queue',
-        string $connection = 'default'
+        string $connection = 'default',
+        string $source = 'saiadmin'
     ): bool {
         if ($class === null) {
             throw new \plugin\saiadmin\exception\ApiException('请填写执行类');
@@ -188,7 +190,7 @@ if (!function_exists('rabbitmq_send')) {
         if ($config->isEmpty()) {
             throw new \plugin\saiadmin\exception\ApiException('RabbitMQ队列配置不存在或未启用');
         }
-        return queue_send((int) $config->id, $class, $method, $arguments, $delay, 'rabbitmq');
+        return queue_send((int) $config->id, $class, $method, $arguments, $delay, $source);
     }
 }
 
