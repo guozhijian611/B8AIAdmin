@@ -38,7 +38,16 @@ class AiFactory
 
     public static function createAgent(string $type, ?string $model = null, bool $enableTools = true): Agent
     {
-        $resolved = self::resolveConfig($type, $model);
+        return self::createAgentFromResolved(self::resolveConfig($type, $model), $enableTools);
+    }
+
+    public static function createAgentByConfigId(int $configId, bool $enableTools = true): Agent
+    {
+        return self::createAgentFromResolved(self::resolveConfigById($configId), $enableTools);
+    }
+
+    protected static function createAgentFromResolved(array $resolved, bool $enableTools = true): Agent
+    {
         $apiUrl = $resolved['apiUrl'];
         $apiKey = $resolved['apiKey'];
         $resolvedModel = $resolved['model'];
@@ -96,11 +105,49 @@ class AiFactory
         ];
     }
 
+    public static function chatOnceByConfigId(string $message, array $history = [], int $configId = 0): array
+    {
+        if ($configId <= 0) {
+            return self::chatOnce($message, $history);
+        }
+
+        $content = '';
+        $resolved = self::resolveConfigById($configId);
+        $resolvedModel = (string) $resolved['model'];
+        foreach (self::chatStreamWithResolved($resolved, $message, $history) as $chunk) {
+            $resolvedModel = (string) ($chunk['model'] ?? $resolvedModel);
+            if (($chunk['type'] ?? '') === 'content') {
+                $content .= (string) ($chunk['content'] ?? '');
+            }
+        }
+
+        return [
+            'content' => $content,
+            'model' => $resolvedModel,
+            'type' => (string) $resolved['platformType'],
+        ];
+    }
+
     public static function chatStream(string $message, array $history = [], ?string $model = null): \Generator
     {
         $resolved = self::resolveConfig(self::DEFAULT_CHAT_TYPE, $model);
-        $resolvedModel = $resolved['model'];
-        $agent = self::createAgent(self::DEFAULT_CHAT_TYPE, $resolvedModel, false);
+        yield from self::chatStreamWithResolved($resolved, $message, $history);
+    }
+
+    public static function chatStreamByConfigId(string $message, array $history = [], int $configId = 0): \Generator
+    {
+        if ($configId <= 0) {
+            yield from self::chatStream($message, $history);
+            return;
+        }
+
+        yield from self::chatStreamWithResolved(self::resolveConfigById($configId), $message, $history);
+    }
+
+    protected static function chatStreamWithResolved(array $resolved, string $message, array $history = []): \Generator
+    {
+        $resolvedModel = (string) $resolved['model'];
+        $agent = self::createAgentFromResolved($resolved, false);
         $messages = self::buildChatMessages($message, $history);
 
         try {
@@ -134,6 +181,20 @@ class AiFactory
     public static function generateImage(string $prompt, ?string $model = null, string $size = '1024x1024'): array
     {
         $resolved = self::resolveConfig(self::DEFAULT_CHAT_TYPE, $model ?: self::DEFAULT_IMAGE_MODEL);
+        return self::generateImageWithResolved($resolved, $prompt, $size);
+    }
+
+    public static function generateImageByConfigId(string $prompt, int $configId = 0, string $size = '1024x1024'): array
+    {
+        if ($configId <= 0) {
+            return self::generateImage($prompt, self::DEFAULT_IMAGE_MODEL, $size);
+        }
+
+        return self::generateImageWithResolved(self::resolveConfigById($configId), $prompt, $size);
+    }
+
+    protected static function generateImageWithResolved(array $resolved, string $prompt, string $size = '1024x1024'): array
+    {
         $apiUrl = self::buildImageGenerationUrl($resolved['apiUrl'], $resolved['platformType']);
         $httpClient = HttpClient::create([
             'timeout' => self::IMAGE_REQUEST_TIMEOUT,
@@ -217,6 +278,26 @@ class AiFactory
             throw new ApiException('未找到可用的 AI 配置，请先在后台启用模型配置');
         }
 
+        return self::resolveConfigFromModel($config, $model);
+    }
+
+    public static function resolveConfigById(int $configId): array
+    {
+        if ($configId <= 0) {
+            return self::resolveConfig(self::DEFAULT_CHAT_TYPE);
+        }
+
+        $config = AiConfig::where('id', $configId)->where('status', 1)->findOrEmpty();
+        if ($config->isEmpty()) {
+            throw new ApiException('所选 AI 模型配置不存在或未启用，请在后台重新选择模型策略');
+        }
+
+        return self::resolveConfigFromModel($config);
+    }
+
+    protected static function resolveConfigFromModel(AiConfig $config, ?string $model = null): array
+    {
+        $model = trim((string) $model);
         $platformType = trim((string) $config->type);
         $apiUrl = self::normalizeApiUrl((string) $config->ai_url, $platformType);
         $apiKey = trim((string) $config->ai_key) ?: (string) env('OPENAI_API_KEY', '');
@@ -229,6 +310,8 @@ class AiFactory
             'apiKey' => $apiKey,
             'model' => $resolvedModel,
             'platformType' => $platformType,
+            'configId' => (int) $config->id,
+            'configName' => (string) $config->name,
         ];
     }
 
