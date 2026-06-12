@@ -583,7 +583,8 @@
       if (window.location.protocol === 'https:') {
         url.protocol = 'wss:'
         if (url.hostname === window.location.hostname || url.port === '8791') {
-          url.host = window.location.host
+          url.hostname = window.location.hostname
+          url.port = window.location.port === '8791' ? '' : window.location.port
         }
       }
       return url.toString()

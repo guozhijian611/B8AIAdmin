@@ -184,7 +184,7 @@ class AiConfigController extends BaseController
 
         $authority = $host;
         if ($scheme === 'wss') {
-            if ($requestPort !== null && $requestPort !== 443) {
+            if ($requestPort !== null && $requestPort !== 443 && $requestPort !== $gatewayPort) {
                 $authority .= ':' . $requestPort;
             }
         } elseif ($gatewayPort !== 80) {
