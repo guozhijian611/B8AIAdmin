@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "443b7640ae58309f60397eb821c644b2",
+    "content-hash": "03c4507734efc65cfc8318f287ec9066",
     "packages": [
         {
             "name": "aliyuncs/oss-sdk-php",
@@ -4927,7 +4927,7 @@
             "dist": {
                 "type": "path",
                 "url": "../packages/webman-otel-trace",
-                "reference": "06e04f3abe94782ddd38ddc67ab0a7d16cb3276e"
+                "reference": "513b3cd0538b929741008d424b26796336e0d415"
             },
             "require": {
                 "open-telemetry/exporter-otlp": "^1.4",
@@ -4957,6 +4957,7 @@
             ],
             "description": "OpenTelemetry trace integration for Webman.",
             "transport-options": {
+                "symlink": false,
                 "relative": true
             }
         },

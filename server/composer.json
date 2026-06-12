@@ -94,6 +94,9 @@
     "repositories": [{
         "name": "openb8-webman-otel-trace",
         "type": "path",
-        "url": "../packages/webman-otel-trace"
+        "url": "../packages/webman-otel-trace",
+        "options": {
+            "symlink": false
+        }
     }]
 }

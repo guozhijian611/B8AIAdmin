@@ -76,6 +76,7 @@ uniapp/src/manifest.json
 uniapp/src/pages.json
 
 # PHP / Webman runtime output
+server/build/
 server/runtime/
 server/tests/tmp/
 server/tests/.phpunit.result.cache
