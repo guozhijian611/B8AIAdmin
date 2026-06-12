@@ -510,7 +510,7 @@
       configApi.list({ page: 1, limit: 100, type: 'realtime' })
     ])
 
-    wsUrl.value = testConfig.ws_url || ''
+    wsUrl.value = normalizeRealtimeWsUrl(String(testConfig.ws_url || ''))
     modelName.value = testConfig.default_model || modelName.value
     applySessionDefaults(testConfig.default_session || {})
 
@@ -534,7 +534,13 @@
     disconnect()
     resetRuntimeState()
 
-    const url = new URL(wsUrl.value)
+    let url: URL
+    try {
+      url = new URL(normalizeRealtimeWsUrl(wsUrl.value))
+    } catch {
+      ElMessage.error('实时代理地址格式不正确')
+      return
+    }
     url.searchParams.set('token', token)
     url.searchParams.set('config_id', String(selectedConfigId.value))
     url.searchParams.set('model', modelName.value)
@@ -562,6 +568,27 @@
     }
     socket.onmessage = (event) => {
       handleServerMessage(String(event.data))
+    }
+  }
+
+  function normalizeRealtimeWsUrl(rawUrl: string) {
+    const trimmed = rawUrl.trim()
+    if (!trimmed || typeof window === 'undefined') return trimmed
+
+    try {
+      const url = new URL(trimmed, window.location.origin)
+      if (url.protocol === 'http:') {
+        url.protocol = 'ws:'
+      }
+      if (window.location.protocol === 'https:') {
+        url.protocol = 'wss:'
+        if (url.hostname === window.location.hostname || url.port === '8791') {
+          url.host = window.location.host
+        }
+      }
+      return url.toString()
+    } catch {
+      return trimmed
     }
   }
 

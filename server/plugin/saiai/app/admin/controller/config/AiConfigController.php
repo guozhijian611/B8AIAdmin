@@ -159,21 +159,61 @@ class AiConfigController extends BaseController
     #[Permission('实时测试配置', 'saiai:realtime:test')]
     public function realtimeTestConfig(Request $request): Response
     {
-        $port = (int) env('SAIAI_REALTIME_WS_PORT', 8791);
-        $forwardedProto = strtolower((string) $request->header('x-forwarded-proto', ''));
-        $scheme = $forwardedProto === 'https' || $request->header('https') === 'on' ? 'wss' : 'ws';
-        $host = $request->host(false) ?: '127.0.0.1';
-        $host = preg_match('/:\d+$/', $host)
-            ? (preg_replace('/:\d+$/', ':' . $port, $host) ?: $host)
-            : $host . ':' . $port;
-
         return $this->success([
-            'ws_url' => $scheme . '://' . $host . '/v1/realtime',
+            'ws_url' => $this->buildRealtimeProxyUrl($request),
             'default_model' => AliyunRealtimeConfig::DEFAULT_MODEL,
             'default_ai_url' => AliyunRealtimeConfig::DEFAULT_URL,
             'default_session' => AliyunRealtimeConfig::defaultSession(),
-            'port' => $port,
+            'port' => (int) env('SAIAI_REALTIME_WS_PORT', 8791),
         ]);
+    }
+
+    protected function buildRealtimeProxyUrl(Request $request): string
+    {
+        $customUrl = trim((string) env('SAIAI_REALTIME_PUBLIC_URL', ''));
+        if ($customUrl !== '') {
+            return $customUrl;
+        }
+
+        $scheme = $this->isHttpsRequest($request) ? 'wss' : 'ws';
+        $hostHeader = $this->resolveRequestHost($request) ?: '127.0.0.1';
+        $hostParts = parse_url('//' . $hostHeader);
+        $host = (string) ($hostParts['host'] ?? $hostHeader);
+        $requestPort = isset($hostParts['port']) ? (int) $hostParts['port'] : null;
+        $gatewayPort = (int) env('SAIAI_REALTIME_WS_PORT', 8791);
+
+        $authority = $host;
+        if ($scheme === 'wss') {
+            if ($requestPort !== null && $requestPort !== 443) {
+                $authority .= ':' . $requestPort;
+            }
+        } elseif ($gatewayPort !== 80) {
+            $authority .= ':' . $gatewayPort;
+        }
+
+        return $scheme . '://' . $authority . '/v1/realtime';
+    }
+
+    protected function isHttpsRequest(Request $request): bool
+    {
+        $forwardedProto = strtolower(trim(explode(',', (string) $request->header('x-forwarded-proto', ''))[0]));
+        if ($forwardedProto === '') {
+            $forwardedProto = strtolower(trim(explode(',', (string) $request->header('x-forwarded-protocol', ''))[0]));
+        }
+
+        return $forwardedProto === 'https'
+            || strtolower((string) $request->header('x-forwarded-ssl', '')) === 'on'
+            || strtolower((string) $request->header('https', '')) === 'on';
+    }
+
+    protected function resolveRequestHost(Request $request): string
+    {
+        $forwardedHost = trim(explode(',', (string) $request->header('x-forwarded-host', ''))[0]);
+        if ($forwardedHost !== '') {
+            return $forwardedHost;
+        }
+
+        return trim((string) $request->host());
     }
 
 }
