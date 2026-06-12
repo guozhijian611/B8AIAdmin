@@ -12,3 +12,4 @@
 9. 离线推送通知
 10. mysql 一键导入导出 https://www.workerman.net/plugin/134 ✅
 11. 海报，水印，行为验证图片，HTML转图片
+12. 授权入口、版本切换
