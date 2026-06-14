@@ -107,6 +107,11 @@ BUILD_H5="${BUILD_H5:-}"
 RUN_MIGRATE="${RUN_MIGRATE:-}"
 AUTO_REMOTE_UPDATE="${AUTO_REMOTE_UPDATE:-}"
 
+# 是否执行首次安装基线。仅在线上库未导入 Database/b8aiadmin.sql 时开启。
+# 开启后会在新镜像的一次性容器里执行 b8:install --force，导入基线并执行迁移。
+# 注意：首次安装会写入基础表和初始化数据，生产环境必须先确认目标库和备份。
+RUN_INSTALL="${RUN_INSTALL:-}"
+
 # 只重建远程容器。设为 1 时跳过本地构建、上传和 docker load，直接使用服务器已有镜像重建容器。
 REMOTE_REBUILD_ONLY="${REMOTE_REBUILD_ONLY:-0}"
 
@@ -236,15 +241,25 @@ if [[ "$INTERACTIVE" == "1" ]]; then
       RUN_MIGRATE=0
     fi
   fi
+
+  if [[ -z "$RUN_INSTALL" ]]; then
+    if prompt_yes_no "是否执行首次安装基线？仅空库第一次部署使用，会导入 Database/b8aiadmin.sql 并执行迁移" "n"; then
+      RUN_INSTALL=1
+    else
+      RUN_INSTALL=0
+    fi
+  fi
 else
   BUILD_ADMIN="${BUILD_ADMIN:-0}"
   BUILD_H5="${BUILD_H5:-0}"
   RUN_MIGRATE="${RUN_MIGRATE:-0}"
+  RUN_INSTALL="${RUN_INSTALL:-0}"
 fi
 
 BUILD_ADMIN="$(resolve_bool "$BUILD_ADMIN" 0)"
 BUILD_H5="$(resolve_bool "$BUILD_H5" 0)"
 RUN_MIGRATE="$(resolve_bool "$RUN_MIGRATE" 0)"
+RUN_INSTALL="$(resolve_bool "$RUN_INSTALL" 0)"
 REMOTE_REBUILD_ONLY="$(resolve_bool "$REMOTE_REBUILD_ONLY" 0)"
 REMOTE_RELOAD_CONTAINER="$(resolve_bool "$REMOTE_RELOAD_CONTAINER" 1)"
 INSTALL_CA_CERTIFICATES="$(resolve_bool "$INSTALL_CA_CERTIFICATES" 1)"
@@ -258,6 +273,10 @@ DOCKER_NO_CACHE="$(resolve_bool "$DOCKER_NO_CACHE" 0)"
 
 validate_bin_name
 
+if [[ "$RUN_INSTALL" == "1" ]]; then
+  RUN_MIGRATE=0
+fi
+
 if [[ "$RUN_MIGRATE" == "1" ]]; then
   if [[ -n "$REMOTE_MIGRATE_STATUS_COMMAND" || -n "$REMOTE_MIGRATE_DRY_RUN_COMMAND" || -n "$REMOTE_MIGRATE_COMMAND" ]]; then
     if [[ -z "$REMOTE_MIGRATE_STATUS_COMMAND" || -z "$REMOTE_MIGRATE_DRY_RUN_COMMAND" || -z "$REMOTE_MIGRATE_COMMAND" ]]; then
@@ -265,6 +284,18 @@ if [[ "$RUN_MIGRATE" == "1" ]]; then
     fi
   elif [[ "$INCLUDE_DATABASE" != "1" ]]; then
     fail "RUN_MIGRATE=1 且未配置自定义迁移命令时，INCLUDE_DATABASE 必须为 1"
+  fi
+fi
+
+if [[ "$RUN_INSTALL" == "1" ]]; then
+  if [[ -n "$REMOTE_MIGRATE_STATUS_COMMAND" || -n "$REMOTE_MIGRATE_DRY_RUN_COMMAND" || -n "$REMOTE_MIGRATE_COMMAND" ]]; then
+    fail "RUN_INSTALL=1 会执行 b8:install --force，不能同时配置自定义迁移命令"
+  fi
+  if [[ "$INCLUDE_PRODUCTION_ENV" != "1" ]]; then
+    fail "RUN_INSTALL=1 时必须打包生产 .env，供 b8:install 读取数据库配置"
+  fi
+  if [[ "$INCLUDE_DATABASE" != "1" ]]; then
+    fail "RUN_INSTALL=1 时必须打包 Database，供 b8:install 导入基线 SQL 和迁移"
   fi
 fi
 
@@ -283,6 +314,7 @@ echo "二进制文件名：$BIN_NAME"
 echo "构建 admin：$BUILD_ADMIN"
 echo "构建 H5：$BUILD_H5"
 echo "线上迁移：$RUN_MIGRATE"
+echo "首次安装基线：$RUN_INSTALL"
 echo "直接重建远程容器：$REMOTE_REBUILD_ONLY"
 echo "打包生产 .env：$INCLUDE_PRODUCTION_ENV"
 echo "打包 Database：$INCLUDE_DATABASE"
@@ -308,6 +340,7 @@ if [[ "$INTERACTIVE" == "1" ]]; then
     r|R)
       REMOTE_REBUILD_ONLY=1
       RUN_MIGRATE=0
+      RUN_INSTALL=0
       AUTO_REMOTE_UPDATE=1
       echo "已选择直接重建远程容器：跳过本地构建、上传、docker load 和迁移。"
       ;;
@@ -662,12 +695,28 @@ migration_step_failed() {
 
   warn "线上迁移 ${step} 失败，已中止容器重建。镜像已上传并 docker load，但没有执行 docker run。"
   warn "请先修复数据库连接或迁移问题；如果本次只想重建容器，请重新执行并选择不执行迁移。"
+  warn "如果报 sa_system_menu 不存在，说明目标库未导入基线；确认是空库并已备份后，可用 RUN_INSTALL=1 执行首次安装。"
 }
 
 run_remote_migrations() {
-  [[ "$RUN_MIGRATE" == "1" ]] || return 0
+  [[ "$RUN_MIGRATE" == "1" || "$RUN_INSTALL" == "1" ]] || return 0
 
   prepare_remote_mount_dirs
+
+  if [[ "$RUN_INSTALL" == "1" ]]; then
+    if [[ "$INTERACTIVE" == "1" ]]; then
+      if ! prompt_yes_no "确认执行首次安装基线？这会导入基础表和初始化数据，请确认目标库为空或已备份" "n"; then
+        fail "已取消首次安装，当前容器未重载"
+      fi
+    fi
+
+    log "执行首次安装基线和迁移"
+    if ! run_remote_image_command "b8:install --force"; then
+      migration_step_failed "install"
+      return 1
+    fi
+    return 0
+  fi
 
   if [[ -n "$REMOTE_MIGRATE_STATUS_COMMAND" ]]; then
     log "执行自定义线上迁移 status"
