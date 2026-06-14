@@ -392,7 +392,7 @@ class MemberLogic extends BaseLogic
             $token = JwtToken::generateToken([
                 'access_exp' => $access_exp,
                 'id' => $model->id,
-                'username' => $model->account,
+                'username' => $model->username,
                 'plat' => 'saiuser',
                 'type' => $platform_id
             ]);
@@ -471,7 +471,7 @@ class MemberLogic extends BaseLogic
             $token = JwtToken::generateToken([
                 'access_exp' => $access_exp,
                 'id' => $model->id,
-                'username' => $model->account,
+                'username' => $model->username,
                 'plat' => 'saiuser',
                 'type' => $platform_id
             ]);
