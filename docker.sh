@@ -163,7 +163,7 @@ prompt_yes_no() {
   answer="${answer:-$default_answer}"
 
   case "$answer" in
-    y|Y|yes|YES) return 0 ;;
+    1|y|Y|yes|YES|true|TRUE|是|对|好|确认) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -241,19 +241,22 @@ elif [[ "$INTERACTIVE" == "1" ]]; then
     fi
   fi
 
-  if [[ -z "$RUN_MIGRATE" ]]; then
+  if [[ -z "$RUN_INSTALL" ]]; then
+    if prompt_yes_no "是否执行首次安装基线？仅空库第一次部署使用，会导入 Database/b8aiadmin.sql 并执行迁移" "n"; then
+      RUN_INSTALL=1
+      RUN_MIGRATE=0
+    else
+      RUN_INSTALL=0
+    fi
+  fi
+
+  if [[ "$RUN_INSTALL" == "1" ]]; then
+    RUN_MIGRATE=0
+  elif [[ -z "$RUN_MIGRATE" ]]; then
     if prompt_yes_no "是否在自动更新线上镜像时执行镜像内数据库迁移？默认会先 status 和 dry-run" "n"; then
       RUN_MIGRATE=1
     else
       RUN_MIGRATE=0
-    fi
-  fi
-
-  if [[ -z "$RUN_INSTALL" ]]; then
-    if prompt_yes_no "是否执行首次安装基线？仅空库第一次部署使用，会导入 Database/b8aiadmin.sql 并执行迁移" "n"; then
-      RUN_INSTALL=1
-    else
-      RUN_INSTALL=0
     fi
   fi
 else
