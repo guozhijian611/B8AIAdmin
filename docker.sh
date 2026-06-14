@@ -469,9 +469,14 @@ CMD ["start"]
 EOF
 
 log "构建 Docker 镜像"
-DOCKER_BUILD_CACHE_FLAGS=()
+DOCKER_BUILD_CMD=(
+  docker buildx build
+  --platform "$DOCKER_PLATFORM"
+  --load
+)
+
 if [[ "$DOCKER_NO_CACHE" == "1" ]]; then
-  DOCKER_BUILD_CACHE_FLAGS+=(--no-cache)
+  DOCKER_BUILD_CMD+=(--no-cache)
 elif [[ "$DOCKER_CACHE_ENABLED" == "1" ]]; then
   if [[ "$DOCKER_BUILDX_DRIVER" == "docker" ]]; then
     echo "当前 buildx driver 为 docker，跳过外部缓存导出，使用 Docker 原生构建缓存。"
@@ -481,19 +486,15 @@ elif [[ "$DOCKER_CACHE_ENABLED" == "1" ]]; then
     mkdir -p "$(dirname "$DOCKER_CACHE_DIR")"
 
     if [[ -f "$DOCKER_CACHE_DIR/index.json" ]]; then
-      DOCKER_BUILD_CACHE_FLAGS+=(--cache-from "type=local,src=$DOCKER_CACHE_DIR")
+      DOCKER_BUILD_CMD+=(--cache-from "type=local,src=$DOCKER_CACHE_DIR")
     fi
 
-    DOCKER_BUILD_CACHE_FLAGS+=(--cache-to "type=local,dest=$DOCKER_CACHE_NEXT_DIR,mode=$DOCKER_CACHE_MODE")
+    DOCKER_BUILD_CMD+=(--cache-to "type=local,dest=$DOCKER_CACHE_NEXT_DIR,mode=$DOCKER_CACHE_MODE")
   fi
 fi
 
-docker buildx build \
-  --platform "$DOCKER_PLATFORM" \
-  --load \
-  "${DOCKER_BUILD_CACHE_FLAGS[@]}" \
-  -t "$IMAGE_REF" \
-  "$CONTEXT_DIR"
+DOCKER_BUILD_CMD+=(-t "$IMAGE_REF" "$CONTEXT_DIR")
+"${DOCKER_BUILD_CMD[@]}"
 
 if [[ "$DOCKER_NO_CACHE" != "1" && "$DOCKER_CACHE_ENABLED" == "1" && "$DOCKER_BUILDX_DRIVER" != "docker" && -d "${DOCKER_CACHE_DIR}.new" ]]; then
   rm -rf "$DOCKER_CACHE_DIR"
