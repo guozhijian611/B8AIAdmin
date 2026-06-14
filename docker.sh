@@ -60,6 +60,14 @@ APP_PORT="${APP_PORT:-8787}"
 CONTAINER_NAME="${CONTAINER_NAME:-b8aiadmin}"
 HOST_PORT="${HOST_PORT:-8787}"
 
+# saiai 实时 WebSocket 进程端口，用于 AI 实时语音/多模态能力。
+# SAIAI_REALTIME_WS_PORT 是容器内监听端口，需与 server/.env.production 中同名配置保持一致。
+# SAIAI_REALTIME_HOST_PORT 是宿主机发布端口，只改外部 Nginx 反代端口时改它即可。
+# 默认发布为宿主机 8791 -> 容器 8791，方便 Nginx 将 /v1/realtime 反代到宿主机 127.0.0.1:8791。
+SAIAI_REALTIME_WS_PORT="${SAIAI_REALTIME_WS_PORT:-8791}"
+SAIAI_REALTIME_HOST_PORT="${SAIAI_REALTIME_HOST_PORT:-$SAIAI_REALTIME_WS_PORT}"
+PUBLISH_SAIAI_REALTIME_PORT="${PUBLISH_SAIAI_REALTIME_PORT:-1}"
+
 # 远程容器重启策略。
 DOCKER_RESTART_POLICY="${DOCKER_RESTART_POLICY:-unless-stopped}"
 
@@ -237,6 +245,7 @@ INCLUDE_PRODUCTION_ENV="$(resolve_bool "$INCLUDE_PRODUCTION_ENV" 1)"
 INCLUDE_DATABASE="$(resolve_bool "$INCLUDE_DATABASE" 1)"
 MOUNT_RUNTIME_DIR="$(resolve_bool "$MOUNT_RUNTIME_DIR" 0)"
 MOUNT_STORAGE_DIR="$(resolve_bool "$MOUNT_STORAGE_DIR" 0)"
+PUBLISH_SAIAI_REALTIME_PORT="$(resolve_bool "$PUBLISH_SAIAI_REALTIME_PORT" 1)"
 DOCKER_CACHE_ENABLED="$(resolve_bool "$DOCKER_CACHE_ENABLED" 1)"
 DOCKER_NO_CACHE="$(resolve_bool "$DOCKER_NO_CACHE" 0)"
 
@@ -276,6 +285,11 @@ echo "服务器别名：$REMOTE_ALIAS"
 echo "上传目录：$REMOTE_UPLOAD_DIR"
 echo "容器名称：$CONTAINER_NAME"
 echo "端口映射：$HOST_PORT:$APP_PORT"
+if [[ "$PUBLISH_SAIAI_REALTIME_PORT" == "1" ]]; then
+  echo "AI 实时端口：$SAIAI_REALTIME_HOST_PORT:$SAIAI_REALTIME_WS_PORT"
+else
+  echo "AI 实时端口：未发布"
+fi
 echo "远程 .env：${REMOTE_ENV_FILE:-未配置}"
 echo "挂载 runtime：$MOUNT_RUNTIME_DIR ${REMOTE_RUNTIME_DIR}"
 echo "挂载 storage：$MOUNT_STORAGE_DIR ${REMOTE_STORAGE_DIR}"
@@ -476,7 +490,7 @@ RUN chmod +x /app/server /usr/local/bin/docker-entrypoint \\
     && mkdir -p /app/runtime /app/public/storage \\
     && chmod -R 0775 /app/runtime /app/public
 
-EXPOSE $APP_PORT
+EXPOSE $APP_PORT $SAIAI_REALTIME_WS_PORT
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint"]
 CMD ["start"]
@@ -677,11 +691,17 @@ reload_remote_container() {
   local env_arg=""
   local network_arg=""
   local volume_args=""
+  local port_args=""
   local command_arg=""
 
   env_arg="$(remote_env_arg)"
   network_arg="$(remote_network_arg)"
   volume_args="$(remote_volume_args)"
+  port_args="-p $(shell_quote "$HOST_PORT:$APP_PORT")"
+
+  if [[ "$PUBLISH_SAIAI_REALTIME_PORT" == "1" ]]; then
+    port_args="$port_args -p $(shell_quote "$SAIAI_REALTIME_HOST_PORT:$SAIAI_REALTIME_WS_PORT")"
+  fi
 
   if [[ -n "$REMOTE_CONTAINER_COMMAND" ]]; then
     command_arg="$REMOTE_CONTAINER_COMMAND"
@@ -701,7 +721,7 @@ docker run -d \\
   --name $(shell_quote "$CONTAINER_NAME") \\
   --restart $(shell_quote "$DOCKER_RESTART_POLICY") \\
   $env_arg \\
-  -p $(shell_quote "$HOST_PORT:$APP_PORT") \\
+  $port_args \\
   $volume_args \\
   $network_arg \\
   $REMOTE_DOCKER_RUN_ARGS \\
