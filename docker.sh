@@ -290,6 +290,10 @@ if ! docker buildx version >/dev/null 2>&1; then
   fail "当前 Docker 不支持 buildx，无法稳定构建 $DOCKER_PLATFORM 镜像"
 fi
 
+DOCKER_BUILDX_DRIVER="$(docker buildx inspect 2>/dev/null | awk '/^Driver:/ {print $2; exit}')"
+DOCKER_BUILDX_DRIVER="${DOCKER_BUILDX_DRIVER:-unknown}"
+echo "Docker buildx driver：$DOCKER_BUILDX_DRIVER"
+
 if [[ "$BUILD_ADMIN" == "1" ]]; then
   log "编译 admin 管理端"
   (
@@ -469,15 +473,19 @@ DOCKER_BUILD_CACHE_FLAGS=()
 if [[ "$DOCKER_NO_CACHE" == "1" ]]; then
   DOCKER_BUILD_CACHE_FLAGS+=(--no-cache)
 elif [[ "$DOCKER_CACHE_ENABLED" == "1" ]]; then
-  DOCKER_CACHE_NEXT_DIR="${DOCKER_CACHE_DIR}.new"
-  rm -rf "$DOCKER_CACHE_NEXT_DIR"
-  mkdir -p "$(dirname "$DOCKER_CACHE_DIR")"
+  if [[ "$DOCKER_BUILDX_DRIVER" == "docker" ]]; then
+    echo "当前 buildx driver 为 docker，跳过外部缓存导出，使用 Docker 原生构建缓存。"
+  else
+    DOCKER_CACHE_NEXT_DIR="${DOCKER_CACHE_DIR}.new"
+    rm -rf "$DOCKER_CACHE_NEXT_DIR"
+    mkdir -p "$(dirname "$DOCKER_CACHE_DIR")"
 
-  if [[ -f "$DOCKER_CACHE_DIR/index.json" ]]; then
-    DOCKER_BUILD_CACHE_FLAGS+=(--cache-from "type=local,src=$DOCKER_CACHE_DIR")
+    if [[ -f "$DOCKER_CACHE_DIR/index.json" ]]; then
+      DOCKER_BUILD_CACHE_FLAGS+=(--cache-from "type=local,src=$DOCKER_CACHE_DIR")
+    fi
+
+    DOCKER_BUILD_CACHE_FLAGS+=(--cache-to "type=local,dest=$DOCKER_CACHE_NEXT_DIR,mode=$DOCKER_CACHE_MODE")
   fi
-
-  DOCKER_BUILD_CACHE_FLAGS+=(--cache-to "type=local,dest=$DOCKER_CACHE_NEXT_DIR,mode=$DOCKER_CACHE_MODE")
 fi
 
 docker buildx build \
@@ -487,7 +495,7 @@ docker buildx build \
   -t "$IMAGE_REF" \
   "$CONTEXT_DIR"
 
-if [[ "$DOCKER_NO_CACHE" != "1" && "$DOCKER_CACHE_ENABLED" == "1" && -d "${DOCKER_CACHE_DIR}.new" ]]; then
+if [[ "$DOCKER_NO_CACHE" != "1" && "$DOCKER_CACHE_ENABLED" == "1" && "$DOCKER_BUILDX_DRIVER" != "docker" && -d "${DOCKER_CACHE_DIR}.new" ]]; then
   rm -rf "$DOCKER_CACHE_DIR"
   mv "${DOCKER_CACHE_DIR}.new" "$DOCKER_CACHE_DIR"
 fi
