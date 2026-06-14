@@ -80,9 +80,8 @@ BUILD_H5="${BUILD_H5:-}"
 RUN_MIGRATE="${RUN_MIGRATE:-}"
 AUTO_REMOTE_UPDATE="${AUTO_REMOTE_UPDATE:-}"
 
-# 线上迁移默认走服务器已有源码目录执行，避免把 Phinx 迁移绑定到容器启动。
-# 如果你的线上只保留 Docker 镜像，请关闭 RUN_MIGRATE，或改写下面三个命令为自己的迁移方式。
-REMOTE_MIGRATE_WORKDIR="${REMOTE_MIGRATE_WORKDIR:-/www/wwwroot/b8aiadmin/server}"
+# Docker 二进制镜像默认不内置可直接执行的 Phinx 迁移工作目录。
+# 如需线上迁移，必须显式配置下面三个远程命令，例如指向服务器保留的源码发布目录或独立迁移脚本。
 REMOTE_MIGRATE_STATUS_COMMAND="${REMOTE_MIGRATE_STATUS_COMMAND:-}"
 REMOTE_MIGRATE_DRY_RUN_COMMAND="${REMOTE_MIGRATE_DRY_RUN_COMMAND:-}"
 REMOTE_MIGRATE_COMMAND="${REMOTE_MIGRATE_COMMAND:-}"
@@ -192,7 +191,7 @@ if [[ "$INTERACTIVE" == "1" ]]; then
   fi
 
   if [[ -z "$RUN_MIGRATE" ]]; then
-    if prompt_yes_no "是否在自动更新线上镜像时执行数据迁移？默认会先 status 和 dry-run" "n"; then
+    if prompt_yes_no "是否在自动更新线上镜像时执行自定义数据迁移命令？需要先配置 REMOTE_MIGRATE_*" "n"; then
       RUN_MIGRATE=1
     else
       RUN_MIGRATE=0
@@ -212,6 +211,12 @@ INSTALL_CA_CERTIFICATES="$(resolve_bool "$INSTALL_CA_CERTIFICATES" 1)"
 INCLUDE_PRODUCTION_ENV="$(resolve_bool "$INCLUDE_PRODUCTION_ENV" 1)"
 
 validate_bin_name
+
+if [[ "$RUN_MIGRATE" == "1" ]]; then
+  if [[ -z "$REMOTE_MIGRATE_STATUS_COMMAND" || -z "$REMOTE_MIGRATE_DRY_RUN_COMMAND" || -z "$REMOTE_MIGRATE_COMMAND" ]]; then
+    fail "RUN_MIGRATE=1 时必须同时配置 REMOTE_MIGRATE_STATUS_COMMAND、REMOTE_MIGRATE_DRY_RUN_COMMAND、REMOTE_MIGRATE_COMMAND"
+  fi
+fi
 
 IMAGE_REF="${IMAGE_NAME}:${IMAGE_TAG}"
 SAFE_IMAGE="$(safe_name "$IMAGE_NAME")"
@@ -454,30 +459,14 @@ fi
 
 AUTO_REMOTE_UPDATE="$(resolve_bool "$AUTO_REMOTE_UPDATE" 0)"
 
-default_migrate_status_command() {
-  printf 'cd %s && php webman b8:migrate:status' "$(shell_quote "$REMOTE_MIGRATE_WORKDIR")"
-}
-
-default_migrate_dry_run_command() {
-  printf 'cd %s && php webman b8:migrate --dry-run' "$(shell_quote "$REMOTE_MIGRATE_WORKDIR")"
-}
-
-default_migrate_command() {
-  printf 'cd %s && php webman b8:migrate' "$(shell_quote "$REMOTE_MIGRATE_WORKDIR")"
-}
-
 run_remote_migrations() {
   [[ "$RUN_MIGRATE" == "1" ]] || return 0
 
-  local status_command="${REMOTE_MIGRATE_STATUS_COMMAND:-$(default_migrate_status_command)}"
-  local dry_run_command="${REMOTE_MIGRATE_DRY_RUN_COMMAND:-$(default_migrate_dry_run_command)}"
-  local migrate_command="${REMOTE_MIGRATE_COMMAND:-$(default_migrate_command)}"
-
   log "执行线上迁移 status"
-  remote_exec "$status_command"
+  remote_exec "$REMOTE_MIGRATE_STATUS_COMMAND"
 
   log "执行线上迁移 dry-run"
-  remote_exec "$dry_run_command"
+  remote_exec "$REMOTE_MIGRATE_DRY_RUN_COMMAND"
 
   if [[ "$INTERACTIVE" == "1" ]]; then
     if ! prompt_yes_no "确认执行线上真实迁移？请确认数据库已备份" "n"; then
@@ -486,7 +475,7 @@ run_remote_migrations() {
   fi
 
   log "执行线上真实迁移"
-  remote_exec "$migrate_command"
+  remote_exec "$REMOTE_MIGRATE_COMMAND"
 }
 
 reload_remote_container() {
