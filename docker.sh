@@ -217,7 +217,14 @@ else
   INTERACTIVE="${INTERACTIVE:-0}"
 fi
 
-if [[ "$INTERACTIVE" == "1" ]]; then
+REMOTE_REBUILD_ONLY="$(resolve_bool "$REMOTE_REBUILD_ONLY" 0)"
+
+if [[ "$REMOTE_REBUILD_ONLY" == "1" ]]; then
+  BUILD_ADMIN="${BUILD_ADMIN:-0}"
+  BUILD_H5="${BUILD_H5:-0}"
+  RUN_MIGRATE="${RUN_MIGRATE:-0}"
+  RUN_INSTALL="${RUN_INSTALL:-0}"
+elif [[ "$INTERACTIVE" == "1" ]]; then
   if [[ -z "$BUILD_ADMIN" ]]; then
     if prompt_yes_no "是否编译 admin 管理端？" "n"; then
       BUILD_ADMIN=1
@@ -260,7 +267,6 @@ BUILD_ADMIN="$(resolve_bool "$BUILD_ADMIN" 0)"
 BUILD_H5="$(resolve_bool "$BUILD_H5" 0)"
 RUN_MIGRATE="$(resolve_bool "$RUN_MIGRATE" 0)"
 RUN_INSTALL="$(resolve_bool "$RUN_INSTALL" 0)"
-REMOTE_REBUILD_ONLY="$(resolve_bool "$REMOTE_REBUILD_ONLY" 0)"
 REMOTE_RELOAD_CONTAINER="$(resolve_bool "$REMOTE_RELOAD_CONTAINER" 1)"
 INSTALL_CA_CERTIFICATES="$(resolve_bool "$INSTALL_CA_CERTIFICATES" 1)"
 INCLUDE_PRODUCTION_ENV="$(resolve_bool "$INCLUDE_PRODUCTION_ENV" 1)"
