@@ -713,12 +713,6 @@ run_remote_migrations() {
   prepare_remote_mount_dirs
 
   if [[ "$RUN_INSTALL" == "1" ]]; then
-    if [[ "$INTERACTIVE" == "1" ]]; then
-      if ! prompt_yes_no "确认执行首次安装基线？这会导入基础表和初始化数据，请确认目标库为空或已备份" "n"; then
-        fail "已取消首次安装，当前容器未重载"
-      fi
-    fi
-
     log "执行首次安装基线和迁移"
     if ! run_remote_image_command "b8:install --force"; then
       migration_step_failed "install"
