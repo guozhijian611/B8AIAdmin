@@ -40,6 +40,12 @@ DOCKER_PLATFORM="${DOCKER_PLATFORM:-linux/amd64}"
 # Docker 基础镜像。默认 Debian slim，便于运行 Webman 二进制和基础 shell 工具。
 DOCKER_BASE_IMAGE="${DOCKER_BASE_IMAGE:-debian:bookworm-slim}"
 
+# Docker buildx 缓存配置。默认启用本地缓存，加速 apt 层和重复 COPY 层。
+DOCKER_CACHE_ENABLED="${DOCKER_CACHE_ENABLED:-1}"
+DOCKER_CACHE_DIR="${DOCKER_CACHE_DIR:-$RELEASE_ROOT/.buildx-cache}"
+DOCKER_CACHE_MODE="${DOCKER_CACHE_MODE:-max}"
+DOCKER_NO_CACHE="${DOCKER_NO_CACHE:-0}"
+
 # 是否在镜像内安装 ca-certificates 和 tzdata。需要访问 HTTPS API 时建议保留开启。
 INSTALL_CA_CERTIFICATES="${INSTALL_CA_CERTIFICATES:-1}"
 
@@ -218,6 +224,8 @@ INCLUDE_PRODUCTION_ENV="$(resolve_bool "$INCLUDE_PRODUCTION_ENV" 1)"
 INCLUDE_DATABASE="$(resolve_bool "$INCLUDE_DATABASE" 1)"
 MOUNT_RUNTIME_DIR="$(resolve_bool "$MOUNT_RUNTIME_DIR" 0)"
 MOUNT_STORAGE_DIR="$(resolve_bool "$MOUNT_STORAGE_DIR" 0)"
+DOCKER_CACHE_ENABLED="$(resolve_bool "$DOCKER_CACHE_ENABLED" 1)"
+DOCKER_NO_CACHE="$(resolve_bool "$DOCKER_NO_CACHE" 0)"
 
 validate_bin_name
 
@@ -248,6 +256,8 @@ echo "构建 H5：$BUILD_H5"
 echo "线上迁移：$RUN_MIGRATE"
 echo "打包生产 .env：$INCLUDE_PRODUCTION_ENV"
 echo "打包 Database：$INCLUDE_DATABASE"
+echo "Docker 缓存：$DOCKER_CACHE_ENABLED $DOCKER_CACHE_DIR"
+echo "Docker no-cache：$DOCKER_NO_CACHE"
 echo "本地生产 .env：$LOCAL_PRODUCTION_ENV_FILE"
 echo "服务器别名：$REMOTE_ALIAS"
 echo "上传目录：$REMOTE_UPLOAD_DIR"
@@ -455,11 +465,32 @@ CMD ["start"]
 EOF
 
 log "构建 Docker 镜像"
+DOCKER_BUILD_CACHE_FLAGS=()
+if [[ "$DOCKER_NO_CACHE" == "1" ]]; then
+  DOCKER_BUILD_CACHE_FLAGS+=(--no-cache)
+elif [[ "$DOCKER_CACHE_ENABLED" == "1" ]]; then
+  DOCKER_CACHE_NEXT_DIR="${DOCKER_CACHE_DIR}.new"
+  rm -rf "$DOCKER_CACHE_NEXT_DIR"
+  mkdir -p "$(dirname "$DOCKER_CACHE_DIR")"
+
+  if [[ -f "$DOCKER_CACHE_DIR/index.json" ]]; then
+    DOCKER_BUILD_CACHE_FLAGS+=(--cache-from "type=local,src=$DOCKER_CACHE_DIR")
+  fi
+
+  DOCKER_BUILD_CACHE_FLAGS+=(--cache-to "type=local,dest=$DOCKER_CACHE_NEXT_DIR,mode=$DOCKER_CACHE_MODE")
+fi
+
 docker buildx build \
   --platform "$DOCKER_PLATFORM" \
   --load \
+  "${DOCKER_BUILD_CACHE_FLAGS[@]}" \
   -t "$IMAGE_REF" \
   "$CONTEXT_DIR"
+
+if [[ "$DOCKER_NO_CACHE" != "1" && "$DOCKER_CACHE_ENABLED" == "1" && -d "${DOCKER_CACHE_DIR}.new" ]]; then
+  rm -rf "$DOCKER_CACHE_DIR"
+  mv "${DOCKER_CACHE_DIR}.new" "$DOCKER_CACHE_DIR"
+fi
 
 log "导出 Docker 镜像 tar 包"
 docker save -o "$IMAGE_TAR_PATH" "$IMAGE_REF"
