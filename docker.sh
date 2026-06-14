@@ -295,10 +295,7 @@ echo "挂载 runtime：$MOUNT_RUNTIME_DIR ${REMOTE_RUNTIME_DIR}"
 echo "挂载 storage：$MOUNT_STORAGE_DIR ${REMOTE_STORAGE_DIR}"
 
 if [[ "$INTERACTIVE" == "1" ]]; then
-  if ! prompt_yes_no "确认开始构建镜像 tar 包？" "y"; then
-    echo "已取消"
-    exit 0
-  fi
+  read -r -p "配置确认完成，按回车继续构建镜像 tar 包；如需取消请按 Ctrl+C。 " _
 fi
 
 ########################################
