@@ -49,6 +49,10 @@ DOCKER_NO_CACHE="${DOCKER_NO_CACHE:-0}"
 # 是否在镜像内安装 ca-certificates 和 tzdata。需要访问 HTTPS API 时建议保留开启。
 INSTALL_CA_CERTIFICATES="${INSTALL_CA_CERTIFICATES:-1}"
 
+# 镜像内默认禁用的 OpenTelemetry 自动埋点。
+# 当前基础镜像不安装 opentelemetry 扩展，禁用 pdo 可避免自动注册时输出扩展缺失 warning。
+OTEL_PHP_DISABLED_INSTRUMENTATIONS="${OTEL_PHP_DISABLED_INSTRUMENTATIONS:-pdo}"
+
 # 容器内 Webman 监听端口，需与项目 config/server.php 保持一致。
 APP_PORT="${APP_PORT:-8787}"
 
@@ -161,6 +165,13 @@ shell_quote() {
 
 remote_exec() {
   ssh "$REMOTE_ALIAS" "$1"
+}
+
+create_tar_gz() {
+  local source_dir="$1"
+  local archive_path="$2"
+
+  COPYFILE_DISABLE=1 tar --no-xattrs -czf "$archive_path" -C "$source_dir" .
 }
 
 validate_bin_name() {
@@ -347,14 +358,14 @@ fi
 
 if [[ -d "$FRONTEND_DIR/dist" ]]; then
   log "压缩 admin 静态资源"
-  tar -czf "$CONTEXT_DIR/public/.release/admin.tar.gz" -C "$FRONTEND_DIR/dist" .
+  create_tar_gz "$FRONTEND_DIR/dist" "$CONTEXT_DIR/public/.release/admin.tar.gz"
 else
   warn "admin dist 不存在，镜像不会包含 admin 静态资源：$FRONTEND_DIR/dist"
 fi
 
 if [[ -d "$UNIAPP_DIR/dist/build/h5" ]]; then
   log "压缩 uniapp H5 静态资源"
-  tar -czf "$CONTEXT_DIR/public/.release/h5.tar.gz" -C "$UNIAPP_DIR/dist/build/h5" .
+  create_tar_gz "$UNIAPP_DIR/dist/build/h5" "$CONTEXT_DIR/public/.release/h5.tar.gz"
 else
   warn "uniapp H5 dist 不存在，镜像不会包含 H5 静态资源：$UNIAPP_DIR/dist/build/h5"
 fi
@@ -436,7 +447,8 @@ WORKDIR /app
 ENV TZ=Asia/Shanghai \\
     B8_EXTRACT_ADMIN=1 \\
     B8_EXTRACT_H5=1 \\
-    B8_KEEP_STATIC_ARCHIVES=1
+    B8_KEEP_STATIC_ARCHIVES=1 \\
+    OTEL_PHP_DISABLED_INSTRUMENTATIONS=$OTEL_PHP_DISABLED_INSTRUMENTATIONS
 EOF
 
 if [[ "$INSTALL_CA_CERTIFICATES" == "1" ]]; then

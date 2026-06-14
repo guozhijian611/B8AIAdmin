@@ -73,7 +73,7 @@ final class B8Install extends AbstractPhinxCommand
 
         if (!$input->getOption('no-migrate')) {
             $output->writeln('<info>开始执行 Phinx 迁移...</info>');
-            $exitCode = $this->runPhinx(['migrate']);
+            $exitCode = $this->runPhinx(['migrate'], [0], $output);
             if ($exitCode !== self::SUCCESS) {
                 return $exitCode;
             }
