@@ -76,9 +76,11 @@ REMOTE_STORAGE_DIR="${REMOTE_STORAGE_DIR:-/www/wwwroot/b8aiadmin/public/storage}
 # 远程 Docker 网络名，留空则使用 Docker 默认网络。
 REMOTE_DOCKER_NETWORK="${REMOTE_DOCKER_NETWORK:-}"
 
-# 额外 docker run 参数，例如：--add-host host.docker.internal:host-gateway。
+# 额外 docker run 参数。
+# 默认仍使用 Docker bridge 网络，不启用 --network host。
+# 这里只添加 host.docker.internal 映射，让 bridge 网络里的容器可访问宿主机 MySQL/Redis/RabbitMQ。
 # 注意：这里会按 shell 原样拼入远程命令，请不要放不可信输入。
-REMOTE_DOCKER_RUN_ARGS="${REMOTE_DOCKER_RUN_ARGS:-}"
+REMOTE_DOCKER_RUN_ARGS="${REMOTE_DOCKER_RUN_ARGS:---add-host host.docker.internal:host-gateway}"
 
 # 容器启动命令，留空使用镜像默认 CMD ["start"]。
 REMOTE_CONTAINER_COMMAND="${REMOTE_CONTAINER_COMMAND:-}"
