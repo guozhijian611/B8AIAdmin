@@ -600,7 +600,14 @@ docker run --rm \\
   $REMOTE_DOCKER_RUN_ARGS \\
   $(shell_quote "$IMAGE_REF") $app_command
 EOF
-)"
+	)"
+}
+
+migration_step_failed() {
+  local step="$1"
+
+  warn "线上迁移 ${step} 失败，已中止容器重建。镜像已上传并 docker load，但没有执行 docker run。"
+  warn "请先修复数据库连接或迁移问题；如果本次只想重建容器，请重新执行并选择不执行迁移。"
 }
 
 run_remote_migrations() {
@@ -610,10 +617,16 @@ run_remote_migrations() {
 
   if [[ -n "$REMOTE_MIGRATE_STATUS_COMMAND" ]]; then
     log "执行自定义线上迁移 status"
-    remote_exec "$REMOTE_MIGRATE_STATUS_COMMAND"
+    if ! remote_exec "$REMOTE_MIGRATE_STATUS_COMMAND"; then
+      migration_step_failed "status"
+      return 1
+    fi
 
     log "执行自定义线上迁移 dry-run"
-    remote_exec "$REMOTE_MIGRATE_DRY_RUN_COMMAND"
+    if ! remote_exec "$REMOTE_MIGRATE_DRY_RUN_COMMAND"; then
+      migration_step_failed "dry-run"
+      return 1
+    fi
 
     if [[ "$INTERACTIVE" == "1" ]]; then
       if ! prompt_yes_no "确认执行线上真实迁移？请确认数据库已备份" "n"; then
@@ -622,15 +635,24 @@ run_remote_migrations() {
     fi
 
     log "执行自定义线上真实迁移"
-    remote_exec "$REMOTE_MIGRATE_COMMAND"
+    if ! remote_exec "$REMOTE_MIGRATE_COMMAND"; then
+      migration_step_failed "migrate"
+      return 1
+    fi
     return 0
   fi
 
   log "执行线上迁移 status"
-  run_remote_image_command "b8:migrate:status"
+  if ! run_remote_image_command "b8:migrate:status"; then
+    migration_step_failed "status"
+    return 1
+  fi
 
   log "执行线上迁移 dry-run"
-  run_remote_image_command "b8:migrate --dry-run"
+  if ! run_remote_image_command "b8:migrate --dry-run"; then
+    migration_step_failed "dry-run"
+    return 1
+  fi
 
   if [[ "$INTERACTIVE" == "1" ]]; then
     if ! prompt_yes_no "确认执行线上真实迁移？请确认数据库已备份" "n"; then
@@ -639,7 +661,10 @@ run_remote_migrations() {
   fi
 
   log "执行线上真实迁移"
-  run_remote_image_command "b8:migrate"
+  if ! run_remote_image_command "b8:migrate"; then
+    migration_step_failed "migrate"
+    return 1
+  fi
 }
 
 reload_remote_container() {
@@ -700,7 +725,9 @@ if [[ "$AUTO_REMOTE_UPDATE" == "1" ]]; then
   log "加载远程 Docker 镜像"
   remote_exec "docker load -i $(shell_quote "$REMOTE_IMAGE_TAR")"
 
-  run_remote_migrations
+  if ! run_remote_migrations; then
+    fail "线上迁移失败，当前发布已停止：镜像已 load 到服务器，但容器未重建。"
+  fi
   reload_remote_container
 
   log "远程镜像更新完成"
