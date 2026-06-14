@@ -6,6 +6,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVER_DIR="$ROOT_DIR/server"
 FRONTEND_DIR="$ROOT_DIR/saiadmin-artd"
 UNIAPP_DIR="$ROOT_DIR/uniapp"
+DATABASE_DIR="$ROOT_DIR/Database"
 RELEASE_ROOT="$ROOT_DIR/build/docker-release"
 
 ########################################
@@ -30,6 +31,9 @@ BIN_NAME="${BIN_NAME:-b8aiadmin.bin}"
 LOCAL_PRODUCTION_ENV_FILE="${LOCAL_PRODUCTION_ENV_FILE:-$SERVER_DIR/.env.production}"
 INCLUDE_PRODUCTION_ENV="${INCLUDE_PRODUCTION_ENV:-1}"
 
+# 数据库迁移目录。默认复制 Database/ 到镜像内 /app/Database，供 b8:migrate 使用。
+INCLUDE_DATABASE="${INCLUDE_DATABASE:-1}"
+
 # Docker 目标平台。linux/amd64 即常见 Linux x86_64。
 DOCKER_PLATFORM="${DOCKER_PLATFORM:-linux/amd64}"
 
@@ -52,7 +56,10 @@ DOCKER_RESTART_POLICY="${DOCKER_RESTART_POLICY:-unless-stopped}"
 # 远程 .env 文件路径。默认留空，因为镜像内会包含 /app/.env；如需运行时覆盖可填远程文件路径。
 REMOTE_ENV_FILE="${REMOTE_ENV_FILE:-}"
 
-# 远程运行时目录和上传存储目录，分别挂载到 /app/runtime 与 /app/public/storage。
+# 远程运行时目录和上传存储目录。
+# Docker 封闭模式默认不挂载，runtime 和 public 都留在容器内部；如需持久化再打开下面两个挂载开关。
+MOUNT_RUNTIME_DIR="${MOUNT_RUNTIME_DIR:-0}"
+MOUNT_STORAGE_DIR="${MOUNT_STORAGE_DIR:-0}"
 REMOTE_RUNTIME_DIR="${REMOTE_RUNTIME_DIR:-/www/wwwroot/b8aiadmin/runtime}"
 REMOTE_STORAGE_DIR="${REMOTE_STORAGE_DIR:-/www/wwwroot/b8aiadmin/public/storage}"
 
@@ -80,8 +87,7 @@ BUILD_H5="${BUILD_H5:-}"
 RUN_MIGRATE="${RUN_MIGRATE:-}"
 AUTO_REMOTE_UPDATE="${AUTO_REMOTE_UPDATE:-}"
 
-# Docker 二进制镜像默认不内置可直接执行的 Phinx 迁移工作目录。
-# 如需线上迁移，必须显式配置下面三个远程命令，例如指向服务器保留的源码发布目录或独立迁移脚本。
+# 迁移默认通过新镜像的一次性容器执行。下面三个命令仅用于覆盖默认行为。
 REMOTE_MIGRATE_STATUS_COMMAND="${REMOTE_MIGRATE_STATUS_COMMAND:-}"
 REMOTE_MIGRATE_DRY_RUN_COMMAND="${REMOTE_MIGRATE_DRY_RUN_COMMAND:-}"
 REMOTE_MIGRATE_COMMAND="${REMOTE_MIGRATE_COMMAND:-}"
@@ -191,7 +197,7 @@ if [[ "$INTERACTIVE" == "1" ]]; then
   fi
 
   if [[ -z "$RUN_MIGRATE" ]]; then
-    if prompt_yes_no "是否在自动更新线上镜像时执行自定义数据迁移命令？需要先配置 REMOTE_MIGRATE_*" "n"; then
+    if prompt_yes_no "是否在自动更新线上镜像时执行镜像内数据库迁移？默认会先 status 和 dry-run" "n"; then
       RUN_MIGRATE=1
     else
       RUN_MIGRATE=0
@@ -209,12 +215,19 @@ RUN_MIGRATE="$(resolve_bool "$RUN_MIGRATE" 0)"
 REMOTE_RELOAD_CONTAINER="$(resolve_bool "$REMOTE_RELOAD_CONTAINER" 1)"
 INSTALL_CA_CERTIFICATES="$(resolve_bool "$INSTALL_CA_CERTIFICATES" 1)"
 INCLUDE_PRODUCTION_ENV="$(resolve_bool "$INCLUDE_PRODUCTION_ENV" 1)"
+INCLUDE_DATABASE="$(resolve_bool "$INCLUDE_DATABASE" 1)"
+MOUNT_RUNTIME_DIR="$(resolve_bool "$MOUNT_RUNTIME_DIR" 0)"
+MOUNT_STORAGE_DIR="$(resolve_bool "$MOUNT_STORAGE_DIR" 0)"
 
 validate_bin_name
 
 if [[ "$RUN_MIGRATE" == "1" ]]; then
-  if [[ -z "$REMOTE_MIGRATE_STATUS_COMMAND" || -z "$REMOTE_MIGRATE_DRY_RUN_COMMAND" || -z "$REMOTE_MIGRATE_COMMAND" ]]; then
-    fail "RUN_MIGRATE=1 时必须同时配置 REMOTE_MIGRATE_STATUS_COMMAND、REMOTE_MIGRATE_DRY_RUN_COMMAND、REMOTE_MIGRATE_COMMAND"
+  if [[ -n "$REMOTE_MIGRATE_STATUS_COMMAND" || -n "$REMOTE_MIGRATE_DRY_RUN_COMMAND" || -n "$REMOTE_MIGRATE_COMMAND" ]]; then
+    if [[ -z "$REMOTE_MIGRATE_STATUS_COMMAND" || -z "$REMOTE_MIGRATE_DRY_RUN_COMMAND" || -z "$REMOTE_MIGRATE_COMMAND" ]]; then
+      fail "自定义迁移时必须同时配置 REMOTE_MIGRATE_STATUS_COMMAND、REMOTE_MIGRATE_DRY_RUN_COMMAND、REMOTE_MIGRATE_COMMAND"
+    fi
+  elif [[ "$INCLUDE_DATABASE" != "1" ]]; then
+    fail "RUN_MIGRATE=1 且未配置自定义迁移命令时，INCLUDE_DATABASE 必须为 1"
   fi
 fi
 
@@ -234,14 +247,15 @@ echo "构建 admin：$BUILD_ADMIN"
 echo "构建 H5：$BUILD_H5"
 echo "线上迁移：$RUN_MIGRATE"
 echo "打包生产 .env：$INCLUDE_PRODUCTION_ENV"
+echo "打包 Database：$INCLUDE_DATABASE"
 echo "本地生产 .env：$LOCAL_PRODUCTION_ENV_FILE"
 echo "服务器别名：$REMOTE_ALIAS"
 echo "上传目录：$REMOTE_UPLOAD_DIR"
 echo "容器名称：$CONTAINER_NAME"
 echo "端口映射：$HOST_PORT:$APP_PORT"
 echo "远程 .env：${REMOTE_ENV_FILE:-未配置}"
-echo "远程 runtime：$REMOTE_RUNTIME_DIR"
-echo "远程 storage：$REMOTE_STORAGE_DIR"
+echo "挂载 runtime：$MOUNT_RUNTIME_DIR ${REMOTE_RUNTIME_DIR}"
+echo "挂载 storage：$MOUNT_STORAGE_DIR ${REMOTE_STORAGE_DIR}"
 
 if [[ "$INTERACTIVE" == "1" ]]; then
   if ! prompt_yes_no "确认开始构建镜像 tar 包？" "y"; then
@@ -307,6 +321,14 @@ if [[ "$INCLUDE_PRODUCTION_ENV" == "1" ]]; then
   cp "$LOCAL_PRODUCTION_ENV_FILE" "$CONTEXT_DIR/.env"
 else
   warn "未打包生产 .env，容器运行时必须通过挂载 /app/.env 或环境变量提供配置"
+fi
+
+if [[ "$INCLUDE_DATABASE" == "1" ]]; then
+  [[ -f "$DATABASE_DIR/phinx.php" ]] || fail "数据库迁移配置不存在：$DATABASE_DIR/phinx.php"
+  [[ -d "$DATABASE_DIR/migrations" ]] || fail "数据库迁移目录不存在：$DATABASE_DIR/migrations"
+  log "复制 Database 迁移目录到镜像上下文"
+  mkdir -p "$CONTEXT_DIR/Database"
+  cp -R "$DATABASE_DIR/." "$CONTEXT_DIR/Database/"
 fi
 
 if [[ -d "$FRONTEND_DIR/dist" ]]; then
@@ -418,6 +440,7 @@ cat >> "$CONTEXT_DIR/Dockerfile" <<EOF
 
 COPY server /app/server
 $(if [[ "$INCLUDE_PRODUCTION_ENV" == "1" ]]; then printf 'COPY .env /app/.env'; fi)
+$(if [[ "$INCLUDE_DATABASE" == "1" ]]; then printf 'COPY Database /app/Database'; fi)
 COPY public /app/public
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint
 
@@ -459,14 +482,101 @@ fi
 
 AUTO_REMOTE_UPDATE="$(resolve_bool "$AUTO_REMOTE_UPDATE" 0)"
 
+remote_env_arg() {
+  if [[ -n "$REMOTE_ENV_FILE" ]]; then
+    printf -- '--env-file %s' "$(shell_quote "$REMOTE_ENV_FILE")"
+  fi
+}
+
+remote_network_arg() {
+  if [[ -n "$REMOTE_DOCKER_NETWORK" ]]; then
+    printf -- '--network %s' "$(shell_quote "$REMOTE_DOCKER_NETWORK")"
+  fi
+}
+
+remote_volume_args() {
+  local args=""
+
+  if [[ "$MOUNT_RUNTIME_DIR" == "1" ]]; then
+    args="$args -v $(shell_quote "$REMOTE_RUNTIME_DIR:/app/runtime")"
+  fi
+
+  if [[ "$MOUNT_STORAGE_DIR" == "1" ]]; then
+    args="$args -v $(shell_quote "$REMOTE_STORAGE_DIR:/app/public/storage")"
+  fi
+
+  printf '%s' "$args"
+}
+
+prepare_remote_mount_dirs() {
+  local dirs=()
+
+  if [[ "$MOUNT_RUNTIME_DIR" == "1" ]]; then
+    dirs+=("$(shell_quote "$REMOTE_RUNTIME_DIR")")
+  fi
+
+  if [[ "$MOUNT_STORAGE_DIR" == "1" ]]; then
+    dirs+=("$(shell_quote "$REMOTE_STORAGE_DIR")")
+  fi
+
+  if [[ "${#dirs[@]}" -gt 0 ]]; then
+    remote_exec "mkdir -p ${dirs[*]}"
+  fi
+}
+
+run_remote_image_command() {
+  local app_command="$1"
+  local env_arg
+  local network_arg
+  local volume_args
+
+  env_arg="$(remote_env_arg)"
+  network_arg="$(remote_network_arg)"
+  volume_args="$(remote_volume_args)"
+
+  remote_exec "$(cat <<EOF
+set -Eeuo pipefail
+if [ -n $(shell_quote "$REMOTE_ENV_FILE") ]; then
+  test -f $(shell_quote "$REMOTE_ENV_FILE")
+fi
+docker run --rm \\
+  $env_arg \\
+  $volume_args \\
+  $network_arg \\
+  $REMOTE_DOCKER_RUN_ARGS \\
+  $(shell_quote "$IMAGE_REF") $app_command
+EOF
+)"
+}
+
 run_remote_migrations() {
   [[ "$RUN_MIGRATE" == "1" ]] || return 0
 
+  prepare_remote_mount_dirs
+
+  if [[ -n "$REMOTE_MIGRATE_STATUS_COMMAND" ]]; then
+    log "执行自定义线上迁移 status"
+    remote_exec "$REMOTE_MIGRATE_STATUS_COMMAND"
+
+    log "执行自定义线上迁移 dry-run"
+    remote_exec "$REMOTE_MIGRATE_DRY_RUN_COMMAND"
+
+    if [[ "$INTERACTIVE" == "1" ]]; then
+      if ! prompt_yes_no "确认执行线上真实迁移？请确认数据库已备份" "n"; then
+        fail "已取消线上迁移，当前容器未重载"
+      fi
+    fi
+
+    log "执行自定义线上真实迁移"
+    remote_exec "$REMOTE_MIGRATE_COMMAND"
+    return 0
+  fi
+
   log "执行线上迁移 status"
-  remote_exec "$REMOTE_MIGRATE_STATUS_COMMAND"
+  run_remote_image_command "b8:migrate:status"
 
   log "执行线上迁移 dry-run"
-  remote_exec "$REMOTE_MIGRATE_DRY_RUN_COMMAND"
+  run_remote_image_command "b8:migrate --dry-run"
 
   if [[ "$INTERACTIVE" == "1" ]]; then
     if ! prompt_yes_no "确认执行线上真实迁移？请确认数据库已备份" "n"; then
@@ -475,7 +585,7 @@ run_remote_migrations() {
   fi
 
   log "执行线上真实迁移"
-  remote_exec "$REMOTE_MIGRATE_COMMAND"
+  run_remote_image_command "b8:migrate"
 }
 
 reload_remote_container() {
@@ -487,24 +597,22 @@ reload_remote_container() {
 
   local env_arg=""
   local network_arg=""
+  local volume_args=""
   local command_arg=""
 
-  if [[ -n "$REMOTE_ENV_FILE" ]]; then
-    env_arg="--env-file $(shell_quote "$REMOTE_ENV_FILE")"
-  fi
-
-  if [[ -n "$REMOTE_DOCKER_NETWORK" ]]; then
-    network_arg="--network $(shell_quote "$REMOTE_DOCKER_NETWORK")"
-  fi
+  env_arg="$(remote_env_arg)"
+  network_arg="$(remote_network_arg)"
+  volume_args="$(remote_volume_args)"
 
   if [[ -n "$REMOTE_CONTAINER_COMMAND" ]]; then
     command_arg="$REMOTE_CONTAINER_COMMAND"
   fi
 
+  prepare_remote_mount_dirs
+
   log "重建远程容器"
   remote_exec "$(cat <<EOF
 set -Eeuo pipefail
-mkdir -p $(shell_quote "$REMOTE_RUNTIME_DIR") $(shell_quote "$REMOTE_STORAGE_DIR")
 if [ -n $(shell_quote "$REMOTE_ENV_FILE") ]; then
   test -f $(shell_quote "$REMOTE_ENV_FILE")
 fi
@@ -515,8 +623,7 @@ docker run -d \\
   --restart $(shell_quote "$DOCKER_RESTART_POLICY") \\
   $env_arg \\
   -p $(shell_quote "$HOST_PORT:$APP_PORT") \\
-  -v $(shell_quote "$REMOTE_RUNTIME_DIR:/app/runtime") \\
-  -v $(shell_quote "$REMOTE_STORAGE_DIR:/app/public/storage") \\
+  $volume_args \\
   $network_arg \\
   $REMOTE_DOCKER_RUN_ARGS \\
   $(shell_quote "$IMAGE_REF") $command_arg
