@@ -107,6 +107,12 @@ BUILD_H5="${BUILD_H5:-}"
 RUN_MIGRATE="${RUN_MIGRATE:-}"
 AUTO_REMOTE_UPDATE="${AUTO_REMOTE_UPDATE:-}"
 
+# 只重建远程容器。设为 1 时跳过本地构建、上传和 docker load，直接使用服务器已有镜像重建容器。
+REMOTE_REBUILD_ONLY="${REMOTE_REBUILD_ONLY:-0}"
+
+# 远程重建时使用的镜像引用。留空时自动选择服务器上 IMAGE_NAME 对应的最新本地镜像。
+REMOTE_REBUILD_IMAGE_REF="${REMOTE_REBUILD_IMAGE_REF:-}"
+
 # 迁移默认通过新镜像的一次性容器执行。下面三个命令仅用于覆盖默认行为。
 REMOTE_MIGRATE_STATUS_COMMAND="${REMOTE_MIGRATE_STATUS_COMMAND:-}"
 REMOTE_MIGRATE_DRY_RUN_COMMAND="${REMOTE_MIGRATE_DRY_RUN_COMMAND:-}"
@@ -239,6 +245,7 @@ fi
 BUILD_ADMIN="$(resolve_bool "$BUILD_ADMIN" 0)"
 BUILD_H5="$(resolve_bool "$BUILD_H5" 0)"
 RUN_MIGRATE="$(resolve_bool "$RUN_MIGRATE" 0)"
+REMOTE_REBUILD_ONLY="$(resolve_bool "$REMOTE_REBUILD_ONLY" 0)"
 REMOTE_RELOAD_CONTAINER="$(resolve_bool "$REMOTE_RELOAD_CONTAINER" 1)"
 INSTALL_CA_CERTIFICATES="$(resolve_bool "$INSTALL_CA_CERTIFICATES" 1)"
 INCLUDE_PRODUCTION_ENV="$(resolve_bool "$INCLUDE_PRODUCTION_ENV" 1)"
@@ -276,6 +283,7 @@ echo "二进制文件名：$BIN_NAME"
 echo "构建 admin：$BUILD_ADMIN"
 echo "构建 H5：$BUILD_H5"
 echo "线上迁移：$RUN_MIGRATE"
+echo "直接重建远程容器：$REMOTE_REBUILD_ONLY"
 echo "打包生产 .env：$INCLUDE_PRODUCTION_ENV"
 echo "打包 Database：$INCLUDE_DATABASE"
 echo "Docker 缓存：$DOCKER_CACHE_ENABLED $DOCKER_CACHE_DIR"
@@ -295,13 +303,25 @@ echo "挂载 runtime：$MOUNT_RUNTIME_DIR ${REMOTE_RUNTIME_DIR}"
 echo "挂载 storage：$MOUNT_STORAGE_DIR ${REMOTE_STORAGE_DIR}"
 
 if [[ "$INTERACTIVE" == "1" ]]; then
-  read -r -p "配置确认完成，按回车继续构建镜像 tar 包；如需取消请按 Ctrl+C。 " _
+  read -r -p "配置确认完成，按回车构建镜像 tar 包；输入 r 直接重建远程容器；如需取消请按 Ctrl+C。 " NEXT_ACTION
+  case "$NEXT_ACTION" in
+    r|R)
+      REMOTE_REBUILD_ONLY=1
+      RUN_MIGRATE=0
+      AUTO_REMOTE_UPDATE=1
+      echo "已选择直接重建远程容器：跳过本地构建、上传、docker load 和迁移。"
+      ;;
+  esac
 fi
 
 ########################################
 # 本地构建
 ########################################
 
+if [[ "$REMOTE_REBUILD_ONLY" == "1" ]]; then
+  log "跳过本地构建"
+  echo "将直接使用服务器已有镜像重建容器。"
+else
 require_command php
 require_command tar
 require_command docker
@@ -530,12 +550,15 @@ log "导出 Docker 镜像 tar 包"
 docker save -o "$IMAGE_TAR_PATH" "$IMAGE_REF"
 
 echo "镜像 tar 包：$IMAGE_TAR_PATH"
+fi
 
 ########################################
 # 远程更新
 ########################################
 
-if [[ -z "$AUTO_REMOTE_UPDATE" && "$INTERACTIVE" == "1" ]]; then
+if [[ "$REMOTE_REBUILD_ONLY" == "1" ]]; then
+  AUTO_REMOTE_UPDATE=1
+elif [[ -z "$AUTO_REMOTE_UPDATE" && "$INTERACTIVE" == "1" ]]; then
   if prompt_yes_no "是否自动上传并更新线上镜像？" "n"; then
     AUTO_REMOTE_UPDATE=1
   else
@@ -546,6 +569,26 @@ else
 fi
 
 AUTO_REMOTE_UPDATE="$(resolve_bool "$AUTO_REMOTE_UPDATE" 0)"
+
+resolve_remote_rebuild_image_ref() {
+  local latest_image=""
+
+  [[ "$REMOTE_REBUILD_ONLY" == "1" ]] || return 0
+
+  if [[ -n "$REMOTE_REBUILD_IMAGE_REF" ]]; then
+    IMAGE_REF="$REMOTE_REBUILD_IMAGE_REF"
+    echo "远程重建镜像：$IMAGE_REF"
+    return 0
+  fi
+
+  latest_image="$(remote_exec "docker image ls $(shell_quote "$IMAGE_NAME") --format '{{.Repository}}:{{.Tag}}' | grep -v ':<none>$' | head -n 1")"
+  if [[ -z "$latest_image" ]]; then
+    fail "服务器上未找到镜像 $IMAGE_NAME，请先完整发布一次，或配置 REMOTE_REBUILD_IMAGE_REF"
+  fi
+
+  IMAGE_REF="$latest_image"
+  echo "远程重建镜像：$IMAGE_REF"
+}
 
 remote_env_arg() {
   if [[ -n "$REMOTE_ENV_FILE" ]]; then
@@ -731,16 +774,22 @@ EOF
 
 if [[ "$AUTO_REMOTE_UPDATE" == "1" ]]; then
   require_command ssh
-  require_command scp
 
-  log "创建远程上传目录"
-  remote_exec "mkdir -p $(shell_quote "$REMOTE_UPLOAD_DIR")"
+  if [[ "$REMOTE_REBUILD_ONLY" == "1" ]]; then
+    log "解析远程已有镜像"
+    resolve_remote_rebuild_image_ref
+  else
+    require_command scp
 
-  log "上传镜像 tar 包"
-  scp "$IMAGE_TAR_PATH" "$REMOTE_ALIAS:$REMOTE_UPLOAD_DIR/"
+    log "创建远程上传目录"
+    remote_exec "mkdir -p $(shell_quote "$REMOTE_UPLOAD_DIR")"
 
-  log "加载远程 Docker 镜像"
-  remote_exec "docker load -i $(shell_quote "$REMOTE_IMAGE_TAR")"
+    log "上传镜像 tar 包"
+    scp "$IMAGE_TAR_PATH" "$REMOTE_ALIAS:$REMOTE_UPLOAD_DIR/"
+
+    log "加载远程 Docker 镜像"
+    remote_exec "docker load -i $(shell_quote "$REMOTE_IMAGE_TAR")"
+  fi
 
   if ! run_remote_migrations; then
     fail "线上迁移失败，当前发布已停止：镜像已 load 到服务器，但容器未重建。"
