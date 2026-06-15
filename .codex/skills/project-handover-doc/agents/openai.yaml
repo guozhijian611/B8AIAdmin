@@ -1,0 +1,4 @@
+interface:
+  display_name: "项目交接文档"
+  short_description: "为当前仓库生成可直接粘贴给新 AI 接手开发的详细交接文档"
+  default_prompt: "Use $project-handover-doc to generate a super-detailed handover document for the current repo, following the template and marking uncertain items."
