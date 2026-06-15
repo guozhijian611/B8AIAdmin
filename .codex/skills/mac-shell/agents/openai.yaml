@@ -1,0 +1,4 @@
+interface:
+  display_name: "Mac Shell"
+  short_description: "macOS/zsh 命令与 .env 安全取值指南"
+  default_prompt: "Use $mac-shell to read .env values and build macOS shell commands safely."
