@@ -14,10 +14,10 @@
 | 数据源管理 | `server/plugin/saiboard/app/admin/controller/DatasourceController.php` | 维护 MySQL/HTTP 数据源连接配置，支持连接测试。 |
 | 查询模板 | `server/plugin/saiboard/app/admin/controller/QueryTemplateController.php` | 维护预置取数模板（原始行、计数、HTTP 透传），不暴露裸 SQL。 |
 | 拖拽编辑器 | `saiadmin-artd/src/views/plugin/saiboard/editor/` | Element Plus 外壳 + 薄拖拽层，组件拖拽布局、绑定查询模板，画布直接渲染真实图表组件。 |
-| 对外运行时 | `saiadmin-artd/src/views/screen-runtime/` | 独立路由 + 代码分割，复用**同一套** `art-*` 图表组件，全屏等比缩放渲染。 |
+| 对外运行时 | `saiadmin-artd/src/views/plugin/saiboard/runtime/` | 无布局菜单路由，复用**同一套** `art-*` 图表组件，全屏等比缩放渲染。 |
 | 对外取数 | `server/plugin/saiboard/app/api/controller/BoardController.php` | 按组件绑定的查询模板执行数据源，返回脱敏结果。 |
 
-后台编辑器与数据源管理都在 `saiadmin-artd/src/views/plugin/saiboard/`（Element Plus，主应用内），对外运行时位于 `saiadmin-artd/src/views/screen-runtime/`（独立路由），后端插件位于 `server/plugin/saiboard`。
+后台编辑器与数据源管理都在 `saiadmin-artd/src/views/plugin/saiboard/`（Element Plus，主应用内），对外运行时也在该目录下的 `runtime/`，通过后台**无布局菜单**对外访问，后端插件位于 `server/plugin/saiboard`。
 
 ## 整体架构
 
@@ -28,7 +28,7 @@
 └──────────────────────────┬──────────────────────────────────────────┘
                            │ layout JSON（仅组件树+绑定关系）入库
                            ▼
-┌──────────────── 对外运行时（独立路由，复用同一套 art-* 组件）────────────┐
+┌──────────────── 对外运行时（无布局菜单路由，复用同一套 art-* 组件）────────┐
 │ /screen/:code → 后端下发大屏配置（脱敏：不含 DB 密码/token）             │
 │   ↓ 组件按 refresh 轮询                                                 │
 │ /app/saiboard/api/data?code=xx&cid=w_1 → 后端代执行                     │
@@ -47,12 +47,12 @@
 | 层 | 选型 | 理由 |
 | --- | --- | --- |
 | UI 框架 | Element Plus（已有） | 主应用同款，无新增 UI 库，编辑器与列表风格统一。 |
-| 拖拽 / 缩放 | 薄封装 `DragResize.vue`（绝对定位 + pointer 事件，约百行） | 大屏要自由定位（x/y/w/h/z），不引入 go-view / 网格库，无 fork 维护负担。 |
+| 拖拽 / 缩放 | `vue3-draggable-resizable`（Vue 3 拖拽+缩放组件，自带对齐线/吸附/父级边界） | 开箱即用、省事，免去自研；只是一个轻量组件库，非整套工程。 |
 | 渲染引擎 | echarts 6（已有）+ 现成 `art-*` 图表组件 | 编辑器与运行时共用同一套组件，所见即所得；新增图表只实现一次。 |
 | 数据存储 | 自定义 layout JSON（组件树 + 绑定关系） | 结构极简，只存「放了哪些组件、各自绑哪个查询模板」。 |
 | SQL 安全 | 预置查询模板，不暴露裸 SQL | 用户选表 + 字段 + 条件，后端拼参数化 SELECT，从源头杜绝注入。 |
 | 鉴权粒度 | 大屏级：公开 / token / 登录 | 简单清晰，覆盖展厅公开、客户专属、内部报表三类场景。 |
-| 运行时页 | 后台前端项目内，独立路由 + 代码分割 | 复用构建链，一套代码，无需第二个前端工程。 |
+| 运行时页 | 后台前端项目内，无布局菜单路由 | 复用构建链，一套代码；后台直接配「无布局菜单」对外，无需第二个前端工程。 |
 
 > **被刻意放弃的选项**：go-view（需 fork 自维护、naive-ui 污染、编辑/运行双引擎割裂）、DataV-Vue3 装饰组件（社区非官方分支）。装饰边框等纯视觉效果如确有需要，放到 P1 用 CSS/SVG 自实现，不绑第三方分支。
 
@@ -61,7 +61,7 @@
 这是本方案相对原始设计的最大简化点。
 
 - `art-*` 图表组件（`src/components/core/charts/` 已有 bar/line/ring/radar/scatter/k-line 等）封装成统一约定的「大屏组件」：输入 `{ option/props, data }`，输出渲染。
-- **编辑器画布**直接 `<component :is>` 渲染这些组件，拖拽只改外层 `DragResize` 的 x/y/w/h，组件本身不感知编辑态。
+- **编辑器画布**直接 `<component :is>` 渲染这些组件，拖拽只改外层 `DraggableItem`（封装 `vue3-draggable-resizable`）的 x/y/w/h，组件本身不感知编辑态。
 - **运行时**用完全相同的组件，只是外层换成只读容器 + 全屏等比缩放。
 - 结果：新增一种图表 = 加一个 `art-*` 组件 + 在组件注册表登记一次，编辑器和运行时**同时生效**，不存在两侧各实现一遍的问题。
 
@@ -93,15 +93,14 @@ saiadmin-artd/src/views/plugin/saiboard/
 ├── api/            screen.ts, datasource.ts, queryTemplate.ts
 ├── screen/         大屏列表（标准 CRUD，Element Plus）
 ├── datasource/     数据源管理（含测试连接 + 查询模板子管理）
-├── editor/         拖拽编辑器（Element Plus 外壳 + DragResize + art-* 画布）
+├── editor/         拖拽编辑器（Element Plus 外壳 + DraggableItem + art-* 画布）
 │   └── [id].vue
-└── widgets/        大屏组件注册表 + DragResize.vue（编辑器与运行时共用）
-
-saiadmin-artd/src/views/screen-runtime/   ← 对外运行时（独立路由，复用 widgets/）
-└── [code].vue
+├── runtime/        对外运行时（无布局菜单路由，复用 widgets/）
+│   └── [code].vue
+└── widgets/        大屏组件注册表 + DraggableItem.vue（封装 vue3-draggable-resizable，编辑器与运行时共用）
 ```
 
-> 编辑器不再独立成「naive-ui 隔离子模块」，直接是主应用里的一个普通 Element Plus 页面；运行时单独拆路由只为代码分割和去掉后台布局，渲染组件仍复用 `widgets/`。
+> 编辑器与运行时都是主应用里的普通 Element Plus 页面：编辑器是带后台布局的菜单页，运行时配成**无布局菜单**（并加入免登录白名单，供对外公开访问），渲染组件全部复用 `widgets/`，无独立工程、无特殊构建处理。
 
 ## 数据库设计
 
@@ -256,14 +255,14 @@ getScreen / data 接口入口：
 
 ### 拖拽编辑器 `/plugin/saiboard/editor/:id`（主应用内，Element Plus）
 
-- 三栏布局：左侧组件面板（拖出组件）、中间画布（`DragResize` 包裹真实 `art-*` 组件）、右侧属性面板（标题、样式、绑定查询模板、`refresh`）。
-- `DragResize.vue` 只负责 x/y/w/h/z 的拖拽与缩放，**不感知图表内容**；组件本身就是运行时同款，天然所见即所得。
+- 三栏布局：左侧组件面板（拖出组件）、中间画布（`DraggableItem` 包裹真实 `art-*` 组件）、右侧属性面板（标题、样式、绑定查询模板、`refresh`）。
+- `DraggableItem.vue` 封装 `vue3-draggable-resizable`，负责 x/y/w/h/z 的拖拽、缩放与对齐吸附，**不感知图表内容**；组件本身就是运行时同款，天然所见即所得。
 - 保存写 `draft_layout`；点「发布」才拷贝到 `layout` 上线。
 - 编辑器内不取真实数据可用占位/示例数据预览，避免编辑态频繁回源。
 
-### 对外运行时页 `/screen/:code`（独立路由，复用 widgets/）
+### 对外运行时页 `/screen/:code`（无布局菜单路由，复用 widgets/）
 
-- 独立路由 + 代码分割，不进后台布局。
+- 后台配成**无布局菜单**并加入免登录白名单（对外公开访问），不进后台布局；页面级是否放行交给后端 `data` 接口按大屏配置判定。
 - 复用 `widgets/` 同一套组件，外层只读容器；按 `screen.width/height` 设计稿做**整屏等比缩放**（`transform: scale`，监听 resize），适配任意投屏分辨率。
 - 按各组件 `dataset.refresh` 轮询 `/data`；深色科技风默认主题，配色在 `screen.bg_config`。
 
@@ -304,14 +303,14 @@ getScreen / data 接口入口：
 
 ## 安装和迁移（计划）
 
-前端**不新增重型依赖**：图表用已有 echarts 6 + `art-*` 组件，UI 用已有 Element Plus，拖拽用自带的 `DragResize.vue`。
+前端只新增**一个轻量组件库** `vue3-draggable-resizable`：图表用已有 echarts 6 + `art-*` 组件，UI 用已有 Element Plus，拖拽/缩放/对齐线由该库提供。
 
 ```bash
 cd server
 composer install   # 如缺 Workerman HTTP 客户端，补该依赖；其余无新增
 
 cd ../saiadmin-artd
-pnpm install       # 无新增重型依赖（无 go-view / naive-ui / DataV）
+pnpm add vue3-draggable-resizable   # 唯一新增前端依赖（轻量，无 go-view / naive-ui / DataV）
 ```
 
 数据库结构和预设数据由 Phinx 迁移维护，文件放在 `Database/migrations/`：
@@ -338,8 +337,8 @@ php webman b8:migrate
 | 数据库 | 3 张表（含 `draft_layout`/`layout` 分离）+ Phinx 迁移（含菜单权限）。 |
 | 后端 | `SqlBuilder`（`table_raw` / `table_count`）+ `DataSourceExecutor`（mysql / http + SSRF 防护 + redis 缓存）。 |
 | 后端 | `ScreenController` 标准 CRUD + `saveLayout` / `publish`；`BoardController`（`getScreen` / `data`，IDOR 绑定校验）。 |
-| 前端 | `DragResize.vue` + `widgets/` 注册表，复用 3~4 个 `art-*` 图表（柱/折线/环形 + 单值翻牌 / 表格）。 |
-| 前端 | 拖拽编辑器 + 对外运行时页（等比缩放、is_public / token 鉴权）。 |
+| 前端 | `DraggableItem.vue`（封装 `vue3-draggable-resizable`）+ `widgets/` 注册表，复用 3~4 个 `art-*` 图表（柱/折线/环形 + 单值翻牌 / 表格）。 |
+| 前端 | 拖拽编辑器 + 对外运行时页（无布局菜单、等比缩放、is_public / token 鉴权）。 |
 
 ### P1 能力增强
 
@@ -356,7 +355,7 @@ php webman b8:migrate
 
 ## 待确认风险点
 
-1. **`DragResize` 交互完善度**：自研拖拽层 P0 先满足拖动 + 缩放 + 网格吸附即可，复杂对齐线、多选、组合等增量在 P1 视需要补，避免一开始过度设计。
+1. **拖拽交互完善度**：`vue3-draggable-resizable` 已提供拖动 + 缩放 + 对齐线 + 父级边界，P0 直接用其能力即可；多选、组合等增量在 P1 视需要补，避免一开始过度设计。
 2. **生产数据源只读账号**：预置模板已能防注入，但强烈建议生产 MySQL 数据源配只读账号作为第二道防线，需在文档和部署指引中强制说明。
 3. **SSRF 防护清单**：HTTP 数据源的内网/元数据地址拦截规则需随实际部署网络环境复核，必要时加出网域名白名单。
 
