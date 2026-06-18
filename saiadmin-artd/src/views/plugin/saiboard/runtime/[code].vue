@@ -5,12 +5,7 @@
     <div v-else ref="viewportRef" class="runtime-viewport">
       <div
         class="runtime-canvas"
-        :style="{
-          width: layout.canvas.width + 'px',
-          height: layout.canvas.height + 'px',
-          transform: `translate(-50%, -50%) scale(${scale})`,
-          background: bgColor
-        }"
+        :style="canvasStyle"
       >
         <div
           v-for="component in layout.components"
@@ -45,8 +40,9 @@
   const viewportRef = ref<HTMLElement>()
   const loading = ref(true)
   const error = ref('')
-  const scale = ref(1)
+  const fit = reactive({ scale: 1, x: 0, y: 0 })
   const timers: number[] = []
+  let resizeObserver: ResizeObserver | undefined
   const screen = reactive<any>({ bg_config: { color: '#07111f' } })
   const layout = reactive<BoardLayout>({ canvas: { width: 1920, height: 1080 }, components: [] })
   const dataMap = reactive<Record<string, { rows: Record<string, any>[]; error: string }>>({})
@@ -54,6 +50,14 @@
   const code = computed(() => String(route.params.code || ''))
   const token = computed(() => String(route.query.token || ''))
   const bgColor = computed(() => screen.bg_config?.color || '#07111f')
+  const canvasStyle = computed(() => ({
+    width: layout.canvas.width + 'px',
+    height: layout.canvas.height + 'px',
+    left: fit.x + 'px',
+    top: fit.y + 'px',
+    transform: `scale(${fit.scale})`,
+    background: bgColor.value
+  }))
 
   const loadScreen = async () => {
     loading.value = true
@@ -69,11 +73,13 @@
       layout.components.splice(0, layout.components.length, ...(nextLayout.components || []))
       resetPolling()
       await Promise.all(layout.components.map((component) => loadComponentData(component.id)))
-      nextTick(updateScale)
     } catch (err: any) {
       error.value = err?.message || '大屏加载失败'
     } finally {
       loading.value = false
+      await nextTick()
+      observeViewport()
+      window.requestAnimationFrame(updateScale)
     }
   }
 
@@ -97,7 +103,21 @@
   const updateScale = () => {
     const el = viewportRef.value
     if (!el) return
-    scale.value = Math.min(el.clientWidth / layout.canvas.width, el.clientHeight / layout.canvas.height)
+    const canvasWidth = Math.max(1, Number(layout.canvas.width || 1920))
+    const canvasHeight = Math.max(1, Number(layout.canvas.height || 1080))
+    const viewportWidth = el.clientWidth
+    const viewportHeight = el.clientHeight
+    const nextScale = Math.min(viewportWidth / canvasWidth, viewportHeight / canvasHeight)
+    fit.scale = Number.isFinite(nextScale) && nextScale > 0 ? nextScale : 1
+    fit.x = Math.max(0, (viewportWidth - canvasWidth * fit.scale) / 2)
+    fit.y = Math.max(0, (viewportHeight - canvasHeight * fit.scale) / 2)
+  }
+
+  const observeViewport = () => {
+    resizeObserver?.disconnect()
+    if (!viewportRef.value || !('ResizeObserver' in window)) return
+    resizeObserver = new ResizeObserver(updateScale)
+    resizeObserver.observe(viewportRef.value)
   }
 
   onMounted(() => {
@@ -107,6 +127,7 @@
 
   onBeforeUnmount(() => {
     window.removeEventListener('resize', updateScale)
+    resizeObserver?.disconnect()
     while (timers.length) window.clearInterval(timers.pop())
   })
 </script>
@@ -114,9 +135,14 @@
 <style scoped lang="scss">
   .runtime-page,
   .runtime-viewport {
+    overflow: hidden;
+  }
+
+  .runtime-page {
+    position: fixed;
+    inset: 0;
     width: 100vw;
     height: 100vh;
-    overflow: hidden;
   }
 
   .runtime-state {
@@ -131,14 +157,14 @@
 
   .runtime-viewport {
     position: relative;
+    width: 100%;
+    height: 100%;
   }
 
   .runtime-canvas {
     position: absolute;
-    top: 50%;
-    left: 50%;
     overflow: hidden;
-    transform-origin: center center;
+    transform-origin: left top;
   }
 
   .runtime-widget {
