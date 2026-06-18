@@ -133,7 +133,7 @@ saiadmin-artd/src/views/plugin/saiboard/
 | `code` | varchar(32) | 对外访问编码，唯一索引。 |
 | `name` | varchar(60) | 大屏名称。 |
 | `width` / `height` | int | 画布设计尺寸，如 1920×1080。 |
-| `bg_config` | json | 背景与运行时适配：颜色、`fit_mode` 等。 |
+| `bg_config` | json | 背景、主题与运行时适配：`color`、`theme`、`fit_mode`、`image`、`image_fit` 等。 |
 | `is_public` | tinyint unsigned | 1对外公开 2需鉴权。 |
 | `access_token` | varchar(64) NULL | `is_public=2` 时校验用，空则要求后台登录态。 |
 | `draft_layout` | json | **编辑中的**组件树，`saveLayout` 只写这里。 |
@@ -277,7 +277,8 @@ getScreen / data 接口入口：
 - 在 `staticRoutes.ts` 显式注册，不进后台布局、不依赖动态菜单；页面级是否放行交给后端 `getScreen` / `data` 接口按大屏配置判定。
 - 复用 `widgets/` 同一套组件，外层只读容器；按 `screen.width/height` 设计稿做运行时适配（监听 resize）。
 - `bg_config.fit_mode` 支持 `contain` / `cover` / `stretch`：`contain` 完整显示设计稿并居中留边，`cover` 等比铺满视口并允许边缘裁切，`stretch` 按视口宽高分别拉伸，适合固定比例投屏。
-- 按各组件 `dataset.refresh` 轮询 `/data`；深色科技风默认主题，配色在 `screen.bg_config`。
+- `bg_config` 支持 `theme` 主题预设、背景色、背景图 URL 和 `image_fit`（铺满裁切 / 完整显示 / 拉伸 / 平铺）；编辑器和运行时复用同一套样式生成逻辑。
+- 按各数据组件 `dataset.refresh` 轮询 `/data`；纯装饰组件不绑定查询模板、不触发运行时取数。
 
 ### 数据源管理页 `/plugin/saiboard/datasource`
 
@@ -425,15 +426,18 @@ php webman b8:migrate
 | 后端 | `table_aggregate` 支持 `metrics[]` 多指标聚合，指标 alias 白名单化、最多 8 项，排序只允许维度或已校验指标。 |
 | 后端 | `table_raw.computed_fields` 支持 `round` / `abs` / `ceil` / `floor` 安全函数白名单，仍禁止裸 SQL、任意函数、子查询和条件表达式。 |
 | 后端/前端 | MySQL 查询模板支持 `params[]` 参数白名单和 `:param_name` 条件占位符；预览与公开运行时按白名单参数清洗后执行。 |
-| 前端 | `DraggableItem.vue`（封装 `vue3-draggable-resizable`）+ `widgets/` 注册表，复用 3~4 个 `art-*` 图表（柱/折线/环形 + 单值翻牌 / 表格）。 |
+| 前端 | `DraggableItem.vue`（封装 `vue3-draggable-resizable`）+ `widgets/` 注册表，复用 `art-*` 图表（柱/折线/横向柱/环形/雷达/散点 + 单值指标 / 表格）并提供 CSS 装饰边框。 |
 | 前端 | 拖拽编辑器 + 编辑态真实数据预览 / 字段映射 + 查询模板表单化配置 + 对外运行时页（静态 `/screen/:code`、适配模式、is_public / token 鉴权）。 |
 | 前端 | 数据源新增/编辑态测试前先做表单校验；查询模板支持多指标聚合配置；指标组件支持前缀 / 小数位 / 单位，表格支持最大行数 / 序号列 / 斑马纹，图表组件缩放后自动触发 resize。 |
 
 ### P1 能力增强（部分完成）
 
-- 查询模板继续补条件分组 / OR 组合等高级条件。
-- 图表组件继续补全：地图、轮播、纯 CSS/SVG 装饰边框、更多图表样式；表格列宽 / 对齐 / 别名等细项可继续增强。
-- 大屏主题与背景增强。
+- 已完成：主题预设、背景图与图片适配；横向柱图 / 雷达图 / 散点图；CSS 装饰边框；新增图表字段映射；装饰组件运行时免取数。
+- 未完成：查询模板条件分组 / OR 组合等高级条件。
+- 未完成：地图、轮播、更多图表样式和更多装饰组件。
+- 未完成：表格列宽 / 对齐 / 字段别名展示等细项。
+- 未完成：公开大屏高并发下的后端轮询频率下限、互斥回源和更细缓存策略。
+- 未完成：编辑器多选、组合、图层面板、复制粘贴、撤销重做等高级编排能力。
 
 ### P2 进阶
 

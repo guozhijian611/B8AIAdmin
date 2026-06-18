@@ -31,7 +31,8 @@
 <script setup lang="ts">
   import api from '../api/runtime'
   import WidgetRenderer from '../widgets/WidgetRenderer.vue'
-  import type { BoardLayout } from '../widgets/types'
+  import { boardCanvasStyle, normalizeBgConfig, normalizeFitMode } from '../widgets/theme'
+  import type { BoardComponent, BoardLayout } from '../widgets/types'
 
   const route = useRoute()
   const viewportRef = ref<HTMLElement>()
@@ -40,7 +41,7 @@
   const fit = reactive({ scaleX: 1, scaleY: 1, x: 0, y: 0 })
   const timers: number[] = []
   let resizeObserver: ResizeObserver | undefined
-  const screen = reactive<any>({ bg_config: { color: '#07111f' } })
+  const screen = reactive<any>({ bg_config: normalizeBgConfig() })
   const layout = reactive<BoardLayout>({ canvas: { width: 1920, height: 1080 }, components: [] })
   const dataMap = reactive<Record<string, { rows: Record<string, any>[]; error: string }>>({})
 
@@ -57,20 +58,23 @@
   const bgColor = computed(() => screen.bg_config?.color || '#07111f')
   const fitMode = computed(() => normalizeFitMode(screen.bg_config?.fit_mode))
   const canvasStyle = computed(() => ({
+    ...boardCanvasStyle(screen.bg_config),
     width: layout.canvas.width + 'px',
     height: layout.canvas.height + 'px',
     left: fit.x + 'px',
     top: fit.y + 'px',
-    transform: `scale(${fit.scaleX}, ${fit.scaleY})`,
-    background: bgColor.value
+    transform: `scale(${fit.scaleX}, ${fit.scaleY})`
   }))
+  const componentNeedsData = (component: BoardComponent) => component.type !== 'decor-border'
 
   const loadScreen = async () => {
     loading.value = true
     error.value = ''
     try {
       const result = await api.screen(code.value, token.value)
-      Object.assign(screen, result.screen)
+      Object.assign(screen, result.screen, {
+        bg_config: normalizeBgConfig(result.screen?.bg_config)
+      })
       const nextLayout = result.screen.layout || {}
       Object.assign(layout.canvas, {
         width: Number(nextLayout.canvas?.width || result.screen.width || 1920),
@@ -78,7 +82,11 @@
       })
       layout.components.splice(0, layout.components.length, ...(nextLayout.components || []))
       resetPolling()
-      await Promise.all(layout.components.map((component) => loadComponentData(component.id)))
+      await Promise.all(
+        layout.components
+          .filter((component) => componentNeedsData(component))
+          .map((component) => loadComponentData(component.id))
+      )
     } catch (err: any) {
       error.value = err?.message || '大屏加载失败'
     } finally {
@@ -106,6 +114,7 @@
   const resetPolling = () => {
     while (timers.length) window.clearInterval(timers.pop())
     for (const component of layout.components) {
+      if (!componentNeedsData(component)) continue
       const seconds = Math.max(5, Number(component.dataset?.refresh || 30))
       timers.push(window.setInterval(() => loadComponentData(component.id), seconds * 1000))
     }
@@ -139,11 +148,6 @@
 
   const validScale = (value: number) => (Number.isFinite(value) && value > 0 ? value : 1)
 
-  const normalizeFitMode = (mode: unknown) => {
-    const value = String(mode || '')
-    return ['contain', 'cover', 'stretch'].includes(value) ? value : 'contain'
-  }
-
   const observeViewport = () => {
     resizeObserver?.disconnect()
     if (!viewportRef.value || !('ResizeObserver' in window)) return
@@ -157,7 +161,9 @@
   })
 
   watch(runtimeParams, () => {
-    layout.components.forEach((component) => loadComponentData(component.id))
+    layout.components
+      .filter((component) => componentNeedsData(component))
+      .forEach((component) => loadComponentData(component.id))
   })
 
   onBeforeUnmount(() => {

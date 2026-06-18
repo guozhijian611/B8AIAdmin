@@ -1,5 +1,9 @@
 <template>
-  <div ref="widgetRef" class="board-widget" :class="{ 'is-runtime': runtime }">
+  <div
+    ref="widgetRef"
+    class="board-widget"
+    :class="{ 'is-runtime': runtime, 'is-decor': component.type === 'decor-border' }"
+  >
     <div v-if="component.title" class="widget-title">{{ component.title }}</div>
     <div class="widget-body">
       <ArtBarChart
@@ -16,10 +20,30 @@
         :x-axis-data="axisData"
         v-bind="component.option"
       />
+      <ArtHBarChart
+        v-else-if="component.type === 'art-h-bar-chart'"
+        height="100%"
+        :data="seriesData"
+        :x-axis-data="axisData"
+        v-bind="component.option"
+      />
       <ArtRingChart
         v-else-if="component.type === 'art-ring-chart'"
         height="100%"
         :data="ringData"
+        v-bind="component.option"
+      />
+      <ArtRadarChart
+        v-else-if="component.type === 'art-radar-chart'"
+        height="100%"
+        :data="radarData"
+        :indicator="radarIndicators"
+        v-bind="component.option"
+      />
+      <ArtScatterChart
+        v-else-if="component.type === 'art-scatter-chart'"
+        height="100%"
+        :data="scatterData"
         v-bind="component.option"
       />
       <div v-else-if="component.type === 'stat-number'" class="metric">
@@ -46,6 +70,12 @@
           show-overflow-tooltip
         />
       </ElTable>
+      <div
+        v-else-if="component.type === 'decor-border'"
+        class="decor-border"
+        :class="`is-${decorStyle}`"
+        :style="decorStyleVars"
+      ></div>
       <div v-else class="unsupported">组件不可用</div>
     </div>
     <div v-if="error" class="widget-error">{{ error }}</div>
@@ -54,11 +84,21 @@
 
 <script setup lang="ts">
   import ArtBarChart from '@/components/core/charts/art-bar-chart/index.vue'
+  import ArtHBarChart from '@/components/core/charts/art-h-bar-chart/index.vue'
   import ArtLineChart from '@/components/core/charts/art-line-chart/index.vue'
+  import ArtRadarChart from '@/components/core/charts/art-radar-chart/index.vue'
   import ArtRingChart from '@/components/core/charts/art-ring-chart/index.vue'
+  import ArtScatterChart from '@/components/core/charts/art-scatter-chart/index.vue'
   import type { BoardComponent } from './types'
 
-  const chartTypes = new Set(['art-bar-chart', 'art-line-chart', 'art-ring-chart'])
+  const chartTypes = new Set([
+    'art-bar-chart',
+    'art-line-chart',
+    'art-h-bar-chart',
+    'art-ring-chart',
+    'art-radar-chart',
+    'art-scatter-chart'
+  ])
 
   const props = withDefaults(
     defineProps<{
@@ -135,6 +175,62 @@
     }))
   })
 
+  const radarIndicators = computed(() => {
+    const rows = tableRows.value
+    if (!rows.length) {
+      return hasBoundDataset.value ? [] : axisData.value.map((name) => ({ name, max: 40 }))
+    }
+
+    return axisData.value.map((name, index) => {
+      const max = Math.max(1, ...valueKeys.value.map((key) => Number(rows[index]?.[key] ?? 0)))
+      return { name, max: Math.ceil(max * 1.2) }
+    })
+  })
+
+  const radarData = computed(() => {
+    if (!tableRows.value.length) {
+      return hasBoundDataset.value
+        ? []
+        : [{ name: props.component.title || '指标', value: [12, 28, 19, 35, 24] }]
+    }
+
+    return valueKeys.value.map((key) => ({
+      name: key,
+      value: tableRows.value.map((row) => Number(row[key] ?? 0))
+    }))
+  })
+
+  const scatterData = computed(() => {
+    if (!tableRows.value.length) {
+      return hasBoundDataset.value
+        ? []
+        : [
+            { value: [0, 12] },
+            { value: [1, 28] },
+            { value: [2, 19] },
+            { value: [3, 35] },
+            { value: [4, 24] }
+          ]
+    }
+
+    const xKey = axisKey.value
+    return tableRows.value.map((row, index) => ({
+      value: [
+        Number.isFinite(Number(row[xKey])) ? Number(row[xKey]) : index,
+        Number(row[valueKey.value] ?? 0)
+      ]
+    }))
+  })
+
+  const decorStyle = computed(() => {
+    const value = String(props.component.option?.borderStyle || 'corner')
+    return ['corner', 'line', 'glow'].includes(value) ? value : 'corner'
+  })
+  const decorStyleVars = computed(() => ({
+    '--decor-accent': String(props.component.option?.accent || 'var(--saiboard-accent, #69b7ff)'),
+    '--decor-opacity': String(normalizeOpacity(props.component.option?.opacity))
+  }))
+
   const metricValue = computed(() => {
     if (!tableRows.value.length) return hasBoundDataset.value ? '-' : '0'
     const raw = tableRows.value[0][valueKey.value]
@@ -152,6 +248,12 @@
     const decimals = Number(value ?? 0)
     if (!Number.isFinite(decimals)) return 0
     return Math.min(6, Math.max(0, Math.round(decimals)))
+  }
+
+  function normalizeOpacity(value: unknown) {
+    const opacity = Number(value ?? 0.85)
+    if (!Number.isFinite(opacity)) return 0.85
+    return Math.min(1, Math.max(0.1, opacity))
   }
 
   function notifyChartResize() {
@@ -222,9 +324,9 @@
     min-width: 0;
     min-height: 0;
     overflow: hidden;
-    color: #e5eefb;
-    background: rgb(8 18 32 / 78%);
-    border: 1px solid rgb(104 166 255 / 24%);
+    color: var(--saiboard-text, #e5eefb);
+    background: var(--saiboard-panel-bg, rgb(8 18 32 / 78%));
+    border: 1px solid var(--saiboard-panel-border, rgb(104 166 255 / 24%));
     border-radius: 6px;
   }
 
@@ -243,6 +345,15 @@
     flex: 1;
     min-height: 0;
     padding: 8px 10px 10px;
+  }
+
+  .board-widget.is-decor {
+    background: transparent;
+    border: 0;
+  }
+
+  .board-widget.is-decor .widget-body {
+    padding: 0;
   }
 
   .metric {
@@ -270,7 +381,7 @@
   .metric-unit {
     flex: 0 0 auto;
     font-size: 15px;
-    color: #8ab4f8;
+    color: var(--saiboard-accent, #8ab4f8);
   }
 
   .metric-unit {
@@ -288,6 +399,49 @@
     color: #ffb4ab;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .decor-border {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    opacity: var(--decor-opacity);
+    border: 1px solid color-mix(in srgb, var(--decor-accent) 42%, transparent);
+    border-radius: 4px;
+  }
+
+  .decor-border::before,
+  .decor-border::after {
+    position: absolute;
+    inset: 10px;
+    pointer-events: none;
+    content: '';
+    border: 1px solid color-mix(in srgb, var(--decor-accent) 18%, transparent);
+  }
+
+  .decor-border.is-corner {
+    background:
+      linear-gradient(var(--decor-accent), var(--decor-accent)) left top / 42px 2px no-repeat,
+      linear-gradient(var(--decor-accent), var(--decor-accent)) left top / 2px 42px no-repeat,
+      linear-gradient(var(--decor-accent), var(--decor-accent)) right top / 42px 2px no-repeat,
+      linear-gradient(var(--decor-accent), var(--decor-accent)) right top / 2px 42px no-repeat,
+      linear-gradient(var(--decor-accent), var(--decor-accent)) left bottom / 42px 2px no-repeat,
+      linear-gradient(var(--decor-accent), var(--decor-accent)) left bottom / 2px 42px no-repeat,
+      linear-gradient(var(--decor-accent), var(--decor-accent)) right bottom / 42px 2px no-repeat,
+      linear-gradient(var(--decor-accent), var(--decor-accent)) right bottom / 2px 42px no-repeat;
+  }
+
+  .decor-border.is-line {
+    background:
+      linear-gradient(90deg, transparent, var(--decor-accent), transparent) top / 100% 1px no-repeat,
+      linear-gradient(90deg, transparent, var(--decor-accent), transparent) bottom / 100% 1px
+        no-repeat;
+  }
+
+  .decor-border.is-glow {
+    box-shadow:
+      inset 0 0 22px color-mix(in srgb, var(--decor-accent) 28%, transparent),
+      0 0 28px color-mix(in srgb, var(--decor-accent) 18%, transparent);
   }
 
   :deep(.el-table) {

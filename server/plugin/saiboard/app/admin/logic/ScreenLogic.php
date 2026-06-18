@@ -69,9 +69,7 @@ class ScreenLogic extends BaseLogic
         $data['code'] = trim((string) ($data['code'] ?? '')) ?: $this->generateCode();
         $data['is_public'] = (int) ($data['is_public'] ?? 1);
         $data['status'] = (int) ($data['status'] ?? 2);
-        if (!array_key_exists('bg_config', $data)) {
-            $data['bg_config'] = ['color' => '#07111f'];
-        }
+        $data['bg_config'] = $this->normalizeBgConfig($data['bg_config'] ?? []);
         if ($ignoreId <= 0) {
             $data['draft_layout'] = $data['draft_layout'] ?? $this->defaultLayout($width, $height);
             $data['layout'] = $data['layout'] ?? $this->defaultLayout($width, $height);
@@ -109,6 +107,24 @@ class ScreenLogic extends BaseLogic
             'canvas' => ['width' => $width, 'height' => $height],
             'components' => [],
         ];
+    }
+
+    private function normalizeBgConfig(mixed $config): array
+    {
+        $config = is_array($config) ? $config : [];
+        $theme = (string) ($config['theme'] ?? 'midnight');
+        $fitMode = (string) ($config['fit_mode'] ?? 'contain');
+        $imageFit = (string) ($config['image_fit'] ?? 'cover');
+
+        return array_merge($config, [
+            'color' => trim((string) ($config['color'] ?? '')) ?: '#07111f',
+            'theme' => in_array($theme, ['midnight', 'teal', 'amber'], true) ? $theme : 'midnight',
+            'fit_mode' => in_array($fitMode, ['contain', 'cover', 'stretch'], true) ? $fitMode : 'contain',
+            'image' => trim((string) ($config['image'] ?? '')),
+            'image_fit' => in_array($imageFit, ['cover', 'contain', 'stretch', 'repeat'], true)
+                ? $imageFit
+                : 'cover',
+        ]);
     }
 
     private function generateCode(): string

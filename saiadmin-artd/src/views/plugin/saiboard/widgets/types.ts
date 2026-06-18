@@ -16,9 +16,28 @@ export interface BoardDataset {
   }
 }
 
+export type WidgetType =
+  | 'art-bar-chart'
+  | 'art-line-chart'
+  | 'art-h-bar-chart'
+  | 'art-ring-chart'
+  | 'art-radar-chart'
+  | 'art-scatter-chart'
+  | 'stat-number'
+  | 'data-table'
+  | 'decor-border'
+
+export interface BoardBgConfig {
+  color?: string
+  theme?: string
+  fit_mode?: string
+  image?: string
+  image_fit?: string
+}
+
 export interface BoardComponent {
   id: string
-  type: string
+  type: WidgetType | string
   title: string
   rect: BoardRect
   dataset: BoardDataset
@@ -34,7 +53,7 @@ export interface BoardLayout {
 }
 
 export interface WidgetMeta {
-  type: string
+  type: WidgetType
   name: string
   icon: string
   defaultRect: BoardRect

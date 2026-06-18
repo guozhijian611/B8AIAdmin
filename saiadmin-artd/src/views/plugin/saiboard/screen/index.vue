@@ -113,6 +113,22 @@
         <ElFormItem label="背景色">
           <ElColorPicker v-model="form.bgColor" />
         </ElFormItem>
+        <ElFormItem label="主题">
+          <ElSegmented v-model="form.theme" :options="boardThemeOptions" />
+        </ElFormItem>
+        <ElFormItem label="背景图">
+          <ElInput v-model="form.bgImage" clearable placeholder="图片 URL" />
+        </ElFormItem>
+        <ElFormItem label="图片适配">
+          <ElSelect v-model="form.bgImageFit">
+            <ElOption
+              v-for="item in backgroundFitOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            />
+          </ElSelect>
+        </ElFormItem>
         <ElFormItem label="适配模式">
           <ElSegmented v-model="form.fitMode" :options="fitModeOptions" />
         </ElFormItem>
@@ -150,6 +166,12 @@
   import { ElMessage, ElMessageBox } from 'element-plus'
   import type { FormInstance, FormRules } from 'element-plus'
   import api from '../api/screen'
+  import {
+    backgroundFitOptions,
+    boardThemeOptions,
+    normalizeBgConfig,
+    normalizeFitMode
+  } from '../widgets/theme'
 
   const rows = ref<any[]>([])
   const loading = ref(false)
@@ -163,6 +185,9 @@
     width: 1920,
     height: 1080,
     bgColor: '#07111f',
+    theme: 'midnight',
+    bgImage: '',
+    bgImageFit: 'cover',
     fitMode: 'contain',
     bg_config: {} as Record<string, any>,
     is_public: 1,
@@ -198,23 +223,32 @@
   }
 
   const openDialog = (row?: any) => {
+    const defaultBg = normalizeBgConfig()
     Object.assign(form, {
       id: undefined,
       name: '',
       code: '',
       width: 1920,
       height: 1080,
-      bgColor: '#07111f',
+      bgColor: defaultBg.color,
+      theme: defaultBg.theme,
+      bgImage: defaultBg.image,
+      bgImageFit: defaultBg.image_fit,
       fitMode: 'contain',
-      bg_config: {},
+      bg_config: defaultBg,
       is_public: 1,
       access_token: '',
       status: 2
     })
     if (row) {
+      const bg = normalizeBgConfig(row.bg_config || {})
       Object.assign(form, row, {
-        bgColor: row.bg_config?.color || '#07111f',
-        fitMode: normalizeFitMode(row.bg_config?.fit_mode)
+        bgColor: bg.color,
+        theme: bg.theme,
+        bgImage: bg.image,
+        bgImageFit: bg.image_fit,
+        fitMode: normalizeFitMode(bg.fit_mode),
+        bg_config: bg
       })
     }
     dialogVisible.value = true
@@ -224,11 +258,14 @@
     await formRef.value?.validate()
     const payload: Record<string, any> = {
       ...form,
-      bg_config: {
+      bg_config: normalizeBgConfig({
         ...(form.bg_config || {}),
         color: form.bgColor,
+        theme: form.theme,
+        image: form.bgImage,
+        image_fit: form.bgImageFit,
         fit_mode: normalizeFitMode(form.fitMode)
-      }
+      })
     }
     if (!form.id) {
       payload.draft_layout = {
@@ -278,11 +315,6 @@
     await api.delete({ ids: [row.id] })
     ElMessage.success('删除成功')
     loadData()
-  }
-
-  const normalizeFitMode = (mode: unknown) => {
-    const value = String(mode || '')
-    return ['contain', 'cover', 'stretch'].includes(value) ? value : 'contain'
   }
 
   const fitModeLabel = (mode: unknown) =>

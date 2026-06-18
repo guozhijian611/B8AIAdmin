@@ -43,10 +43,10 @@
         <div
           class="canvas"
           :style="{
+            ...canvasStyle,
             width: layout.canvas.width + 'px',
             height: layout.canvas.height + 'px',
-            transform: `scale(${effectiveZoom})`,
-            background: screen.bg_config?.color || '#07111f'
+            transform: `scale(${effectiveZoom})`
           }"
           @mousedown.self="selectedId = ''"
         >
@@ -80,7 +80,7 @@
                 />
               </ElSelect>
             </ElFormItem>
-            <ElFormItem label="查询模板">
+            <ElFormItem v-if="requiresDataset" label="查询模板">
               <div class="template-bind-row">
                 <ElSelect
                   v-model="selectedComponent.dataset.queryTemplateId"
@@ -105,7 +105,7 @@
                 </ElButton>
               </div>
             </ElFormItem>
-            <ElFormItem label="刷新秒">
+            <ElFormItem v-if="requiresDataset" label="刷新秒">
               <ElInputNumber v-model="selectedComponent.dataset.refresh" :min="5" :max="3600" />
             </ElFormItem>
             <ElFormItem v-if="supportsFieldMapping" label="类目字段">
@@ -158,7 +158,7 @@
                 />
               </ElSelect>
             </ElFormItem>
-            <ElFormItem label="数据预览">
+            <ElFormItem v-if="requiresDataset" label="数据预览">
               <ElText v-if="selectedPreviewError" type="danger" truncated>
                 {{ selectedPreviewError }}
               </ElText>
@@ -232,6 +232,26 @@
                 <ElSwitch v-model="selectedComponent.option!.rowStripe" />
               </ElFormItem>
             </template>
+            <template v-if="selectedComponent.type === 'decor-border'">
+              <ElFormItem label="样式">
+                <ElSelect v-model="selectedComponent.option!.borderStyle">
+                  <ElOption label="转角" value="corner" />
+                  <ElOption label="线条" value="line" />
+                  <ElOption label="辉光" value="glow" />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="强调色">
+                <ElColorPicker v-model="selectedComponent.option!.accent" />
+              </ElFormItem>
+              <ElFormItem label="透明度">
+                <ElSlider
+                  v-model="selectedComponent.option!.opacity"
+                  :min="0.1"
+                  :max="1"
+                  :step="0.05"
+                />
+              </ElFormItem>
+            </template>
             <ElFormItem>
               <ElSpace>
                 <ElButton @click="bringToFront">置顶</ElButton>
@@ -252,6 +272,22 @@
             <ElFormItem label="背景色">
               <ElColorPicker v-model="screen.bg_config.color" />
             </ElFormItem>
+            <ElFormItem label="主题">
+              <ElSegmented v-model="screen.bg_config.theme" :options="boardThemeOptions" />
+            </ElFormItem>
+            <ElFormItem label="背景图">
+              <ElInput v-model="screen.bg_config.image" clearable placeholder="图片 URL" />
+            </ElFormItem>
+            <ElFormItem label="图片适配">
+              <ElSelect v-model="screen.bg_config.image_fit">
+                <ElOption
+                  v-for="item in backgroundFitOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
+              </ElSelect>
+            </ElFormItem>
             <ElFormItem label="适配模式">
               <ElSegmented v-model="screen.bg_config.fit_mode" :options="fitModeOptions" />
             </ElFormItem>
@@ -268,6 +304,12 @@
   import templateApi from '../api/query-template'
   import DraggableItem from '../widgets/DraggableItem.vue'
   import { createDefaultComponent, getWidgetMeta, widgetRegistry } from '../widgets/registry'
+  import {
+    backgroundFitOptions,
+    boardCanvasStyle,
+    boardThemeOptions,
+    normalizeBgConfig
+  } from '../widgets/theme'
   import type { BoardComponent, BoardLayout } from '../widgets/types'
 
   interface PreviewState {
@@ -288,7 +330,7 @@
     id: 0,
     name: '',
     status: 2,
-    bg_config: { color: '#07111f', fit_mode: 'contain' }
+    bg_config: normalizeBgConfig()
   })
   const layout = reactive<BoardLayout>({
     canvas: { width: 1920, height: 1080 },
@@ -306,9 +348,23 @@
     { label: '裁切铺满', value: 'cover' },
     { label: '非等比拉伸', value: 'stretch' }
   ]
+  const fieldMappingTypes = new Set([
+    'art-bar-chart',
+    'art-line-chart',
+    'art-h-bar-chart',
+    'art-ring-chart',
+    'art-radar-chart',
+    'art-scatter-chart',
+    'stat-number',
+    'data-table'
+  ])
+  const componentNeedsData = (component: BoardComponent) => component.type !== 'decor-border'
 
   const selectedComponent = computed(() =>
     layout.components.find((item) => item.id === selectedId.value)
+  )
+  const requiresDataset = computed(() =>
+    Boolean(selectedComponent.value && componentNeedsData(selectedComponent.value))
   )
   const selectedPreviewState = computed(() =>
     selectedComponent.value ? previewMap[selectedComponent.value.id] : undefined
@@ -323,16 +379,12 @@
     )
   )
   const supportsFieldMapping = computed(() =>
-    Boolean(
-      selectedComponent.value &&
-        ['art-bar-chart', 'art-line-chart', 'art-ring-chart', 'stat-number', 'data-table'].includes(
-          selectedComponent.value.type
-        )
-    )
+    Boolean(selectedComponent.value && fieldMappingTypes.has(selectedComponent.value.type))
   )
   const effectiveZoom = computed(() =>
     zoom.value === 'auto' ? autoZoom.value : Number(zoom.value)
   )
+  const canvasStyle = computed(() => boardCanvasStyle(screen.bg_config))
 
   const loadData = async () => {
     const id = Number(route.params.id)
@@ -356,20 +408,25 @@
       height: Number(value?.canvas?.height || screen.height || 1080)
     },
     components: Array.isArray(value?.components)
-      ? value.components.map((component: any, index: number) => ({
-          id: component.id || `w_${Date.now()}_${index}`,
-          type: component.type || 'art-bar-chart',
-          title: component.title || '组件',
-          rect: {
-            x: Number(component.rect?.x || 0),
-            y: Number(component.rect?.y || 0),
-            w: Number(component.rect?.w || 320),
-            h: Number(component.rect?.h || 180),
-            z: Number(component.rect?.z || 1)
-          },
-          dataset: normalizeDataset(component.dataset),
-          option: normalizeOption(component.type || 'art-bar-chart', component.option)
-        }))
+      ? value.components.map((component: any, index: number) => {
+          const type = component.type || 'art-bar-chart'
+          const meta = getWidgetMeta(type)
+
+          return {
+            id: component.id || `w_${Date.now()}_${index}`,
+            type,
+            title: typeof component.title === 'string' ? component.title : meta?.name || '组件',
+            rect: {
+              x: Number(component.rect?.x || 0),
+              y: Number(component.rect?.y || 0),
+              w: Number(component.rect?.w || 320),
+              h: Number(component.rect?.h || 180),
+              z: Number(component.rect?.z || 1)
+            },
+            dataset: normalizeDataset(component.dataset),
+            option: normalizeOption(type, component.option)
+          }
+        })
       : []
   })
 
@@ -383,17 +440,6 @@
       tableFields: Array.isArray(dataset?.mapping?.tableFields) ? dataset.mapping.tableFields : []
     }
   })
-
-  const normalizeBgConfig = (config: any = {}) => ({
-    ...(config || {}),
-    color: config?.color || '#07111f',
-    fit_mode: normalizeFitMode(config?.fit_mode)
-  })
-
-  const normalizeFitMode = (mode: unknown) => {
-    const value = String(mode || '')
-    return ['contain', 'cover', 'stretch'].includes(value) ? value : 'contain'
-  }
 
   const updateAutoZoom = () => {
     const shell = canvasShellRef.value
@@ -437,6 +483,7 @@
   })
 
   const componentRows = (component: BoardComponent) => {
+    if (!componentNeedsData(component)) return []
     if (!component.dataset?.queryTemplateId) return sampleRows
     return previewMap[component.id]?.rows || []
   }
@@ -445,6 +492,10 @@
 
   const refreshComponentData = async (component: BoardComponent) => {
     ensureDataset(component)
+    if (!componentNeedsData(component)) {
+      delete previewMap[component.id]
+      return
+    }
     const queryTemplateId = Number(component.dataset.queryTemplateId || 0)
     if (!queryTemplateId) {
       delete previewMap[component.id]
@@ -520,7 +571,7 @@
       code: screen.code,
       width: layout.canvas.width,
       height: layout.canvas.height,
-      bg_config: screen.bg_config,
+      bg_config: normalizeBgConfig(screen.bg_config),
       is_public: screen.is_public,
       access_token: screen.access_token,
       status: 2
