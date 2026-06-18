@@ -24,8 +24,9 @@ class SqlBuilder
     {
         $table = $this->assertTable($pdo, (string) ($config['table'] ?? ''));
         $columns = $this->columns($pdo, $table);
+        $columnTypes = $this->columnTypes($pdo, $table);
         $fields = $this->normalizeFields($config['fields'] ?? [], $columns);
-        [$whereSql, $bindings] = $this->buildWhere($columns, $config['conditions'] ?? []);
+        [$whereSql, $bindings] = $this->buildWhere($columns, $config['conditions'] ?? [], $columnTypes);
         $orderSql = $this->buildOrder($columns, $config);
         $limit = $this->normalizeLimit($config['limit'] ?? 100);
 
@@ -45,7 +46,8 @@ class SqlBuilder
     {
         $table = $this->assertTable($pdo, (string) ($config['table'] ?? ''));
         $columns = $this->columns($pdo, $table);
-        [$whereSql, $bindings] = $this->buildWhere($columns, $config['conditions'] ?? []);
+        $columnTypes = $this->columnTypes($pdo, $table);
+        [$whereSql, $bindings] = $this->buildWhere($columns, $config['conditions'] ?? [], $columnTypes);
 
         return [sprintf('SELECT COUNT(*) AS total FROM `%s`%s', $table, $whereSql), $bindings, 'count'];
     }
@@ -54,6 +56,7 @@ class SqlBuilder
     {
         $table = $this->assertTable($pdo, (string) ($config['table'] ?? ''));
         $columns = $this->columns($pdo, $table);
+        $columnTypes = $this->columnTypes($pdo, $table);
         $dimension = $this->assertColumn($columns, (string) ($config['dimension'] ?? ''), '维度字段');
         $aggregate = strtolower(trim((string) ($config['aggregate'] ?? 'count')));
         if (!in_array($aggregate, ['count', 'sum', 'avg', 'min', 'max'], true)) {
@@ -63,14 +66,13 @@ class SqlBuilder
         $valueExpression = 'COUNT(*)';
         if ($aggregate !== 'count') {
             $metric = $this->assertColumn($columns, (string) ($config['metric'] ?? ''), '指标字段');
-            $columnTypes = $this->columnTypes($pdo, $table);
             if (!$this->isNumericType($columnTypes[$metric] ?? '')) {
                 throw new InvalidArgumentException('指标字段必须是数值类型');
             }
             $valueExpression = strtoupper($aggregate) . "(`{$metric}`)";
         }
 
-        [$whereSql, $bindings] = $this->buildWhere($columns, $config['conditions'] ?? []);
+        [$whereSql, $bindings] = $this->buildWhere($columns, $config['conditions'] ?? [], $columnTypes);
         $labelExpression = $this->dimensionExpression($dimension, (string) ($config['dimension_type'] ?? 'raw'));
         $orderBy = strtolower((string) ($config['order_by'] ?? 'label')) === 'value' ? 'value' : 'label';
         $direction = strtolower((string) ($config['order_type'] ?? 'asc')) === 'desc' ? 'DESC' : 'ASC';
@@ -178,7 +180,7 @@ class SqlBuilder
         };
     }
 
-    private function buildWhere(array $columns, mixed $conditions): array
+    private function buildWhere(array $columns, mixed $conditions, array $columnTypes = []): array
     {
         if (!is_array($conditions) || $conditions === []) {
             return ['', []];
@@ -207,6 +209,7 @@ class SqlBuilder
                 'like' => $this->appendSimpleWhere($parts, $bindings, $field, 'LIKE', '%' . (string) $value . '%'),
                 'in' => $this->appendInWhere($parts, $bindings, $field, $value),
                 'between' => $this->appendBetweenWhere($parts, $bindings, $field, $value),
+                'time_range' => $this->appendTimeRangeWhere($parts, $bindings, $field, $value, $columnTypes[$field] ?? ''),
                 default => throw new InvalidArgumentException("条件操作符 {$operator} 不支持"),
             };
         }
@@ -241,6 +244,42 @@ class SqlBuilder
         $parts[] = "`{$field}` BETWEEN ? AND ?";
         $bindings[] = $values[0];
         $bindings[] = $values[1];
+    }
+
+    private function appendTimeRangeWhere(
+        array &$parts,
+        array &$bindings,
+        string $field,
+        mixed $value,
+        string $columnType
+    ): void {
+        if (!$this->isTemporalType($columnType)) {
+            throw new InvalidArgumentException("时间范围字段 {$field} 必须是日期或时间类型");
+        }
+
+        [$start, $end] = $this->timeRangeBounds((string) $value);
+        $parts[] = "`{$field}` >= ? AND `{$field}` < ?";
+        $bindings[] = $start->format('Y-m-d H:i:s');
+        $bindings[] = $end->format('Y-m-d H:i:s');
+    }
+
+    private function timeRangeBounds(string $preset): array
+    {
+        $today = new \DateTimeImmutable('today');
+        $thisMonth = $today->modify('first day of this month');
+        $thisYear = $today->setDate((int) $today->format('Y'), 1, 1);
+
+        return match (strtolower(trim($preset))) {
+            'today' => [$today, $today->modify('+1 day')],
+            'yesterday' => [$today->modify('-1 day'), $today],
+            'last_7_days' => [$today->modify('-6 days'), $today->modify('+1 day')],
+            'last_30_days' => [$today->modify('-29 days'), $today->modify('+1 day')],
+            'this_week' => [$today->modify('monday this week'), $today->modify('+1 day')],
+            'this_month' => [$thisMonth, $thisMonth->modify('+1 month')],
+            'last_month' => [$thisMonth->modify('-1 month'), $thisMonth],
+            'this_year' => [$thisYear, $thisYear->modify('+1 year')],
+            default => throw new InvalidArgumentException("时间范围 {$preset} 不支持"),
+        };
     }
 
     private function buildOrder(array $columns, array $config): string
@@ -293,5 +332,10 @@ class SqlBuilder
     private function isNumericType(string $type): bool
     {
         return preg_match('/int|decimal|double|float|real|numeric|bit|bool/', strtolower($type)) === 1;
+    }
+
+    private function isTemporalType(string $type): bool
+    {
+        return preg_match('/date|time|timestamp/', strtolower($type)) === 1;
     }
 }

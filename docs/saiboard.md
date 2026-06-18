@@ -288,7 +288,19 @@ getScreen / data 接口入口：
 - `table_raw` 可选返回字段、条件、排序和 limit。
 - `table_count` 可选条件，统一返回 `{rows, total}`，其中 `total` 是计数值。
 - `table_aggregate` 可选维度字段、日期粒度、聚合方式、指标字段、条件、排序和 limit，统一返回 `{rows, total}`，每行结构为 `{label, value}`。
+- 条件支持 `= / != / > / >= / < / <= / like / in / between / time_range`。`time_range` 只允许日期 / 时间字段，`value` 可用 `today`、`yesterday`、`last_7_days`、`last_30_days`、`this_week`、`this_month`、`last_month`、`this_year`。
 - HTTP 数据源使用 `http_passthrough`，配置路径和请求参数 JSON。
+
+时间范围条件示例：
+
+```json
+{
+  "table": "saipay_order",
+  "conditions": [
+    { "field": "create_time", "op": "time_range", "value": "last_7_days" }
+  ]
+}
+```
 
 ## 数据源配置示例
 
@@ -362,7 +374,7 @@ php webman b8:migrate
 
 ### P1 能力增强
 
-- 查询模板补更强的时间范围快捷条件、字段别名和计算字段。
+- 查询模板补字段别名和计算字段。
 - 图表组件补全：地图、表格增强、翻牌、轮播；纯 CSS/SVG 装饰边框（不引第三方分支）。
 - 大屏主题与背景增强。
 

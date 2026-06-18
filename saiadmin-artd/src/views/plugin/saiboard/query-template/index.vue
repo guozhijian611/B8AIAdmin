@@ -199,21 +199,41 @@
               >
                 <ElSelect v-model="condition.field" filterable placeholder="字段">
                   <ElOption
-                    v-for="item in columnOptions"
+                    v-for="item in conditionColumnOptions(condition)"
                     :key="item.name"
                     :label="item.name"
                     :value="item.name"
                   />
                 </ElSelect>
-                <ElSelect v-model="condition.op" placeholder="操作符">
+                <ElSelect
+                  v-model="condition.op"
+                  placeholder="操作符"
+                  @change="onConditionOperatorChange(condition)"
+                >
                   <ElOption
                     v-for="item in operatorOptions"
-                    :key="item"
-                    :label="item"
-                    :value="item"
+                    :key="item.value"
+                    :label="item.label"
+                    :value="item.value"
                   />
                 </ElSelect>
-                <ElInput v-model="condition.value" placeholder="值，in/between 可用逗号分隔" />
+                <ElSelect
+                  v-if="condition.op === 'time_range'"
+                  v-model="condition.value"
+                  placeholder="选择时间范围"
+                >
+                  <ElOption
+                    v-for="item in timeRangeOptions"
+                    :key="item.value"
+                    :label="item.label"
+                    :value="item.value"
+                  />
+                </ElSelect>
+                <ElInput
+                  v-else
+                  v-model="condition.value"
+                  placeholder="值，in/between 可用逗号分隔"
+                />
                 <ElButton text type="danger" @click="removeCondition(index)">删除</ElButton>
               </div>
               <ElButton @click="addCondition">
@@ -340,7 +360,28 @@
     dataset_type: [{ required: true, message: '取数类型必选', trigger: 'change' }]
   }
 
-  const operatorOptions = ['=', '!=', '>', '>=', '<', '<=', 'like', 'in', 'between']
+  const operatorOptions = [
+    { label: '等于 =', value: '=' },
+    { label: '不等于 !=', value: '!=' },
+    { label: '大于 >', value: '>' },
+    { label: '大于等于 >=', value: '>=' },
+    { label: '小于 <', value: '<' },
+    { label: '小于等于 <=', value: '<=' },
+    { label: '包含 like', value: 'like' },
+    { label: '在列表 in', value: 'in' },
+    { label: '区间 between', value: 'between' },
+    { label: '时间范围', value: 'time_range' }
+  ]
+  const timeRangeOptions = [
+    { label: '今天', value: 'today' },
+    { label: '昨天', value: 'yesterday' },
+    { label: '近 7 天', value: 'last_7_days' },
+    { label: '近 30 天', value: 'last_30_days' },
+    { label: '本周至今', value: 'this_week' },
+    { label: '本月', value: 'this_month' },
+    { label: '上月', value: 'last_month' },
+    { label: '本年', value: 'this_year' }
+  ]
   const mysqlDatasetTypes = [
     { label: '表原始行', value: 'table_raw' },
     { label: '表计数', value: 'table_count' },
@@ -357,6 +398,11 @@
   )
   const numericColumnOptions = computed(() =>
     columnOptions.value.filter((item) => item.kind === 'number')
+  )
+  const dateColumnOptions = computed(() =>
+    columnOptions.value.filter(
+      (item) => item.kind === 'date' && !item.type.toLowerCase().startsWith('year')
+    )
   )
   const configPreview = computed(() => JSON.stringify(buildConfig(false), null, 2))
 
@@ -534,6 +580,18 @@
   const addCondition = () => {
     form.config.conditions.push({ field: '', op: '=', value: '' })
   }
+
+  const onConditionOperatorChange = (condition: Record<string, any>) => {
+    condition.value = condition.op === 'time_range' ? 'last_7_days' : ''
+    if (condition.op === 'time_range' && !isDateField(condition.field)) {
+      condition.field = ''
+    }
+  }
+
+  const conditionColumnOptions = (condition: Record<string, any>) =>
+    condition?.op === 'time_range' ? dateColumnOptions.value : columnOptions.value
+
+  const isDateField = (field: string) => dateColumnOptions.value.some((item) => item.name === field)
 
   const removeCondition = (index: number) => {
     form.config.conditions.splice(index, 1)
