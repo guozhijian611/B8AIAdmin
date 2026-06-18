@@ -106,7 +106,7 @@
               </div>
             </ElFormItem>
             <ElFormItem v-if="requiresDataset" label="刷新秒">
-              <ElInputNumber v-model="selectedComponent.dataset.refresh" :min="5" :max="3600" />
+              <ElInputNumber v-model="selectedComponent.dataset.refresh" :min="10" :max="3600" />
             </ElFormItem>
             <ElFormItem v-if="supportsFieldMapping" label="类目字段">
               <ElSelect
@@ -348,6 +348,8 @@
     { label: '裁切铺满', value: 'cover' },
     { label: '非等比拉伸', value: 'stretch' }
   ]
+  const minRefreshSeconds = 10
+  const maxRefreshSeconds = 3600
   const fieldMappingTypes = new Set([
     'art-bar-chart',
     'art-line-chart',
@@ -433,7 +435,7 @@
   const normalizeDataset = (dataset: any = {}) => ({
     queryTemplateId:
       Number(dataset?.queryTemplateId || dataset?.query_template_id || 0) || undefined,
-    refresh: Number(dataset?.refresh || 30),
+    refresh: normalizeRefresh(dataset?.refresh),
     mapping: {
       labelField: dataset?.mapping?.labelField || dataset?.fieldMap?.label || '',
       valueField: dataset?.mapping?.valueField || dataset?.fieldMap?.value || '',
@@ -481,6 +483,12 @@
     ...(getWidgetMeta(type)?.defaultOption || {}),
     ...(option || {})
   })
+
+  const normalizeRefresh = (refresh: unknown) => {
+    const seconds = Number(refresh || 30)
+    if (!Number.isFinite(seconds) || seconds <= 0) return 30
+    return Math.min(maxRefreshSeconds, Math.max(minRefreshSeconds, Math.round(seconds)))
+  }
 
   const componentRows = (component: BoardComponent) => {
     if (!componentNeedsData(component)) return []

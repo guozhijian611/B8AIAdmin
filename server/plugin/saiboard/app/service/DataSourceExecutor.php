@@ -11,6 +11,11 @@ use Throwable;
 
 class DataSourceExecutor
 {
+    private const CACHE_LOCK_WAIT_USEC = 100000;
+    private const CACHE_LOCK_TIMEOUT_SECONDS = 3.0;
+    private const CACHE_STALE_MIN_TTL = 60;
+    private const CACHE_STALE_MAX_TTL = 86400;
+
     public function testDatasource(Datasource $datasource): array
     {
         return match ((string) $datasource->type) {
@@ -74,6 +79,32 @@ class DataSourceExecutor
             }
         }
 
+        if (!$forceRefresh && $cacheTtl > 0) {
+            try {
+                return $this->executeWithCacheLock(
+                    $cacheKey,
+                    $cacheTtl,
+                    fn () => $this->executeSource($datasource, $template, $runtimeParams)
+                );
+            } catch (Throwable $exception) {
+                $stale = Cache::get($this->staleCacheKey($cacheKey));
+                if (is_array($stale)) {
+                    return $stale;
+                }
+                throw $exception;
+            }
+        }
+
+        $result = $this->executeSource($datasource, $template, $runtimeParams);
+        if ($cacheTtl > 0) {
+            $this->storeCacheResult($cacheKey, $result, $cacheTtl);
+        }
+
+        return $result;
+    }
+
+    private function executeSource(Datasource $datasource, QueryTemplate $template, array $runtimeParams): array
+    {
         try {
             $result = match ((string) $datasource->type) {
                 'mysql' => $this->executeMysql(
@@ -89,9 +120,6 @@ class DataSourceExecutor
                 default => throw new InvalidArgumentException('数据源类型不支持'),
             };
 
-            if ($cacheTtl > 0) {
-                Cache::set($cacheKey, $result, $cacheTtl);
-            }
             if ((string) $datasource->last_error !== '') {
                 $datasource->save(['last_error' => null]);
             }
@@ -101,6 +129,84 @@ class DataSourceExecutor
             $datasource->save(['last_error' => $this->safeError($exception->getMessage())]);
             throw $exception;
         }
+    }
+
+    private function executeWithCacheLock(string $cacheKey, int $cacheTtl, callable $callback): array
+    {
+        $lock = $this->openCacheLock($cacheKey);
+        if ($lock && flock($lock, LOCK_EX | LOCK_NB)) {
+            try {
+                $cached = Cache::get($cacheKey);
+                if (is_array($cached)) {
+                    return $cached;
+                }
+
+                $result = $callback();
+                $this->storeCacheResult($cacheKey, $result, $cacheTtl);
+                return $result;
+            } finally {
+                flock($lock, LOCK_UN);
+                fclose($lock);
+            }
+        }
+
+        $deadline = microtime(true) + self::CACHE_LOCK_TIMEOUT_SECONDS;
+        while (microtime(true) < $deadline) {
+            usleep(self::CACHE_LOCK_WAIT_USEC);
+            $cached = Cache::get($cacheKey);
+            if (is_array($cached)) {
+                if (is_resource($lock)) {
+                    fclose($lock);
+                }
+                return $cached;
+            }
+        }
+
+        if ($lock && flock($lock, LOCK_EX)) {
+            try {
+                $cached = Cache::get($cacheKey);
+                if (is_array($cached)) {
+                    return $cached;
+                }
+
+                $result = $callback();
+                $this->storeCacheResult($cacheKey, $result, $cacheTtl);
+                return $result;
+            } finally {
+                flock($lock, LOCK_UN);
+                fclose($lock);
+            }
+        }
+
+        $result = $callback();
+        $this->storeCacheResult($cacheKey, $result, $cacheTtl);
+        return $result;
+    }
+
+    private function openCacheLock(string $cacheKey): mixed
+    {
+        $dir = runtime_path('saiboard-locks');
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0755, true);
+        }
+
+        return @fopen($dir . DIRECTORY_SEPARATOR . md5($cacheKey) . '.lock', 'c');
+    }
+
+    private function storeCacheResult(string $cacheKey, array $result, int $cacheTtl): void
+    {
+        Cache::set($cacheKey, $result, $cacheTtl);
+        Cache::set($this->staleCacheKey($cacheKey), $result, $this->staleCacheTtl($cacheTtl));
+    }
+
+    private function staleCacheKey(string $cacheKey): string
+    {
+        return $cacheKey . ':stale';
+    }
+
+    private function staleCacheTtl(int $cacheTtl): int
+    {
+        return min(self::CACHE_STALE_MAX_TTL, max(self::CACHE_STALE_MIN_TTL, $cacheTtl * 6));
     }
 
     private function testMysql(array $config): array

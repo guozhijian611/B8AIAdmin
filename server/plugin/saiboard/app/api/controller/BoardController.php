@@ -13,6 +13,9 @@ use support\Response;
 #[Apidoc\Title('大屏公开运行接口')]
 class BoardController
 {
+    private const MIN_REFRESH_SECONDS = 10;
+    private const MAX_REFRESH_SECONDS = 3600;
+
     public function __construct(private readonly DataSourceExecutor $executor = new DataSourceExecutor())
     {
     }
@@ -41,7 +44,7 @@ class BoardController
                 'bg_config' => $screen->bg_config,
                 'is_public' => (int) $screen->is_public,
                 'status' => (int) $screen->status,
-                'layout' => $screen->layout,
+                'layout' => $this->publicLayout($screen->layout),
             ],
         ]);
     }
@@ -70,7 +73,8 @@ class BoardController
             return fail('无权访问大屏', 401);
         }
 
-        $queryTemplateId = $this->componentQueryTemplateId($screen->layout, $cid);
+        $dataset = $this->componentDataset($screen->layout, $cid);
+        $queryTemplateId = (int) ($dataset['queryTemplateId'] ?? $dataset['query_template_id'] ?? 0);
         if ($queryTemplateId <= 0) {
             return fail('组件未绑定查询模板');
         }
@@ -112,7 +116,27 @@ class BoardController
         return is_array($current) && ($current['plat'] ?? '') === 'saiadmin';
     }
 
-    private function componentQueryTemplateId(array $layout, string $cid): int
+    private function publicLayout(array $layout): array
+    {
+        $components = is_array($layout['components'] ?? null) ? $layout['components'] : [];
+        foreach ($components as $index => $component) {
+            if (!is_array($component)) {
+                continue;
+            }
+
+            $dataset = is_array($component['dataset'] ?? null) ? $component['dataset'] : [];
+            if ($dataset !== []) {
+                $dataset['refresh'] = $this->normalizeRefresh($dataset['refresh'] ?? null);
+                $component['dataset'] = $dataset;
+                $components[$index] = $component;
+            }
+        }
+
+        $layout['components'] = $components;
+        return $layout;
+    }
+
+    private function componentDataset(array $layout, string $cid): array
     {
         $components = is_array($layout['components'] ?? null) ? $layout['components'] : [];
         foreach ($components as $component) {
@@ -121,10 +145,24 @@ class BoardController
             }
 
             $dataset = is_array($component['dataset'] ?? null) ? $component['dataset'] : [];
-            return (int) ($dataset['queryTemplateId'] ?? $dataset['query_template_id'] ?? 0);
+            if ($dataset !== []) {
+                $dataset['refresh'] = $this->normalizeRefresh($dataset['refresh'] ?? null);
+            }
+
+            return $dataset;
         }
 
-        return 0;
+        return [];
+    }
+
+    private function normalizeRefresh(mixed $refresh): int
+    {
+        $refresh = (int) $refresh;
+        if ($refresh <= 0) {
+            $refresh = 30;
+        }
+
+        return min(self::MAX_REFRESH_SECONDS, max(self::MIN_REFRESH_SECONDS, $refresh));
     }
 
     private function runtimeParams(Request $request): array

@@ -44,6 +44,8 @@
   const screen = reactive<any>({ bg_config: normalizeBgConfig() })
   const layout = reactive<BoardLayout>({ canvas: { width: 1920, height: 1080 }, components: [] })
   const dataMap = reactive<Record<string, { rows: Record<string, any>[]; error: string }>>({})
+  const minRefreshSeconds = 10
+  const maxRefreshSeconds = 3600
 
   const code = computed(() => String(route.params.code || ''))
   const token = computed(() => String(route.query.token || ''))
@@ -115,7 +117,7 @@
     while (timers.length) window.clearInterval(timers.pop())
     for (const component of layout.components) {
       if (!componentNeedsData(component)) continue
-      const seconds = Math.max(5, Number(component.dataset?.refresh || 30))
+      const seconds = normalizeRefresh(component.dataset?.refresh)
       timers.push(window.setInterval(() => loadComponentData(component.id), seconds * 1000))
     }
   }
@@ -147,6 +149,12 @@
   }
 
   const validScale = (value: number) => (Number.isFinite(value) && value > 0 ? value : 1)
+
+  const normalizeRefresh = (refresh: unknown) => {
+    const seconds = Number(refresh || 30)
+    if (!Number.isFinite(seconds) || seconds <= 0) return 30
+    return Math.min(maxRefreshSeconds, Math.max(minRefreshSeconds, Math.round(seconds)))
+  }
 
   const observeViewport = () => {
     resizeObserver?.disconnect()

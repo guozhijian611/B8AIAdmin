@@ -228,7 +228,7 @@ saiadmin-artd/src/views/plugin/saiboard/
 
 - `mysql`：按数据源配置即时创建 PDO 连接，执行 `SqlBuilder` 产出的参数化 SELECT，返回 rows。
 - `http`：只支持 GET，按数据源 config 和模板 config 拼 URL，携带自定义请求头，使用 curl（无 curl 时降级 `file_get_contents`）请求 JSON；**发请求前做 SSRF 校验**。
-- 支持 `cache_ttl` 通过 `support\think\Cache` 缓存结果，缓存键含 `query_template_id`、数据源配置和模板配置指纹，降低运行时轮询压力。
+- 支持 `cache_ttl` 通过 `support\think\Cache` 缓存结果，缓存键含 `query_template_id`、数据源配置、模板配置和运行时白名单参数指纹，降低运行时轮询压力；缓存 miss 时使用单机文件锁互斥回源，并保留短期 stale 缓存作为数据源异常时的公开页兜底。
 
 **`SqlBuilder`**
 
@@ -246,7 +246,7 @@ saiadmin-artd/src/views/plugin/saiboard/
 | 越权取数（IDOR） | `data` 接口以 `code + cid` 为键，组件绑定的 `queryTemplateId` 由服务端从该大屏 `layout` 解析，**前端不能指定任意模板/数据源 id**。 |
 | SSRF（HTTP 数据源） | 后端代发 GET 前解析目标域名 → 拒绝内网 / 环回 / 链路本地地址（`127.0.0.0/8`、`10/8`、`172.16/12`、`192.168/16`、`169.254/16`、`::1` 等）与云元数据地址；可选出网域名白名单。 |
 | 密钥泄露 | 数据源 `config`（DB 密码、请求头 token）只在后端持有，`getScreen` 下发时剥离。 |
-| 公开大屏被刷 | `cache_ttl` 通过 Webman Cache 缓存结果；前端组件按 `refresh` 轮询，后续可补后端频率下限和互斥回源。 |
+| 公开大屏被刷 | `cache_ttl` 通过 Webman Cache 缓存结果；公开运行时下发 layout 时强制 `dataset.refresh` 不低于 10 秒；缓存 miss 使用互斥回源，异常时可回退 stale 缓存。 |
 | 日志脱敏 | 连接配置、token、Bearer 在日志/调试页脱敏，仅 `last_error` 存非敏感错误摘要。 |
 
 ## 鉴权模型
@@ -278,7 +278,7 @@ getScreen / data 接口入口：
 - 复用 `widgets/` 同一套组件，外层只读容器；按 `screen.width/height` 设计稿做运行时适配（监听 resize）。
 - `bg_config.fit_mode` 支持 `contain` / `cover` / `stretch`：`contain` 完整显示设计稿并居中留边，`cover` 等比铺满视口并允许边缘裁切，`stretch` 按视口宽高分别拉伸，适合固定比例投屏。
 - `bg_config` 支持 `theme` 主题预设、背景色、背景图 URL 和 `image_fit`（铺满裁切 / 完整显示 / 拉伸 / 平铺）；编辑器和运行时复用同一套样式生成逻辑。
-- 按各数据组件 `dataset.refresh` 轮询 `/data`；纯装饰组件不绑定查询模板、不触发运行时取数。
+- 按各数据组件 `dataset.refresh` 轮询 `/data`，公开运行时最小 10 秒；纯装饰组件不绑定查询模板、不触发运行时取数。
 
 ### 数据源管理页 `/plugin/saiboard/datasource`
 
@@ -446,10 +446,10 @@ php webman b8:migrate
 
 ### P1 能力增强（部分完成）
 
-- 已完成：主题预设、背景图与图片适配；横向柱图 / 雷达图 / 散点图；CSS 装饰边框；新增图表字段映射；装饰组件运行时免取数；查询模板条件分组 / OR 组合。
+- 已完成：主题预设、背景图与图片适配；横向柱图 / 雷达图 / 散点图；CSS 装饰边框；新增图表字段映射；装饰组件运行时免取数；查询模板条件分组 / OR 组合；公开运行时轮询下限、互斥回源和 stale 缓存兜底。
 - 未完成：地图、轮播、更多图表样式和更多装饰组件。
 - 未完成：表格列宽 / 对齐 / 字段别名展示等细项。
-- 未完成：公开大屏高并发下的后端轮询频率下限、互斥回源和更细缓存策略。
+- 未完成：公开大屏更细的租户级 / IP 级限流、Redis 原子锁、多副本部署下的分布式互斥、指标监控和缓存命中率观测。
 - 未完成：编辑器多选、组合、图层面板、复制粘贴、撤销重做等高级编排能力。
 
 ### P2 进阶
@@ -464,11 +464,11 @@ php webman b8:migrate
 1. **拖拽交互完善度**：`vue3-draggable-resizable` 已提供拖动 + 缩放 + 对齐线 + 父级边界；图表缩放后已通过组件容器 `ResizeObserver` 触发 resize。多选、组合等增量在 P1 视需要补，避免一开始过度设计。
 2. **生产数据源只读账号**：预置模板已能防注入，但强烈建议生产 MySQL 数据源配只读账号作为第二道防线，需在文档和部署指引中强制说明。
 3. **SSRF 防护清单**：HTTP 数据源已拒绝 localhost、内网和保留地址；实际部署如需进一步收紧，可加出网域名白名单。
-4. **缓存击穿与轮询频率**：P0 已支持 `cache_ttl` 缓存，但尚未实现互斥回源和后端轮询频率下限，公开大屏高并发场景需在 P1 补齐。
+4. **缓存与限流边界**：P1 已支持运行时轮询下限、单机互斥回源和 stale 缓存兜底；若面向多副本公网大流量，还需继续补 Redis 原子锁、租户级 / IP 级限流与缓存命中率监控。
 
 ## 排障
 
 - 运行时 401：检查大屏是否公开；如为 token 模式，访问 `/screen/:code?token=...` 或请求头传递 `X-Saiboard-Token`。
 - SQL 白名单拦截：确认查询模板里的 `table`、`fields`、`conditions.field`、`order.field` 都是目标数据源真实存在的表和字段。
 - HTTP 数据源失败：确认 URL 是公网 `http/https` 地址；localhost、内网 IP、保留地址和无法 DNS 解析的域名会被 SSRF 防护拦截。
-- 数据不刷新：检查数据源 `cache_ttl` 和组件 `dataset.refresh`；预览接口会强制绕过缓存，运行时接口会按 `cache_ttl` 复用结果。
+- 数据不刷新：检查数据源 `cache_ttl` 和组件 `dataset.refresh`；预览接口会强制绕过缓存，运行时接口会按 `cache_ttl` 复用结果，公开运行时轮询下限为 10 秒。
