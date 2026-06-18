@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -9,7 +10,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify@4/lib/themes/vue.css" />
   <style>
     /* 侧边栏分组标题加粗 */
-    .sidebar-nav > ul > li > strong {
+    .sidebar-nav>ul>li>strong {
       display: block;
       margin: 12px 0 4px;
       font-size: 0.85em;
@@ -17,12 +18,14 @@
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
+
     /* 搜索框圆角 */
     .search input {
       border-radius: 6px !important;
     }
   </style>
 </head>
+
 <body>
   <div id="app">正在加载文档…</div>
 
@@ -30,7 +33,7 @@
     window.$docsify = {
       name: 'B8AIadmin',
       nameLink: '/',
-      repo: '',                       // 如有 GitHub 仓库可填写地址，右上角显示链接
+      repo: 'https://github.com/guozhijian611/B8AIAdmin',                       // 如有 GitHub 仓库可填写地址，右上角显示链接
       loadSidebar: true,              // 启用自定义侧边栏 _sidebar.md
       subMaxLevel: 3,                 // 侧边栏显示到 h3
       auto2top: true,                 // 切换页面自动回到顶部
@@ -74,4 +77,5 @@
   <!-- 分页导航 -->
   <script src="https://cdn.jsdelivr.net/npm/docsify-pagination@2/dist/docsify-pagination.min.js"></script>
 </body>
+
 </html>
