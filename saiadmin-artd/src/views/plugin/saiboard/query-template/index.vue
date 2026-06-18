@@ -257,6 +257,39 @@
             </ElFormItem>
           </template>
 
+          <ElFormItem label="参数">
+            <div class="config-list">
+              <div v-for="(param, index) in form.config.params" :key="index" class="param-row">
+                <ElInput v-model="param.name" placeholder="参数名，例如 pay_method" />
+                <ElInput v-model="param.label" placeholder="显示名，例如 支付方式" />
+                <ElSelect
+                  v-model="param.type"
+                  placeholder="类型"
+                  @change="onParamTypeChange(param)"
+                >
+                  <ElOption
+                    v-for="item in paramTypeOptions"
+                    :key="item.value"
+                    :label="item.label"
+                    :value="item.value"
+                  />
+                </ElSelect>
+                <ElInput v-model="param.default" :placeholder="paramDefaultPlaceholder(param)" />
+                <ElSwitch
+                  v-model="param.required"
+                  inline-prompt
+                  active-text="必填"
+                  inactive-text="可空"
+                />
+                <ElButton text type="danger" @click="removeParam(index)">删除</ElButton>
+              </div>
+              <ElButton @click="addParam">
+                <template #icon><ArtSvgIcon icon="ri:add-line" /></template>
+                添加参数
+              </ElButton>
+            </div>
+          </ElFormItem>
+
           <ElFormItem label="条件">
             <div class="config-list">
               <div
@@ -295,11 +328,17 @@
                     :label="item.label"
                     :value="item.value"
                   />
+                  <ElOption
+                    v-for="item in timeRangeParamOptions"
+                    :key="item.value"
+                    :label="item.label"
+                    :value="item.value"
+                  />
                 </ElSelect>
                 <ElInput
                   v-else
                   v-model="condition.value"
-                  placeholder="值，in/between 可用逗号分隔"
+                  placeholder="值或 :参数名，in/between 可用逗号分隔"
                 />
                 <ElButton text type="danger" @click="removeCondition(index)">删除</ElButton>
               </div>
@@ -406,6 +445,14 @@
     field: string
   }
 
+  interface TemplateParam {
+    name: string
+    label: string
+    type: string
+    default: string
+    required: boolean
+  }
+
   const rows = ref<any[]>([])
   const datasourceOptions = ref<DatasourceOption[]>([])
   const tableOptions = ref<{ name: string }[]>([])
@@ -462,6 +509,13 @@
     { label: '最小 min', value: 'min' },
     { label: '最大 max', value: 'max' }
   ]
+  const paramTypeOptions = [
+    { label: '文本', value: 'string' },
+    { label: '数字', value: 'number' },
+    { label: '日期', value: 'date' },
+    { label: '日期时间', value: 'datetime' },
+    { label: '时间范围', value: 'time_range' }
+  ]
   const mysqlDatasetTypes = [
     { label: '表原始行', value: 'table_raw' },
     { label: '表计数', value: 'table_count' },
@@ -496,12 +550,25 @@
       value: aggregateMetricAlias(item, index)
     }))
   )
+  const paramReferenceOptions = computed(() =>
+    normalizeParamRows(form.config.params, false)
+      .filter((item) => item.name)
+      .map((item) => ({
+        label: `${item.label || item.name} (:${item.name})`,
+        value: `:${item.name}`,
+        type: item.type
+      }))
+  )
+  const timeRangeParamOptions = computed(() =>
+    paramReferenceOptions.value.filter((item) => item.type === 'time_range')
+  )
 
   const defaultConfig = (type: string): Record<string, any> => {
-    if (type === 'table_count') return { table: '', conditions: [] }
+    if (type === 'table_count') return { table: '', params: [], conditions: [] }
     if (type === 'table_aggregate') {
       return {
         table: '',
+        params: [],
         dimension: '',
         dimension_type: 'raw',
         metrics: [{ alias: '数量', aggregate: 'count', field: '' }],
@@ -514,6 +581,7 @@
     if (type === 'http_passthrough') return { path: '', params: {} }
     return {
       table: '',
+      params: [],
       fields: [],
       field_aliases: [],
       computed_fields: [],
@@ -526,6 +594,9 @@
   const normalizeConfig = (type: string, config: Record<string, any> = {}) => {
     const next = { ...defaultConfig(type), ...(config || {}) }
     if (!Array.isArray(next.conditions)) next.conditions = []
+    if (type !== 'http_passthrough') {
+      next.params = normalizeParamRows(next.params)
+    }
     if (type === 'table_raw') {
       if (!Array.isArray(next.fields)) next.fields = []
       next.field_aliases = normalizeAliasRows(next.field_aliases)
@@ -636,6 +707,7 @@
       return config
     }
 
+    config.params = normalizeParamRows(config.params, true)
     config.conditions = normalizeConditions(config.conditions)
     if (form.dataset_type === 'table_raw') {
       config.fields = Array.isArray(config.fields) ? config.fields : []
@@ -669,7 +741,9 @@
   }
 
   const preview = async (row: any) => {
-    const payload = row.id ? { id: row.id } : buildPayload()
+    const payload = row.id
+      ? { id: row.id, params: previewParams(row.config) }
+      : { ...buildPayload(), params: previewParams(form.config) }
     const result = await api.preview(payload)
     previewText.value = JSON.stringify(result, null, 2)
     previewVisible.value = true
@@ -690,6 +764,27 @@
 
   const addCondition = () => {
     form.config.conditions.push({ field: '', op: '=', value: '' })
+  }
+
+  const addParam = () => {
+    if (!Array.isArray(form.config.params)) form.config.params = []
+    form.config.params.push({ name: '', label: '', type: 'string', default: '', required: false })
+  }
+
+  const removeParam = (index: number) => {
+    form.config.params.splice(index, 1)
+  }
+
+  const onParamTypeChange = (param: TemplateParam) => {
+    param.default = param.type === 'time_range' ? 'last_7_days' : ''
+  }
+
+  const paramDefaultPlaceholder = (param: TemplateParam) => {
+    if (param.type === 'number') return '默认值，例如 1'
+    if (param.type === 'date') return '默认值，例如 2026-06-19'
+    if (param.type === 'datetime') return '默认值，例如 2026-06-19 00:00:00'
+    if (param.type === 'time_range') return '默认值，例如 last_7_days'
+    return '默认值，可留空'
   }
 
   const onConditionOperatorChange = (condition: Record<string, any>) => {
@@ -765,6 +860,39 @@
   function normalizeConditions(conditions: any[]) {
     if (!Array.isArray(conditions)) return []
     return conditions.filter((item) => item?.field && item?.op && item?.value !== '')
+  }
+
+  function normalizeParamRows(rows: any = [], strict = false): TemplateParam[] {
+    if (!Array.isArray(rows)) return []
+    const items = rows
+      .map((item) => ({
+        name: String(item?.name || '').trim(),
+        label: String(item?.label || '').trim(),
+        type: normalizeParamType(item?.type),
+        default: String(item?.default ?? item?.default_value ?? '').trim(),
+        required: Boolean(item?.required)
+      }))
+      .filter((item) => (strict ? item.name : item.name || item.label || item.default))
+    if (strict && items.length > 20) {
+      ElMessage.error('查询参数最多支持 20 个')
+      throw new Error('查询参数最多支持 20 个')
+    }
+
+    return items.slice(0, 20)
+  }
+
+  function normalizeParamType(value: string) {
+    return ['string', 'number', 'date', 'datetime', 'time_range'].includes(value) ? value : 'string'
+  }
+
+  function previewParams(config: Record<string, any>) {
+    const result: Record<string, string> = {}
+    for (const item of normalizeParamRows(config?.params, true)) {
+      if (item.default !== '') {
+        result[item.name] = item.default
+      }
+    }
+    return result
   }
 
   function normalizeOrders(orders: any[]) {

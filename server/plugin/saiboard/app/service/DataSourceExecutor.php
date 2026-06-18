@@ -20,9 +20,9 @@ class DataSourceExecutor
         };
     }
 
-    public function preview(QueryTemplate $template): array
+    public function preview(QueryTemplate $template, array $runtimeParams = []): array
     {
-        return $this->execute($template, true);
+        return $this->execute($template, true, $runtimeParams);
     }
 
     public function schema(Datasource $datasource, string $table = ''): array
@@ -56,7 +56,7 @@ class DataSourceExecutor
         return $result;
     }
 
-    public function execute(QueryTemplate $template, bool $forceRefresh = false): array
+    public function execute(QueryTemplate $template, bool $forceRefresh = false, array $runtimeParams = []): array
     {
         $datasource = Datasource::where('id', (int) $template->datasource_id)
             ->where('status', 1)
@@ -66,7 +66,7 @@ class DataSourceExecutor
         }
 
         $cacheTtl = max(0, (int) $datasource->cache_ttl);
-        $cacheKey = $this->cacheKey($template, $datasource);
+        $cacheKey = $this->cacheKey($template, $datasource, $runtimeParams);
         if (!$forceRefresh && $cacheTtl > 0) {
             $cached = Cache::get($cacheKey);
             if (is_array($cached)) {
@@ -76,7 +76,12 @@ class DataSourceExecutor
 
         try {
             $result = match ((string) $datasource->type) {
-                'mysql' => $this->executeMysql($datasource->config, (string) $template->dataset_type, $template->config),
+                'mysql' => $this->executeMysql(
+                    $datasource->config,
+                    (string) $template->dataset_type,
+                    $template->config,
+                    $runtimeParams
+                ),
                 'http' => $this->executeHttp($datasource->config, [
                     'dataset_type' => (string) $template->dataset_type,
                     'config' => $template->config,
@@ -105,10 +110,19 @@ class DataSourceExecutor
         return ['rows' => [$row], 'total' => 1];
     }
 
-    private function executeMysql(array $datasourceConfig, string $datasetType, array $templateConfig): array
-    {
+    private function executeMysql(
+        array $datasourceConfig,
+        string $datasetType,
+        array $templateConfig,
+        array $runtimeParams = []
+    ): array {
         $pdo = $this->pdo($datasourceConfig);
-        [$sql, $bindings, $mode] = (new SqlBuilder())->build($pdo, $datasetType, $templateConfig);
+        [$sql, $bindings, $mode] = (new SqlBuilder())->build(
+            $pdo,
+            $datasetType,
+            $templateConfig,
+            $runtimeParams
+        );
         $stmt = $pdo->prepare($sql);
         $stmt->execute($bindings);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
@@ -286,13 +300,36 @@ class DataSourceExecutor
         return $payload;
     }
 
-    private function cacheKey(QueryTemplate $template, Datasource $datasource): string
+    private function cacheKey(QueryTemplate $template, Datasource $datasource, array $runtimeParams = []): string
     {
         return 'saiboard:data:' . $template->id . ':' . md5(json_encode([
             'datasource' => $datasource->config,
             'template' => $template->config,
             'type' => $template->dataset_type,
+            'params' => $this->cacheableRuntimeParams($template->config, $runtimeParams),
         ], JSON_UNESCAPED_UNICODE));
+    }
+
+    private function cacheableRuntimeParams(array $config, array $runtimeParams): array
+    {
+        $definitions = $config['params'] ?? [];
+        if (!is_array($definitions) || !array_is_list($definitions)) {
+            return [];
+        }
+
+        $result = [];
+        foreach ($definitions as $definition) {
+            if (!is_array($definition)) {
+                continue;
+            }
+            $name = trim((string) ($definition['name'] ?? ''));
+            if ($name !== '' && array_key_exists($name, $runtimeParams)) {
+                $result[$name] = $runtimeParams[$name];
+            }
+        }
+
+        ksort($result);
+        return $result;
     }
 
     private function columnKind(string $type): string

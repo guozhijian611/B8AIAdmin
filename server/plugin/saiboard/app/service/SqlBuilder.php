@@ -10,17 +10,19 @@ class SqlBuilder
     private array $columnsCache = [];
     private array $columnTypesCache = [];
 
-    public function build(PDO $pdo, string $datasetType, array $config): array
+    public function build(PDO $pdo, string $datasetType, array $config, array $runtimeParams = []): array
     {
+        $templateParams = $this->resolveTemplateParams($config['params'] ?? [], $runtimeParams);
+
         return match ($datasetType) {
-            'table_raw' => $this->buildRaw($pdo, $config),
-            'table_count' => $this->buildCount($pdo, $config),
-            'table_aggregate' => $this->buildAggregate($pdo, $config),
+            'table_raw' => $this->buildRaw($pdo, $config, $templateParams),
+            'table_count' => $this->buildCount($pdo, $config, $templateParams),
+            'table_aggregate' => $this->buildAggregate($pdo, $config, $templateParams),
             default => throw new InvalidArgumentException('不支持的 MySQL 取数类型'),
         };
     }
 
-    private function buildRaw(PDO $pdo, array $config): array
+    private function buildRaw(PDO $pdo, array $config, array $templateParams = []): array
     {
         $table = $this->assertTable($pdo, (string) ($config['table'] ?? ''));
         $columns = $this->columns($pdo, $table);
@@ -32,7 +34,12 @@ class SqlBuilder
             $columns,
             $columnTypes
         );
-        [$whereSql, $bindings] = $this->buildWhere($columns, $config['conditions'] ?? [], $columnTypes);
+        [$whereSql, $bindings] = $this->buildWhere(
+            $columns,
+            $config['conditions'] ?? [],
+            $columnTypes,
+            $templateParams
+        );
         $orderSql = $this->buildOrder($columns, $config);
         $limit = $this->normalizeLimit($config['limit'] ?? 100);
 
@@ -48,17 +55,22 @@ class SqlBuilder
         return [$sql, $bindings, 'raw'];
     }
 
-    private function buildCount(PDO $pdo, array $config): array
+    private function buildCount(PDO $pdo, array $config, array $templateParams = []): array
     {
         $table = $this->assertTable($pdo, (string) ($config['table'] ?? ''));
         $columns = $this->columns($pdo, $table);
         $columnTypes = $this->columnTypes($pdo, $table);
-        [$whereSql, $bindings] = $this->buildWhere($columns, $config['conditions'] ?? [], $columnTypes);
+        [$whereSql, $bindings] = $this->buildWhere(
+            $columns,
+            $config['conditions'] ?? [],
+            $columnTypes,
+            $templateParams
+        );
 
         return [sprintf('SELECT COUNT(*) AS total FROM `%s`%s', $table, $whereSql), $bindings, 'count'];
     }
 
-    private function buildAggregate(PDO $pdo, array $config): array
+    private function buildAggregate(PDO $pdo, array $config, array $templateParams = []): array
     {
         $table = $this->assertTable($pdo, (string) ($config['table'] ?? ''));
         $columns = $this->columns($pdo, $table);
@@ -66,7 +78,12 @@ class SqlBuilder
         $dimension = $this->assertColumn($columns, (string) ($config['dimension'] ?? ''), '维度字段');
         $metrics = $this->normalizeAggregateMetrics($config, $columns, $columnTypes);
 
-        [$whereSql, $bindings] = $this->buildWhere($columns, $config['conditions'] ?? [], $columnTypes);
+        [$whereSql, $bindings] = $this->buildWhere(
+            $columns,
+            $config['conditions'] ?? [],
+            $columnTypes,
+            $templateParams
+        );
         $labelExpression = $this->dimensionExpression($dimension, (string) ($config['dimension_type'] ?? 'raw'));
         $metricExpressions = array_map(
             fn (array $metric) => $metric['expression'] . ' AS ' . $this->quoteAlias($metric['alias']),
@@ -536,7 +553,152 @@ class SqlBuilder
         };
     }
 
-    private function buildWhere(array $columns, mixed $conditions, array $columnTypes = []): array
+    private function resolveTemplateParams(mixed $definitions, array $runtimeParams): array
+    {
+        if (!is_array($definitions) || $definitions === []) {
+            return [];
+        }
+        if (!array_is_list($definitions)) {
+            throw new InvalidArgumentException('查询参数配置不正确');
+        }
+        if (count($definitions) > 20) {
+            throw new InvalidArgumentException('查询参数最多支持 20 个');
+        }
+
+        $result = [];
+        foreach ($definitions as $definition) {
+            if (!is_array($definition)) {
+                throw new InvalidArgumentException('查询参数配置不正确');
+            }
+
+            $name = trim((string) ($definition['name'] ?? ''));
+            if (!$this->isParameterName($name)) {
+                throw new InvalidArgumentException('查询参数名称不正确');
+            }
+            if (array_key_exists($name, $result)) {
+                throw new InvalidArgumentException("查询参数 {$name} 重复");
+            }
+
+            $type = strtolower(trim((string) ($definition['type'] ?? 'string')));
+            if (!in_array($type, ['string', 'number', 'date', 'datetime', 'time_range'], true)) {
+                throw new InvalidArgumentException("查询参数 {$name} 类型不支持");
+            }
+
+            $rawValue = array_key_exists($name, $runtimeParams)
+                ? $runtimeParams[$name]
+                : ($definition['default'] ?? $definition['default_value'] ?? null);
+            $required = filter_var($definition['required'] ?? false, FILTER_VALIDATE_BOOLEAN);
+            if ($rawValue === null || $rawValue === '' || $rawValue === []) {
+                if ($required) {
+                    throw new InvalidArgumentException("查询参数 {$name} 必须填写");
+                }
+                $result[$name] = null;
+                continue;
+            }
+
+            $result[$name] = $this->normalizeTemplateParamValue($name, $type, $rawValue);
+        }
+
+        return $result;
+    }
+
+    private function normalizeTemplateParamValue(string $name, string $type, mixed $value): mixed
+    {
+        if (is_array($value)) {
+            if (count($value) > 100) {
+                throw new InvalidArgumentException("查询参数 {$name} 最多支持 100 个值");
+            }
+
+            return array_values(array_map(
+                fn (mixed $item) => $this->normalizeTemplateParamValue($name, $type, $item),
+                $value
+            ));
+        }
+        if (!is_scalar($value)) {
+            throw new InvalidArgumentException("查询参数 {$name} 值不正确");
+        }
+
+        $value = trim((string) $value);
+        if ($value === '') {
+            return null;
+        }
+
+        return match ($type) {
+            'number' => $this->normalizeNumberParam($name, $value),
+            'date' => $this->normalizeDateParam($name, $value),
+            'datetime' => $this->normalizeDateTimeParam($name, $value),
+            'time_range' => $this->normalizeTimeRangeParam($name, $value),
+            default => mb_substr($value, 0, 200),
+        };
+    }
+
+    private function normalizeNumberParam(string $name, string $value): int|float
+    {
+        if (!is_numeric($value)) {
+            throw new InvalidArgumentException("查询参数 {$name} 必须是数字");
+        }
+
+        return str_contains($value, '.') ? (float) $value : (int) $value;
+    }
+
+    private function normalizeDateParam(string $name, string $value): string
+    {
+        $date = \DateTimeImmutable::createFromFormat('!Y-m-d', $value);
+        if (!$date || $date->format('Y-m-d') !== $value) {
+            throw new InvalidArgumentException("查询参数 {$name} 必须是日期");
+        }
+
+        return $value;
+    }
+
+    private function normalizeDateTimeParam(string $name, string $value): string
+    {
+        $value = str_replace('T', ' ', $value);
+        if (preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/', $value) === 1) {
+            $value .= ':00';
+        }
+
+        $date = \DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $value);
+        if (!$date || $date->format('Y-m-d H:i:s') !== $value) {
+            throw new InvalidArgumentException("查询参数 {$name} 必须是日期时间");
+        }
+
+        return $value;
+    }
+
+    private function normalizeTimeRangeParam(string $name, string $value): string
+    {
+        $value = strtolower($value);
+        if (!in_array($value, $this->timeRangePresets(), true)) {
+            throw new InvalidArgumentException("查询参数 {$name} 时间范围不支持");
+        }
+
+        return $value;
+    }
+
+    private function resolveConditionValue(mixed $value, array $templateParams): mixed
+    {
+        if (is_array($value)) {
+            return array_map(fn (mixed $item) => $this->resolveConditionValue($item, $templateParams), $value);
+        }
+        if (!is_string($value) || !str_starts_with(trim($value), ':')) {
+            return $value;
+        }
+
+        $name = substr(trim($value), 1);
+        if (!$this->isParameterName($name) || !array_key_exists($name, $templateParams)) {
+            throw new InvalidArgumentException("查询参数 {$name} 未定义");
+        }
+
+        return $templateParams[$name];
+    }
+
+    private function buildWhere(
+        array $columns,
+        mixed $conditions,
+        array $columnTypes = [],
+        array $templateParams = []
+    ): array
     {
         if (!is_array($conditions) || $conditions === []) {
             return ['', []];
@@ -555,14 +717,14 @@ class SqlBuilder
             }
 
             $operator = strtolower(trim((string) ($condition['op'] ?? '=')));
-            $value = $condition['value'] ?? null;
+            $value = $this->resolveConditionValue($condition['value'] ?? null, $templateParams);
             if ($value === null || $value === '') {
                 continue;
             }
 
             match ($operator) {
                 '=', '!=', '>', '>=', '<', '<=' => $this->appendSimpleWhere($parts, $bindings, $field, $operator, $value),
-                'like' => $this->appendSimpleWhere($parts, $bindings, $field, 'LIKE', '%' . (string) $value . '%'),
+                'like' => $this->appendLikeWhere($parts, $bindings, $field, $value),
                 'in' => $this->appendInWhere($parts, $bindings, $field, $value),
                 'between' => $this->appendBetweenWhere($parts, $bindings, $field, $value),
                 'time_range' => $this->appendTimeRangeWhere($parts, $bindings, $field, $value, $columnTypes[$field] ?? ''),
@@ -575,8 +737,21 @@ class SqlBuilder
 
     private function appendSimpleWhere(array &$parts, array &$bindings, string $field, string $operator, mixed $value): void
     {
+        if (is_array($value)) {
+            throw new InvalidArgumentException("条件字段 {$field} 的值不正确");
+        }
+
         $parts[] = "`{$field}` {$operator} ?";
         $bindings[] = $value;
+    }
+
+    private function appendLikeWhere(array &$parts, array &$bindings, string $field, mixed $value): void
+    {
+        if (is_array($value)) {
+            throw new InvalidArgumentException("条件字段 {$field} 的值不正确");
+        }
+
+        $this->appendSimpleWhere($parts, $bindings, $field, 'LIKE', '%' . (string) $value . '%');
     }
 
     private function appendInWhere(array &$parts, array &$bindings, string $field, mixed $value): void
@@ -609,6 +784,9 @@ class SqlBuilder
         mixed $value,
         string $columnType
     ): void {
+        if (is_array($value)) {
+            throw new InvalidArgumentException("时间范围字段 {$field} 的值不正确");
+        }
         if (!$this->isTemporalType($columnType)) {
             throw new InvalidArgumentException("时间范围字段 {$field} 必须是日期或时间类型");
         }
@@ -621,6 +799,10 @@ class SqlBuilder
 
     private function timeRangeBounds(string $preset): array
     {
+        if (!in_array(strtolower(trim($preset)), $this->timeRangePresets(), true)) {
+            throw new InvalidArgumentException("时间范围 {$preset} 不支持");
+        }
+
         $today = new \DateTimeImmutable('today');
         $thisMonth = $today->modify('first day of this month');
         $thisYear = $today->setDate((int) $today->format('Y'), 1, 1);
@@ -636,6 +818,20 @@ class SqlBuilder
             'this_year' => [$thisYear, $thisYear->modify('+1 year')],
             default => throw new InvalidArgumentException("时间范围 {$preset} 不支持"),
         };
+    }
+
+    private function timeRangePresets(): array
+    {
+        return [
+            'today',
+            'yesterday',
+            'last_7_days',
+            'last_30_days',
+            'this_week',
+            'this_month',
+            'last_month',
+            'this_year',
+        ];
     }
 
     private function buildOrder(array $columns, array $config): string
@@ -683,6 +879,11 @@ class SqlBuilder
     private function isIdentifier(string $value): bool
     {
         return preg_match('/^[A-Za-z0-9_]+$/', $value) === 1;
+    }
+
+    private function isParameterName(string $value): bool
+    {
+        return preg_match('/^[A-Za-z_][A-Za-z0-9_]{0,63}$/', $value) === 1;
     }
 
     private function isNumericType(string $type): bool

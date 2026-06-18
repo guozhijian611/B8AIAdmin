@@ -89,6 +89,7 @@ class QueryTemplateController extends AbstractCrudController
     #[Apidoc\Title('预览查询模板')]
     #[Apidoc\Url('/app/saiboard/admin/QueryTemplate/preview')]
     #[Apidoc\Method('POST')]
+    #[Apidoc\Param('params', type: 'object', require: false, desc: '预览查询参数')]
     #[Permission('预览查询模板', 'saiboard:query_template:preview')]
     public function preview(Request $request): Response
     {
@@ -98,7 +99,8 @@ class QueryTemplateController extends AbstractCrudController
             return $this->fail('查询模板不存在');
         }
 
-        return $this->success($this->executor->preview($template));
+        $runtimeParams = $request->post('params', []);
+        return $this->success($this->executor->preview($template, is_array($runtimeParams) ? $runtimeParams : []));
     }
 
     #[Apidoc\Title('查询模板选项')]

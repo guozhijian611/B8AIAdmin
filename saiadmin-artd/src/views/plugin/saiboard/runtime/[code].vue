@@ -46,6 +46,14 @@
 
   const code = computed(() => String(route.params.code || ''))
   const token = computed(() => String(route.query.token || ''))
+  const runtimeParams = computed(() => {
+    const params: Record<string, any> = {}
+    for (const [key, value] of Object.entries(route.query)) {
+      if (key === 'token') continue
+      params[key] = value
+    }
+    return params
+  })
   const bgColor = computed(() => screen.bg_config?.color || '#07111f')
   const fitMode = computed(() => normalizeFitMode(screen.bg_config?.fit_mode))
   const canvasStyle = computed(() => ({
@@ -83,7 +91,12 @@
 
   const loadComponentData = async (cid: string) => {
     try {
-      const result = await api.data({ code: code.value, cid, token: token.value })
+      const result = await api.data({
+        code: code.value,
+        cid,
+        token: token.value,
+        ...runtimeParams.value
+      })
       dataMap[cid] = { rows: result.rows || [], error: '' }
     } catch (err: any) {
       dataMap[cid] = { rows: dataMap[cid]?.rows || [], error: err?.message || '取数失败' }
@@ -141,6 +154,10 @@
   onMounted(() => {
     loadScreen()
     window.addEventListener('resize', updateScale)
+  })
+
+  watch(runtimeParams, () => {
+    layout.components.forEach((component) => loadComponentData(component.id))
   })
 
   onBeforeUnmount(() => {

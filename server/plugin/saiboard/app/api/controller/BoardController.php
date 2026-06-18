@@ -52,6 +52,7 @@ class BoardController
     #[Apidoc\Query('code', type: 'string', require: true, desc: '大屏编码')]
     #[Apidoc\Query('cid', type: 'string', require: true, desc: '组件ID')]
     #[Apidoc\Query('token', type: 'string', require: false, desc: '访问令牌')]
+    #[Apidoc\Query('params', type: 'object', require: false, desc: '运行时查询参数')]
     #[Apidoc\Returned('rows', type: 'array', desc: '数据行')]
     public function data(Request $request): Response
     {
@@ -79,7 +80,7 @@ class BoardController
             return fail('查询模板不存在或已停用');
         }
 
-        return ok($this->executor->execute($template));
+        return ok($this->executor->execute($template, false, $this->runtimeParams($request)));
     }
 
     private function publishedScreen(string $code): ?Screen
@@ -124,5 +125,22 @@ class BoardController
         }
 
         return 0;
+    }
+
+    private function runtimeParams(Request $request): array
+    {
+        $reserved = ['code' => true, 'cid' => true, 'token' => true];
+        $params = $request->input('params', []);
+        $result = is_array($params) ? $params : [];
+
+        foreach ($request->all() as $key => $value) {
+            $key = (string) $key;
+            if (isset($reserved[$key]) || $key === 'params') {
+                continue;
+            }
+            $result[$key] = $value;
+        }
+
+        return $result;
     }
 }
