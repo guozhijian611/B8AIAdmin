@@ -332,76 +332,164 @@ class SqlBuilder
             throw new InvalidArgumentException('计算字段表达式长度不正确');
         }
 
-        preg_match_all('/[A-Za-z_][A-Za-z0-9_]*|\d+(?:\.\d+)?|[()+\-*\/]/', $expression, $matches);
+        preg_match_all('/[A-Za-z_][A-Za-z0-9_]*|\d+(?:\.\d+)?|[(),+\-*\/]/', $expression, $matches);
         $tokens = $matches[0] ?? [];
         $compactExpression = preg_replace('/\s+/', '', $expression);
         if ($tokens === [] || implode('', $tokens) !== $compactExpression) {
-            throw new InvalidArgumentException('计算字段表达式只支持数值字段、数字、括号和四则运算');
+            throw new InvalidArgumentException('计算字段表达式只支持数值字段、数字、括号、四则运算和安全函数');
         }
 
-        $parts = [];
-        $balance = 0;
         $hasField = false;
-        $expectOperand = true;
-        foreach ($tokens as $token) {
-            if (preg_match('/^\d+(?:\.\d+)?$/', $token) === 1) {
-                if (!$expectOperand) {
-                    throw new InvalidArgumentException('计算字段表达式格式不正确');
-                }
-                $parts[] = $token;
-                $expectOperand = false;
-                continue;
-            }
-
-            if ($this->isIdentifier($token)) {
-                if (!$expectOperand) {
-                    throw new InvalidArgumentException('计算字段表达式格式不正确');
-                }
-                if (!in_array($token, $columns, true) || !$this->isNumericType($columnTypes[$token] ?? '')) {
-                    throw new InvalidArgumentException("计算字段 {$token} 必须是数值字段");
-                }
-                $parts[] = "`{$token}`";
-                $hasField = true;
-                $expectOperand = false;
-                continue;
-            }
-
-            if ($token === '(') {
-                if (!$expectOperand) {
-                    throw new InvalidArgumentException('计算字段表达式格式不正确');
-                }
-                $balance++;
-                $parts[] = '(';
-                continue;
-            }
-
-            if ($token === ')') {
-                if ($expectOperand || $balance <= 0) {
-                    throw new InvalidArgumentException('计算字段表达式格式不正确');
-                }
-                $balance--;
-                $parts[] = ')';
-                $expectOperand = false;
-                continue;
-            }
-
-            if (in_array($token, ['+', '-', '*', '/'], true)) {
-                if ($expectOperand) {
-                    throw new InvalidArgumentException('计算字段表达式格式不正确');
-                }
-                $parts[] = $token;
-                $expectOperand = true;
-                continue;
-            }
-
+        $offset = 0;
+        $sql = $this->parseComputedExpression($tokens, $offset, $columns, $columnTypes, $hasField);
+        if ($offset !== count($tokens) || !$hasField) {
             throw new InvalidArgumentException('计算字段表达式格式不正确');
         }
 
-        if ($expectOperand || $balance !== 0 || !$hasField) {
+        return $sql;
+    }
+
+    private function parseComputedExpression(
+        array $tokens,
+        int &$offset,
+        array $columns,
+        array $columnTypes,
+        bool &$hasField
+    ): string {
+        $sql = $this->parseComputedTerm($tokens, $offset, $columns, $columnTypes, $hasField);
+        while (($tokens[$offset] ?? null) === '+' || ($tokens[$offset] ?? null) === '-') {
+            $operator = $tokens[$offset++];
+            $right = $this->parseComputedTerm($tokens, $offset, $columns, $columnTypes, $hasField);
+            $sql = "{$sql} {$operator} {$right}";
+        }
+
+        return $sql;
+    }
+
+    private function parseComputedTerm(
+        array $tokens,
+        int &$offset,
+        array $columns,
+        array $columnTypes,
+        bool &$hasField
+    ): string {
+        $sql = $this->parseComputedFactor($tokens, $offset, $columns, $columnTypes, $hasField);
+        while (($tokens[$offset] ?? null) === '*' || ($tokens[$offset] ?? null) === '/') {
+            $operator = $tokens[$offset++];
+            $right = $this->parseComputedFactor($tokens, $offset, $columns, $columnTypes, $hasField);
+            $sql = "{$sql} {$operator} {$right}";
+        }
+
+        return $sql;
+    }
+
+    private function parseComputedFactor(
+        array $tokens,
+        int &$offset,
+        array $columns,
+        array $columnTypes,
+        bool &$hasField
+    ): string {
+        $token = $tokens[$offset] ?? null;
+        if ($token === null) {
             throw new InvalidArgumentException('计算字段表达式格式不正确');
         }
 
-        return implode(' ', $parts);
+        if (preg_match('/^\d+(?:\.\d+)?$/', $token) === 1) {
+            $offset++;
+            return $token;
+        }
+
+        if ($token === '(') {
+            $offset++;
+            $sql = $this->parseComputedExpression($tokens, $offset, $columns, $columnTypes, $hasField);
+            if (($tokens[$offset] ?? null) !== ')') {
+                throw new InvalidArgumentException('计算字段表达式格式不正确');
+            }
+            $offset++;
+            return "({$sql})";
+        }
+
+        if ($this->isIdentifier((string) $token)) {
+            if (($tokens[$offset + 1] ?? null) === '(') {
+                return $this->parseComputedFunction($tokens, $offset, $columns, $columnTypes, $hasField);
+            }
+
+            if (!in_array($token, $columns, true) || !$this->isNumericType($columnTypes[$token] ?? '')) {
+                throw new InvalidArgumentException("计算字段 {$token} 必须是数值字段");
+            }
+            $hasField = true;
+            $offset++;
+            return "`{$token}`";
+        }
+
+        throw new InvalidArgumentException('计算字段表达式格式不正确');
+    }
+
+    private function parseComputedFunction(
+        array $tokens,
+        int &$offset,
+        array $columns,
+        array $columnTypes,
+        bool &$hasField
+    ): string {
+        $name = strtolower((string) $tokens[$offset]);
+        $sqlName = match ($name) {
+            'round' => 'ROUND',
+            'abs' => 'ABS',
+            'ceil' => 'CEIL',
+            'floor' => 'FLOOR',
+            default => throw new InvalidArgumentException("计算字段函数 {$name} 不支持"),
+        };
+
+        $offset += 2;
+        $args = [];
+        if (($tokens[$offset] ?? null) !== ')') {
+            while (true) {
+                if ($name === 'round' && count($args) === 1) {
+                    $args[] = $this->parseComputedRoundScale($tokens, $offset);
+                } else {
+                    $args[] = $this->parseComputedExpression($tokens, $offset, $columns, $columnTypes, $hasField);
+                }
+
+                if (($tokens[$offset] ?? null) !== ',') {
+                    break;
+                }
+                $offset++;
+            }
+        }
+
+        if (($tokens[$offset] ?? null) !== ')') {
+            throw new InvalidArgumentException('计算字段表达式格式不正确');
+        }
+        $offset++;
+
+        $count = count($args);
+        if ($name === 'round') {
+            if ($count < 1 || $count > 2) {
+                throw new InvalidArgumentException('round 函数参数数量不正确');
+            }
+        } elseif ($count !== 1) {
+            throw new InvalidArgumentException("{$name} 函数参数数量不正确");
+        }
+
+        return $sqlName . '(' . implode(', ', $args) . ')';
+    }
+
+    private function parseComputedRoundScale(array $tokens, int &$offset): string
+    {
+        $token = $tokens[$offset] ?? null;
+        if ($token === null || preg_match('/^\d+$/', (string) $token) !== 1) {
+            throw new InvalidArgumentException('round 函数小数位必须是 0-6 的整数');
+        }
+
+        $scale = (int) $token;
+        if ($scale < 0 || $scale > 6) {
+            throw new InvalidArgumentException('round 函数小数位必须是 0-6 的整数');
+        }
+
+        $offset++;
+        return (string) $scale;
     }
 
     private function assertOutputAlias(string $alias, string $label): string

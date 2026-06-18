@@ -168,7 +168,10 @@
                 class="computed-row"
               >
                 <ElInput v-model="item.alias" placeholder="字段名，例如 实付金额" />
-                <ElInput v-model="item.expression" placeholder="表达式，例如 order_price * 2" />
+                <ElInput
+                  v-model="item.expression"
+                  placeholder="表达式，例如 round(order_price * 1.2, 2)"
+                />
                 <ElButton text type="danger" @click="removeComputedField(index)">删除</ElButton>
               </div>
               <ElButton @click="addComputedField">
