@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="B8AIadmin 开发框架文档站 — PHP 8.3 / Webman / Vue 3 / uni-app" />
+  <title>B8AIadmin 开发文档</title>
+  <!-- Docsify 主题 -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify@4/lib/themes/vue.css" />
+  <style>
+    /* 侧边栏分组标题加粗 */
+    .sidebar-nav > ul > li > strong {
+      display: block;
+      margin: 12px 0 4px;
+      font-size: 0.85em;
+      color: #7f8c8d;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    /* 搜索框圆角 */
+    .search input {
+      border-radius: 6px !important;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">正在加载文档…</div>
+
+  <script>
+    window.$docsify = {
+      name: 'B8AIadmin',
+      nameLink: '/',
+      repo: '',                       // 如有 GitHub 仓库可填写地址，右上角显示链接
+      loadSidebar: true,              // 启用自定义侧边栏 _sidebar.md
+      subMaxLevel: 3,                 // 侧边栏显示到 h3
+      auto2top: true,                 // 切换页面自动回到顶部
+      search: {                       // 全文搜索
+        placeholder: '搜索文档…',
+        noData: '没有找到结果',
+        paths: 'auto',
+        maxAge: 86400000,             // 缓存 1 天
+      },
+      copyCode: {                     // 代码复制按钮
+        buttonText: '复制',
+        errorText: '复制失败',
+        successText: '已复制',
+      },
+      pagination: {                   // 上一篇 / 下一篇
+        previousText: '上一篇',
+        nextText: '下一篇',
+        crossChapter: true,
+      },
+    };
+  </script>
+
+  <!-- Docsify 核心 -->
+  <script src="https://cdn.jsdelivr.net/npm/docsify@4/lib/docsify.min.js"></script>
+
+  <!-- 全文搜索 -->
+  <script src="https://cdn.jsdelivr.net/npm/docsify@4/lib/plugins/search.min.js"></script>
+
+  <!-- 代码高亮 -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-php.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-bash.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-sql.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-json.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-yaml.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-nginx.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-docker.min.js"></script>
+
+  <!-- 代码复制按钮 -->
+  <script src="https://cdn.jsdelivr.net/npm/docsify-copy-code@2/dist/docsify-copy-code.min.js"></script>
+
+  <!-- 分页导航 -->
+  <script src="https://cdn.jsdelivr.net/npm/docsify-pagination@2/dist/docsify-pagination.min.js"></script>
+</body>
+</html>
