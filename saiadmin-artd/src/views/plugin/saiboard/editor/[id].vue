@@ -15,6 +15,11 @@
           <ElOption label="75%" :value="0.75" />
           <ElOption label="100%" :value="1" />
         </ElSelect>
+        <ElDivider direction="vertical" />
+        <ElButton :disabled="!canUndo" @click="undoLayout">撤销</ElButton>
+        <ElButton :disabled="!canRedo" @click="redoLayout">重做</ElButton>
+        <ElButton :disabled="!canCopy" @click="copySelected">复制</ElButton>
+        <ElButton :disabled="!canPaste" @click="pasteCopied">粘贴</ElButton>
         <ElButton v-permission="'saiboard:screen:saveLayout'" type="primary" @click="saveLayout">
           保存
         </ElButton>
@@ -359,14 +364,29 @@
     loading: boolean
   }
 
+  interface LayoutHistoryState {
+    past: string[]
+    future: string[]
+    current: string
+  }
+
   const route = useRoute()
   const zoom = ref<'auto' | number>('auto')
   const autoZoom = ref(0.75)
   const canvasShellRef = ref<HTMLElement>()
   const selectedId = ref('')
+  const copiedComponent = ref<BoardComponent>()
   const templateOptions = ref<any[]>([])
   const previewMap = reactive<Record<string, PreviewState>>({})
+  const layoutHistory = reactive<LayoutHistoryState>({
+    past: [],
+    future: [],
+    current: ''
+  })
   let canvasResizeObserver: ResizeObserver | undefined
+  let suppressHistory = false
+  let historyTimer = 0
+  const historyLimit = 50
   const screen = reactive<any>({
     id: 0,
     name: '',
@@ -433,21 +453,31 @@
   const selectedTableColumns = computed(
     () => selectedComponent.value?.dataset.mapping?.tableColumns || []
   )
+  const canUndo = computed(() => layoutHistory.past.length > 0)
+  const canRedo = computed(() => layoutHistory.future.length > 0)
+  const canCopy = computed(() => Boolean(selectedComponent.value))
+  const canPaste = computed(() => Boolean(copiedComponent.value))
   const effectiveZoom = computed(() =>
     zoom.value === 'auto' ? autoZoom.value : Number(zoom.value)
   )
   const canvasStyle = computed(() => boardCanvasStyle(screen.bg_config))
 
   const loadData = async () => {
-    const id = Number(route.params.id)
-    const data = await api.read(id)
-    Object.assign(screen, data, { bg_config: normalizeBgConfig(data.bg_config) })
-    const draft = normalizeLayout(data.draft_layout || data.layout || {})
-    Object.assign(layout.canvas, draft.canvas)
-    layout.components.splice(0, layout.components.length, ...draft.components)
-    await nextTick()
-    updateAutoZoom()
-    await refreshAllComponentData()
+    suppressHistory = true
+    try {
+      const id = Number(route.params.id)
+      const data = await api.read(id)
+      Object.assign(screen, data, { bg_config: normalizeBgConfig(data.bg_config) })
+      const draft = normalizeLayout(data.draft_layout || data.layout || {})
+      Object.assign(layout.canvas, draft.canvas)
+      layout.components.splice(0, layout.components.length, ...draft.components)
+      await nextTick()
+      updateAutoZoom()
+      await refreshAllComponentData()
+      resetLayoutHistory()
+    } finally {
+      suppressHistory = false
+    }
   }
 
   const loadTemplates = async () => {
@@ -603,6 +633,90 @@
   const normalizeTableColumnAlign = (value: unknown): NonNullable<BoardTableColumn['align']> =>
     value === 'center' || value === 'right' ? value : 'left'
 
+  const clonePlain = <T,>(value: T): T => JSON.parse(JSON.stringify(value))
+
+  const serializeLayout = () =>
+    JSON.stringify({
+      canvas: clonePlain(layout.canvas),
+      components: clonePlain(layout.components)
+    })
+
+  const clearHistoryTimer = () => {
+    if (!historyTimer) return
+    window.clearTimeout(historyTimer)
+    historyTimer = 0
+  }
+
+  const resetLayoutHistory = () => {
+    clearHistoryTimer()
+    layoutHistory.past.splice(0)
+    layoutHistory.future.splice(0)
+    layoutHistory.current = serializeLayout()
+  }
+
+  const recordLayoutHistory = () => {
+    if (suppressHistory) return
+    const snapshot = serializeLayout()
+    if (!layoutHistory.current) {
+      layoutHistory.current = snapshot
+      return
+    }
+    if (snapshot === layoutHistory.current) return
+
+    layoutHistory.past.push(layoutHistory.current)
+    if (layoutHistory.past.length > historyLimit) layoutHistory.past.shift()
+    layoutHistory.current = snapshot
+    layoutHistory.future.splice(0)
+  }
+
+  const queueLayoutHistory = () => {
+    if (suppressHistory) return
+    clearHistoryTimer()
+    historyTimer = window.setTimeout(() => {
+      historyTimer = 0
+      recordLayoutHistory()
+    }, 180)
+  }
+
+  const flushLayoutHistory = () => {
+    if (!historyTimer) return
+    clearHistoryTimer()
+    recordLayoutHistory()
+  }
+
+  const restoreLayoutSnapshot = (snapshot: string) => {
+    suppressHistory = true
+    const nextLayout = normalizeLayout(JSON.parse(snapshot))
+    Object.assign(layout.canvas, nextLayout.canvas)
+    layout.components.splice(0, layout.components.length, ...nextLayout.components)
+    if (!layout.components.some((component) => component.id === selectedId.value)) {
+      selectedId.value = ''
+    }
+    nextTick(async () => {
+      updateAutoZoom()
+      await refreshAllComponentData()
+      layoutHistory.current = serializeLayout()
+      suppressHistory = false
+    })
+  }
+
+  const undoLayout = () => {
+    flushLayoutHistory()
+    const previous = layoutHistory.past.pop()
+    if (!previous) return
+    layoutHistory.future.push(layoutHistory.current)
+    layoutHistory.current = previous
+    restoreLayoutSnapshot(previous)
+  }
+
+  const redoLayout = () => {
+    const next = layoutHistory.future.pop()
+    if (!next) return
+    layoutHistory.past.push(layoutHistory.current)
+    layoutHistory.current = next
+    restoreLayoutSnapshot(next)
+  }
+
   const componentRows = (component: BoardComponent) => {
     if (!componentNeedsData(component)) return []
     if (!component.dataset?.queryTemplateId) return sampleRows
@@ -694,6 +808,39 @@
     mapping.tableColumns = normalizeTableColumns(mapping.tableColumns, mapping.tableFields)
   }
 
+  const copySelected = () => {
+    if (!selectedComponent.value) return
+    copiedComponent.value = clonePlain(selectedComponent.value)
+    ElMessage.success('已复制组件')
+  }
+
+  const pasteCopied = async () => {
+    if (!copiedComponent.value) return
+    const component = createPastedComponent(copiedComponent.value)
+    ensureDataset(component)
+    layout.components.push(component)
+    selectedId.value = component.id
+    if (componentNeedsData(component) && component.dataset.queryTemplateId) {
+      await refreshComponentData(component)
+    }
+  }
+
+  const createPastedComponent = (source: BoardComponent): BoardComponent => {
+    const component = clonePlain(source)
+    const maxZ = Math.max(0, ...layout.components.map((item) => Number(item.rect.z || 1)))
+    const offset = 24
+    const maxX = Math.max(0, Number(layout.canvas.width || 0) - Number(component.rect.w || 0))
+    const maxY = Math.max(0, Number(layout.canvas.height || 0) - Number(component.rect.h || 0))
+
+    component.id = `w_${Date.now()}_${Math.floor(Math.random() * 1000)}`
+    component.title = component.title ? `${component.title}副本` : component.title
+    component.rect.x = Math.min(maxX, Math.max(0, Number(component.rect.x || 0) + offset))
+    component.rect.y = Math.min(maxY, Math.max(0, Number(component.rect.y || 0) + offset))
+    component.rect.z = maxZ + 1
+
+    return normalizeLayout({ canvas: layout.canvas, components: [component] }).components[0]
+  }
+
   const bringToFront = () => {
     if (!selectedComponent.value) return
     const maxZ = Math.max(0, ...layout.components.map((item) => Number(item.rect.z || 1)))
@@ -720,14 +867,14 @@
     })
     await api.saveLayout({ id: screen.id, layout })
     ElMessage.success('保存成功')
-    loadData()
+    await loadData()
   }
 
   const publish = async () => {
     await saveLayout()
     await api.publish({ id: screen.id })
     ElMessage.success('发布成功')
-    loadData()
+    await loadData()
   }
 
   const back = () => {
@@ -741,6 +888,7 @@
   })
 
   onBeforeUnmount(() => {
+    clearHistoryTimer()
     canvasResizeObserver?.disconnect()
   })
 
@@ -762,6 +910,8 @@
       }
     }
   )
+
+  watch(layout, queueLayoutHistory, { deep: true })
 
   watch(() => [layout.canvas.width, layout.canvas.height], updateAutoZoom)
 </script>
