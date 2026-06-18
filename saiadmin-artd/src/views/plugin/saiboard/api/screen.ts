@@ -27,5 +27,8 @@ export default {
   },
   copy(data: Record<string, any>) {
     return request.post<any>({ url: '/app/saiboard/admin/Screen/copy', data })
+  },
+  runtimeMetrics(params: Record<string, any> = {}) {
+    return request.get<any>({ url: '/app/saiboard/admin/Screen/runtimeMetrics', params })
   }
 }

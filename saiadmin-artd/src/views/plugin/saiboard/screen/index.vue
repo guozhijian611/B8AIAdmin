@@ -80,6 +80,7 @@
                     <ElDropdownItem v-permission="'saiboard:screen:copy'" @click="copy(row)">
                       复制
                     </ElDropdownItem>
+                    <ElDropdownItem @click="openMetrics(row)">运行统计</ElDropdownItem>
                     <ElDropdownItem
                       v-permission="'saiboard:screen:destroy'"
                       @click="deleteRow(row)"
@@ -159,6 +160,55 @@
         </ElButton>
       </template>
     </ElDialog>
+
+    <ElDialog
+      v-model="metricsVisible"
+      :title="`${metricsTarget?.name || '大屏'}运行统计`"
+      width="760px"
+    >
+      <div v-loading="metricsLoading" class="metrics-panel">
+        <ElDescriptions v-if="metrics" :column="3" border>
+          <ElDescriptionsItem label="统计窗口"> {{ metrics.window }} 秒 </ElDescriptionsItem>
+          <ElDescriptionsItem label="请求数">
+            {{ currentMetrics.request || 0 }}
+          </ElDescriptionsItem>
+          <ElDescriptionsItem label="限流数">
+            {{ currentMetrics.rate_limited || 0 }}
+          </ElDescriptionsItem>
+          <ElDescriptionsItem label="缓存命中">
+            {{ currentMetrics.cache_hit || 0 }}
+          </ElDescriptionsItem>
+          <ElDescriptionsItem label="缓存未命中">
+            {{ currentMetrics.cache_miss || 0 }}
+          </ElDescriptionsItem>
+          <ElDescriptionsItem label="命中率">
+            {{ formatPercent(currentHitRate) }}
+          </ElDescriptionsItem>
+          <ElDescriptionsItem label="回源成功">
+            {{ currentMetrics.source_success || 0 }}
+          </ElDescriptionsItem>
+          <ElDescriptionsItem label="回源失败">
+            {{ currentMetrics.source_fail || 0 }}
+          </ElDescriptionsItem>
+          <ElDescriptionsItem label="Stale 命中">
+            {{ currentMetrics.stale_hit || 0 }}
+          </ElDescriptionsItem>
+          <ElDescriptionsItem label="Redis 锁">
+            {{ currentMetrics.redis_lock_acquired || 0 }}
+          </ElDescriptionsItem>
+          <ElDescriptionsItem label="文件锁">
+            {{ currentMetrics.file_lock_acquired || 0 }}
+          </ElDescriptionsItem>
+          <ElDescriptionsItem label="锁等待 / 超时">
+            {{ currentMetrics.lock_wait || 0 }} / {{ currentMetrics.lock_timeout || 0 }}
+          </ElDescriptionsItem>
+        </ElDescriptions>
+      </div>
+      <template #footer>
+        <ElButton @click="metricsVisible = false">关闭</ElButton>
+        <ElButton type="primary" @click="refreshMetrics">刷新</ElButton>
+      </template>
+    </ElDialog>
   </div>
 </template>
 
@@ -176,6 +226,10 @@
   const rows = ref<any[]>([])
   const loading = ref(false)
   const dialogVisible = ref(false)
+  const metricsVisible = ref(false)
+  const metricsLoading = ref(false)
+  const metrics = ref<any>(null)
+  const metricsTarget = ref<any>(null)
   const formRef = ref<FormInstance>()
   const search = reactive({ name: '', code: '', status: undefined as number | undefined })
   const form = reactive({
@@ -206,6 +260,13 @@
     width: [{ required: true, message: '设计宽度必填', trigger: 'blur' }],
     height: [{ required: true, message: '设计高度必填', trigger: 'blur' }]
   }
+
+  const currentMetrics = computed(() => metrics.value?.screen || metrics.value?.totals || {})
+  const currentHitRate = computed(() => {
+    const hit = Number(currentMetrics.value.cache_hit || 0)
+    const miss = Number(currentMetrics.value.cache_miss || 0)
+    return hit + miss > 0 ? hit / (hit + miss) : 0
+  })
 
   const loadData = async () => {
     loading.value = true
@@ -310,6 +371,23 @@
     loadData()
   }
 
+  const openMetrics = async (row: any) => {
+    metricsTarget.value = row
+    metricsVisible.value = true
+    await refreshMetrics()
+  }
+
+  const refreshMetrics = async () => {
+    metricsLoading.value = true
+    try {
+      metrics.value = await api.runtimeMetrics(
+        metricsTarget.value?.id ? { id: metricsTarget.value.id } : {}
+      )
+    } finally {
+      metricsLoading.value = false
+    }
+  }
+
   const deleteRow = async (row: any) => {
     await ElMessageBox.confirm(`确定删除「${row.name}」吗？`, '删除大屏', { type: 'warning' })
     await api.delete({ ids: [row.id] })
@@ -320,5 +398,13 @@
   const fitModeLabel = (mode: unknown) =>
     fitModeOptions.find((item) => item.value === normalizeFitMode(mode))?.label || '完整显示'
 
+  const formatPercent = (value: number) => `${Math.round(value * 10000) / 100}%`
+
   onMounted(loadData)
 </script>
+
+<style scoped lang="scss">
+  .metrics-panel {
+    min-height: 160px;
+  }
+</style>

@@ -3,11 +3,14 @@
 namespace plugin\saiboard\app\api\controller;
 
 use hg\apidoc\annotation as Apidoc;
+use InvalidArgumentException;
 use plugin\saiboard\app\model\QueryTemplate;
 use plugin\saiboard\app\model\Screen;
 use plugin\saiboard\app\service\DataSourceExecutor;
+use plugin\saiboard\app\service\RuntimeGuard;
 use support\Request;
 use support\Response;
+use Throwable;
 
 #[Apidoc\Group('SAI Board')]
 #[Apidoc\Title('大屏公开运行接口')]
@@ -16,7 +19,10 @@ class BoardController
     private const MIN_REFRESH_SECONDS = 10;
     private const MAX_REFRESH_SECONDS = 3600;
 
-    public function __construct(private readonly DataSourceExecutor $executor = new DataSourceExecutor())
+    public function __construct(
+        private readonly DataSourceExecutor $executor = new DataSourceExecutor(),
+        private readonly RuntimeGuard $guard = new RuntimeGuard()
+    )
     {
     }
 
@@ -33,6 +39,9 @@ class BoardController
         }
         if (!$this->authorized($request, $screen)) {
             return fail('无权访问大屏', 401);
+        }
+        if ($limited = $this->guard->assertAllowed($request, $screen, 'screen')) {
+            return $this->rateLimited($limited);
         }
 
         return ok([
@@ -72,6 +81,9 @@ class BoardController
         if (!$this->authorized($request, $screen)) {
             return fail('无权访问大屏', 401);
         }
+        if ($limited = $this->guard->assertAllowed($request, $screen, 'data')) {
+            return $this->rateLimited($limited);
+        }
 
         $dataset = $this->componentDataset($screen->layout, $cid);
         $queryTemplateId = (int) ($dataset['queryTemplateId'] ?? $dataset['query_template_id'] ?? 0);
@@ -84,7 +96,16 @@ class BoardController
             return fail('查询模板不存在或已停用');
         }
 
-        return ok($this->executor->execute($template, false, $this->runtimeParams($request)));
+        try {
+            return ok($this->executor->execute($template, false, $this->runtimeParams($request), [
+                'screen' => (string) $screen->id,
+                'owner' => (string) ((int) ($screen->created_by ?? 0)),
+            ]));
+        } catch (InvalidArgumentException) {
+            return fail('数据源执行失败');
+        } catch (Throwable) {
+            return fail('数据源执行失败');
+        }
     }
 
     private function publishedScreen(string $code): ?Screen
@@ -180,5 +201,15 @@ class BoardController
         }
 
         return $result;
+    }
+
+    private function rateLimited(array $limited): Response
+    {
+        return fail('请求过于频繁，请稍后再试', 429)->withHeaders([
+            'Retry-After' => (string) max(1, (int) ($limited['retry_after'] ?? 1)),
+            'X-Saiboard-RateLimit-Scope' => (string) ($limited['scope'] ?? 'runtime'),
+            'X-Saiboard-RateLimit-Limit' => (string) max(0, (int) ($limited['limit'] ?? 0)),
+            'X-Saiboard-RateLimit-Window' => (string) max(1, (int) ($limited['window'] ?? 1)),
+        ]);
     }
 }

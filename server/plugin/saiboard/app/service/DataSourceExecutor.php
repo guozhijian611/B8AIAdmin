@@ -6,6 +6,8 @@ use InvalidArgumentException;
 use PDO;
 use plugin\saiboard\app\model\Datasource;
 use plugin\saiboard\app\model\QueryTemplate;
+use RuntimeException;
+use support\Redis;
 use support\think\Cache;
 use Throwable;
 
@@ -15,6 +17,10 @@ class DataSourceExecutor
     private const CACHE_LOCK_TIMEOUT_SECONDS = 3.0;
     private const CACHE_STALE_MIN_TTL = 60;
     private const CACHE_STALE_MAX_TTL = 86400;
+
+    public function __construct(private readonly RuntimeMetrics $metrics = new RuntimeMetrics())
+    {
+    }
 
     public function testDatasource(Datasource $datasource): array
     {
@@ -61,8 +67,12 @@ class DataSourceExecutor
         return $result;
     }
 
-    public function execute(QueryTemplate $template, bool $forceRefresh = false, array $runtimeParams = []): array
-    {
+    public function execute(
+        QueryTemplate $template,
+        bool $forceRefresh = false,
+        array $runtimeParams = [],
+        array $metricContext = []
+    ): array {
         $datasource = Datasource::where('id', (int) $template->datasource_id)
             ->where('status', 1)
             ->findOrEmpty();
@@ -72,11 +82,19 @@ class DataSourceExecutor
 
         $cacheTtl = max(0, (int) $datasource->cache_ttl);
         $cacheKey = $this->cacheKey($template, $datasource, $runtimeParams);
+        $recordMetrics = !$forceRefresh;
+        $metricTags = array_merge($metricContext, [
+            'template' => (string) $template->id,
+            'datasource' => (string) $datasource->id,
+            'type' => (string) $datasource->type,
+        ]);
         if (!$forceRefresh && $cacheTtl > 0) {
             $cached = Cache::get($cacheKey);
             if (is_array($cached)) {
+                $this->metrics->record('cache_hit', $metricTags);
                 return $cached;
             }
+            $this->metrics->record('cache_miss', $metricTags);
         }
 
         if (!$forceRefresh && $cacheTtl > 0) {
@@ -84,27 +102,34 @@ class DataSourceExecutor
                 return $this->executeWithCacheLock(
                     $cacheKey,
                     $cacheTtl,
-                    fn () => $this->executeSource($datasource, $template, $runtimeParams)
+                    fn () => $this->executeSource($datasource, $template, $runtimeParams, $recordMetrics, $metricTags),
+                    $metricTags
                 );
             } catch (Throwable $exception) {
                 $stale = Cache::get($this->staleCacheKey($cacheKey));
                 if (is_array($stale)) {
+                    $this->metrics->record('stale_hit', $metricTags);
                     return $stale;
                 }
                 throw $exception;
             }
         }
 
-        $result = $this->executeSource($datasource, $template, $runtimeParams);
+        $result = $this->executeSource($datasource, $template, $runtimeParams, $recordMetrics, $metricTags);
         if ($cacheTtl > 0) {
-            $this->storeCacheResult($cacheKey, $result, $cacheTtl);
+            $this->storeCacheResult($cacheKey, $result, $cacheTtl, $metricTags);
         }
 
         return $result;
     }
 
-    private function executeSource(Datasource $datasource, QueryTemplate $template, array $runtimeParams): array
-    {
+    private function executeSource(
+        Datasource $datasource,
+        QueryTemplate $template,
+        array $runtimeParams,
+        bool $recordMetrics = true,
+        array $metricTags = []
+    ): array {
         try {
             $result = match ((string) $datasource->type) {
                 'mysql' => $this->executeMysql(
@@ -124,25 +149,64 @@ class DataSourceExecutor
                 $datasource->save(['last_error' => null]);
             }
 
+            if ($recordMetrics) {
+                $this->metrics->record('source_success', $metricTags);
+            }
+
             return $result;
         } catch (Throwable $exception) {
+            if ($recordMetrics) {
+                $this->metrics->record('source_fail', $metricTags);
+            }
             $datasource->save(['last_error' => $this->safeError($exception->getMessage())]);
             throw $exception;
         }
     }
 
-    private function executeWithCacheLock(string $cacheKey, int $cacheTtl, callable $callback): array
+    private function executeWithCacheLock(string $cacheKey, int $cacheTtl, callable $callback, array $metricTags = []): array
     {
+        $redisLock = $this->acquireRedisLock($cacheKey);
+        if ($redisLock['available']) {
+            if ($redisLock['acquired']) {
+                $this->metrics->record('redis_lock_acquired', $metricTags);
+                try {
+                    $cached = Cache::get($cacheKey);
+                    if (is_array($cached)) {
+                        $this->metrics->record('cache_hit', $metricTags);
+                        return $cached;
+                    }
+
+                    $result = $callback();
+                    $this->storeCacheResult($cacheKey, $result, $cacheTtl, $metricTags);
+                    return $result;
+                } finally {
+                    $this->releaseRedisLock($redisLock['key'], $redisLock['token']);
+                }
+            }
+
+            $this->metrics->record('lock_wait', $metricTags);
+            $cached = $this->waitForCachedResult($cacheKey);
+            if (is_array($cached)) {
+                $this->metrics->record('cache_hit', $metricTags);
+                return $cached;
+            }
+
+            $this->metrics->record('lock_timeout', $metricTags);
+            throw new RuntimeException('数据缓存刷新中');
+        }
+
         $lock = $this->openCacheLock($cacheKey);
         if ($lock && flock($lock, LOCK_EX | LOCK_NB)) {
+            $this->metrics->record('file_lock_acquired', $metricTags);
             try {
                 $cached = Cache::get($cacheKey);
                 if (is_array($cached)) {
+                    $this->metrics->record('cache_hit', $metricTags);
                     return $cached;
                 }
 
                 $result = $callback();
-                $this->storeCacheResult($cacheKey, $result, $cacheTtl);
+                $this->storeCacheResult($cacheKey, $result, $cacheTtl, $metricTags);
                 return $result;
             } finally {
                 flock($lock, LOCK_UN);
@@ -150,37 +214,93 @@ class DataSourceExecutor
             }
         }
 
+        $this->metrics->record('lock_wait', $metricTags);
+        $cached = $this->waitForCachedResult($cacheKey);
+        if (is_array($cached)) {
+            if (is_resource($lock)) {
+                fclose($lock);
+            }
+            $this->metrics->record('cache_hit', $metricTags);
+            return $cached;
+        }
+
+        if ($lock && flock($lock, LOCK_EX)) {
+            $this->metrics->record('file_lock_acquired', $metricTags);
+            try {
+                $cached = Cache::get($cacheKey);
+                if (is_array($cached)) {
+                    $this->metrics->record('cache_hit', $metricTags);
+                    return $cached;
+                }
+
+                $result = $callback();
+                $this->storeCacheResult($cacheKey, $result, $cacheTtl, $metricTags);
+                return $result;
+            } finally {
+                flock($lock, LOCK_UN);
+                fclose($lock);
+            }
+        }
+
+        $this->metrics->record('lock_timeout', $metricTags);
+        $result = $callback();
+        $this->storeCacheResult($cacheKey, $result, $cacheTtl, $metricTags);
+        return $result;
+    }
+
+    private function waitForCachedResult(string $cacheKey): ?array
+    {
         $deadline = microtime(true) + self::CACHE_LOCK_TIMEOUT_SECONDS;
         while (microtime(true) < $deadline) {
             usleep(self::CACHE_LOCK_WAIT_USEC);
             $cached = Cache::get($cacheKey);
             if (is_array($cached)) {
-                if (is_resource($lock)) {
-                    fclose($lock);
-                }
                 return $cached;
             }
         }
 
-        if ($lock && flock($lock, LOCK_EX)) {
-            try {
-                $cached = Cache::get($cacheKey);
-                if (is_array($cached)) {
-                    return $cached;
-                }
+        return null;
+    }
 
-                $result = $callback();
-                $this->storeCacheResult($cacheKey, $result, $cacheTtl);
-                return $result;
-            } finally {
-                flock($lock, LOCK_UN);
-                fclose($lock);
-            }
+    private function acquireRedisLock(string $cacheKey): array
+    {
+        if (!(bool) config('plugin.saiboard.app.runtime.lock.redis', true)) {
+            return ['available' => false, 'acquired' => false, 'key' => '', 'token' => ''];
         }
 
-        $result = $callback();
-        $this->storeCacheResult($cacheKey, $result, $cacheTtl);
-        return $result;
+        $key = 'saiboard:runtime:lock:' . md5($cacheKey);
+        $token = bin2hex(random_bytes(16));
+        $ttl = max(1, (int) config('plugin.saiboard.app.runtime.lock.ttl', 15));
+
+        try {
+            return [
+                'available' => true,
+                'acquired' => (bool) Redis::set($key, $token, 'EX', $ttl, 'NX'),
+                'key' => $key,
+                'token' => $token,
+            ];
+        } catch (Throwable) {
+            return ['available' => false, 'acquired' => false, 'key' => '', 'token' => ''];
+        }
+    }
+
+    private function releaseRedisLock(string $key, string $token): void
+    {
+        if ($key === '' || $token === '') {
+            return;
+        }
+
+        try {
+            $script = <<<'LUA'
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+    return redis.call('DEL', KEYS[1])
+end
+return 0
+LUA;
+            Redis::eval($script, 1, $key, $token);
+        } catch (Throwable) {
+            // 锁带 TTL，释放失败时让 Redis 自动过期。
+        }
     }
 
     private function openCacheLock(string $cacheKey): mixed
@@ -193,10 +313,11 @@ class DataSourceExecutor
         return @fopen($dir . DIRECTORY_SEPARATOR . md5($cacheKey) . '.lock', 'c');
     }
 
-    private function storeCacheResult(string $cacheKey, array $result, int $cacheTtl): void
+    private function storeCacheResult(string $cacheKey, array $result, int $cacheTtl, array $metricTags = []): void
     {
         Cache::set($cacheKey, $result, $cacheTtl);
         Cache::set($this->staleCacheKey($cacheKey), $result, $this->staleCacheTtl($cacheTtl));
+        $this->metrics->record('cache_store', $metricTags);
     }
 
     private function staleCacheKey(string $cacheKey): string

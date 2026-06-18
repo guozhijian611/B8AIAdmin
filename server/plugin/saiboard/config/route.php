@@ -12,6 +12,7 @@ Route::group('/app/saiboard/admin', function () {
     Route::post('/Screen/saveLayout', [ScreenController::class, 'saveLayout']);
     Route::post('/Screen/publish', [ScreenController::class, 'publish']);
     Route::post('/Screen/copy', [ScreenController::class, 'copy']);
+    Route::get('/Screen/runtimeMetrics', [ScreenController::class, 'runtimeMetrics']);
 
     fastRoute('Datasource', DatasourceController::class);
     Route::post('/Datasource/changeStatus', [DatasourceController::class, 'changeStatus']);

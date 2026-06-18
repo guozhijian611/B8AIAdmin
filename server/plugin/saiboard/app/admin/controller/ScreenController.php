@@ -5,6 +5,7 @@ namespace plugin\saiboard\app\admin\controller;
 use hg\apidoc\annotation as Apidoc;
 use plugin\saiadmin\service\Permission;
 use plugin\saiboard\app\admin\logic\ScreenLogic;
+use plugin\saiboard\app\service\RuntimeMetrics;
 use plugin\saiboard\app\validate\ScreenValidate;
 use support\Request;
 use support\Response;
@@ -13,7 +14,7 @@ use support\Response;
 #[Apidoc\Title('大屏管理')]
 class ScreenController extends AbstractCrudController
 {
-    public function __construct()
+    public function __construct(private readonly RuntimeMetrics $runtimeMetrics = new RuntimeMetrics())
     {
         $this->logic = new ScreenLogic();
         $this->validate = new ScreenValidate();
@@ -138,5 +139,15 @@ class ScreenController extends AbstractCrudController
         }
 
         return $this->success(['id' => $this->logic->copy($id)], '复制成功');
+    }
+
+    #[Apidoc\Title('大屏运行统计')]
+    #[Apidoc\Url('/app/saiboard/admin/Screen/runtimeMetrics')]
+    #[Apidoc\Method('GET')]
+    #[Apidoc\Query('id', type: 'int', require: false, desc: '大屏ID，不传返回全局运行统计')]
+    #[Permission('大屏运行统计', 'saiboard:screen:index')]
+    public function runtimeMetrics(Request $request): Response
+    {
+        return $this->success($this->runtimeMetrics->snapshot((int) $request->input('id', 0)));
     }
 }
