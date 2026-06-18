@@ -26,13 +26,19 @@ class SqlBuilder
         $columns = $this->columns($pdo, $table);
         $columnTypes = $this->columnTypes($pdo, $table);
         $fields = $this->normalizeFields($config['fields'] ?? [], $columns);
+        $selectExpressions = $this->buildRawSelectExpressions(
+            $fields,
+            $config,
+            $columns,
+            $columnTypes
+        );
         [$whereSql, $bindings] = $this->buildWhere($columns, $config['conditions'] ?? [], $columnTypes);
         $orderSql = $this->buildOrder($columns, $config);
         $limit = $this->normalizeLimit($config['limit'] ?? 100);
 
         $sql = sprintf(
             'SELECT %s FROM `%s`%s%s LIMIT %d',
-            implode(', ', array_map(static fn ($field) => "`{$field}`", $fields)),
+            implode(', ', $selectExpressions),
             $table,
             $whereSql,
             $orderSql,
@@ -158,6 +164,187 @@ class SqlBuilder
         }
 
         return array_values(array_unique($result));
+    }
+
+    private function buildRawSelectExpressions(
+        array $fields,
+        array $config,
+        array $columns,
+        array $columnTypes
+    ): array {
+        $aliases = $this->normalizeFieldAliases($config['field_aliases'] ?? [], $fields);
+        $expressions = [];
+        $usedNames = [];
+
+        foreach ($fields as $field) {
+            $alias = $aliases[$field] ?? $field;
+            $this->assertUniqueOutputName($usedNames, $alias);
+            $expressions[] = $alias === $field
+                ? "`{$field}`"
+                : "`{$field}` AS " . $this->quoteAlias($alias);
+        }
+
+        foreach ($this->normalizeComputedFields($config['computed_fields'] ?? []) as $item) {
+            $alias = $this->assertOutputAlias($item['alias'], '计算字段别名');
+            $this->assertUniqueOutputName($usedNames, $alias);
+            $expression = $this->buildComputedExpression((string) $item['expression'], $columns, $columnTypes);
+            $expressions[] = "({$expression}) AS " . $this->quoteAlias($alias);
+        }
+
+        return $expressions;
+    }
+
+    private function normalizeFieldAliases(mixed $aliases, array $fields): array
+    {
+        if (!is_array($aliases) || $aliases === []) {
+            return [];
+        }
+
+        $allowedFields = array_flip($fields);
+        $result = [];
+        foreach ($aliases as $field => $alias) {
+            $field = trim((string) $field);
+            if (!$this->isIdentifier($field) || !isset($allowedFields[$field])) {
+                throw new InvalidArgumentException("别名字段 {$field} 必须在返回字段中");
+            }
+
+            $alias = $this->assertOutputAlias((string) $alias, '字段别名');
+            if ($alias !== $field) {
+                $result[$field] = $alias;
+            }
+        }
+
+        return $result;
+    }
+
+    private function normalizeComputedFields(mixed $items): array
+    {
+        if (!is_array($items) || $items === []) {
+            return [];
+        }
+
+        $result = [];
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                throw new InvalidArgumentException('计算字段配置不正确');
+            }
+
+            $alias = trim((string) ($item['alias'] ?? ''));
+            $expression = trim((string) ($item['expression'] ?? ''));
+            if ($alias === '' || $expression === '') {
+                throw new InvalidArgumentException('计算字段别名和表达式必须填写');
+            }
+
+            $result[] = [
+                'alias' => $alias,
+                'expression' => $expression,
+            ];
+        }
+
+        return $result;
+    }
+
+    private function buildComputedExpression(string $expression, array $columns, array $columnTypes): string
+    {
+        $expression = trim($expression);
+        if ($expression === '' || mb_strlen($expression) > 200) {
+            throw new InvalidArgumentException('计算字段表达式长度不正确');
+        }
+
+        preg_match_all('/[A-Za-z_][A-Za-z0-9_]*|\d+(?:\.\d+)?|[()+\-*\/]/', $expression, $matches);
+        $tokens = $matches[0] ?? [];
+        $compactExpression = preg_replace('/\s+/', '', $expression);
+        if ($tokens === [] || implode('', $tokens) !== $compactExpression) {
+            throw new InvalidArgumentException('计算字段表达式只支持数值字段、数字、括号和四则运算');
+        }
+
+        $parts = [];
+        $balance = 0;
+        $hasField = false;
+        $expectOperand = true;
+        foreach ($tokens as $token) {
+            if (preg_match('/^\d+(?:\.\d+)?$/', $token) === 1) {
+                if (!$expectOperand) {
+                    throw new InvalidArgumentException('计算字段表达式格式不正确');
+                }
+                $parts[] = $token;
+                $expectOperand = false;
+                continue;
+            }
+
+            if ($this->isIdentifier($token)) {
+                if (!$expectOperand) {
+                    throw new InvalidArgumentException('计算字段表达式格式不正确');
+                }
+                if (!in_array($token, $columns, true) || !$this->isNumericType($columnTypes[$token] ?? '')) {
+                    throw new InvalidArgumentException("计算字段 {$token} 必须是数值字段");
+                }
+                $parts[] = "`{$token}`";
+                $hasField = true;
+                $expectOperand = false;
+                continue;
+            }
+
+            if ($token === '(') {
+                if (!$expectOperand) {
+                    throw new InvalidArgumentException('计算字段表达式格式不正确');
+                }
+                $balance++;
+                $parts[] = '(';
+                continue;
+            }
+
+            if ($token === ')') {
+                if ($expectOperand || $balance <= 0) {
+                    throw new InvalidArgumentException('计算字段表达式格式不正确');
+                }
+                $balance--;
+                $parts[] = ')';
+                $expectOperand = false;
+                continue;
+            }
+
+            if (in_array($token, ['+', '-', '*', '/'], true)) {
+                if ($expectOperand) {
+                    throw new InvalidArgumentException('计算字段表达式格式不正确');
+                }
+                $parts[] = $token;
+                $expectOperand = true;
+                continue;
+            }
+
+            throw new InvalidArgumentException('计算字段表达式格式不正确');
+        }
+
+        if ($expectOperand || $balance !== 0 || !$hasField) {
+            throw new InvalidArgumentException('计算字段表达式格式不正确');
+        }
+
+        return implode(' ', $parts);
+    }
+
+    private function assertOutputAlias(string $alias, string $label): string
+    {
+        $alias = trim($alias);
+        if ($alias === '' || mb_strlen($alias) > 64 || preg_match('/[`\\x00-\\x1F\\x7F]/u', $alias) === 1) {
+            throw new InvalidArgumentException("{$label}不正确");
+        }
+
+        return $alias;
+    }
+
+    private function assertUniqueOutputName(array &$usedNames, string $name): void
+    {
+        if (isset($usedNames[$name])) {
+            throw new InvalidArgumentException("返回字段 {$name} 重复");
+        }
+
+        $usedNames[$name] = true;
+    }
+
+    private function quoteAlias(string $alias): string
+    {
+        return '`' . $alias . '`';
     }
 
     private function assertColumn(array $columns, string $field, string $label): string

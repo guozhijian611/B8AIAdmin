@@ -285,10 +285,11 @@ getScreen / data 接口入口：
 ### 查询模板页 `/plugin/saiboard/query-template`
 
 - 支持按数据源读取 MySQL 表和字段，表单化配置 `table_raw` / `table_count` / `table_aggregate`。
-- `table_raw` 可选返回字段、条件、排序和 limit。
+- `table_raw` 可选返回字段、字段别名、计算字段、条件、排序和 limit。
 - `table_count` 可选条件，统一返回 `{rows, total}`，其中 `total` 是计数值。
 - `table_aggregate` 可选维度字段、日期粒度、聚合方式、指标字段、条件、排序和 limit，统一返回 `{rows, total}`，每行结构为 `{label, value}`。
 - 条件支持 `= / != / > / >= / < / <= / like / in / between / time_range`。`time_range` 只允许日期 / 时间字段，`value` 可用 `today`、`yesterday`、`last_7_days`、`last_30_days`、`this_week`、`this_month`、`last_month`、`this_year`。
+- `table_raw.field_aliases` 用真实字段名映射输出字段名；`computed_fields` 仅支持数值字段、数字、括号和 `+ - * /` 四则运算，不开放裸 SQL、函数、子查询或条件表达式。
 - HTTP 数据源使用 `http_passthrough`，配置路径和请求参数 JSON。
 
 时间范围条件示例：
@@ -299,6 +300,26 @@ getScreen / data 接口入口：
   "conditions": [
     { "field": "create_time", "op": "time_range", "value": "last_7_days" }
   ]
+}
+```
+
+字段别名和计算字段示例：
+
+```json
+{
+  "table": "saipay_order",
+  "fields": ["order_no", "order_price"],
+  "field_aliases": {
+    "order_no": "订单号",
+    "order_price": "订单金额"
+  },
+  "computed_fields": [
+    {
+      "alias": "订单金额翻倍",
+      "expression": "order_price * 2"
+    }
+  ],
+  "limit": 100
 }
 ```
 
@@ -374,7 +395,7 @@ php webman b8:migrate
 
 ### P1 能力增强
 
-- 查询模板补字段别名和计算字段。
+- 查询模板继续补多指标聚合、表达式函数和参数化高级条件。
 - 图表组件补全：地图、表格增强、翻牌、轮播；纯 CSS/SVG 装饰边框（不引第三方分支）。
 - 大屏主题与背景增强。
 

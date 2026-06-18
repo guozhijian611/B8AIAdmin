@@ -124,6 +124,7 @@
               collapse-tags
               collapse-tags-tooltip
               style="width: 100%"
+              @change="onRawFieldsChange"
             >
               <ElOption
                 v-for="item in columnOptions"
@@ -132,6 +133,49 @@
                 :value="item.name"
               />
             </ElSelect>
+          </ElFormItem>
+
+          <ElFormItem v-if="form.dataset_type === 'table_raw'" label="字段别名">
+            <div class="config-list">
+              <div
+                v-for="(alias, index) in form.config.field_aliases"
+                :key="index"
+                class="alias-row"
+              >
+                <ElSelect v-model="alias.field" filterable placeholder="字段">
+                  <ElOption
+                    v-for="item in aliasColumnOptions"
+                    :key="item.name"
+                    :label="item.name"
+                    :value="item.name"
+                  />
+                </ElSelect>
+                <ElInput v-model="alias.alias" placeholder="显示名，例如 订单号" />
+                <ElButton text type="danger" @click="removeFieldAlias(index)">删除</ElButton>
+              </div>
+              <ElButton @click="addFieldAlias">
+                <template #icon><ArtSvgIcon icon="ri:add-line" /></template>
+                添加别名
+              </ElButton>
+            </div>
+          </ElFormItem>
+
+          <ElFormItem v-if="form.dataset_type === 'table_raw'" label="计算字段">
+            <div class="config-list">
+              <div
+                v-for="(item, index) in form.config.computed_fields"
+                :key="index"
+                class="computed-row"
+              >
+                <ElInput v-model="item.alias" placeholder="字段名，例如 实付金额" />
+                <ElInput v-model="item.expression" placeholder="表达式，例如 order_price * 2" />
+                <ElButton text type="danger" @click="removeComputedField(index)">删除</ElButton>
+              </div>
+              <ElButton @click="addComputedField">
+                <template #icon><ArtSvgIcon icon="ri:add-line" /></template>
+                添加计算字段
+              </ElButton>
+            </div>
           </ElFormItem>
 
           <template v-if="form.dataset_type === 'table_aggregate'">
@@ -399,6 +443,11 @@
   const numericColumnOptions = computed(() =>
     columnOptions.value.filter((item) => item.kind === 'number')
   )
+  const aliasColumnOptions = computed(() => {
+    const fields = Array.isArray(form.config.fields) ? form.config.fields : []
+    if (!fields.length) return columnOptions.value
+    return columnOptions.value.filter((item) => fields.includes(item.name))
+  })
   const dateColumnOptions = computed(() =>
     columnOptions.value.filter(
       (item) => item.kind === 'date' && !item.type.toLowerCase().startsWith('year')
@@ -406,7 +455,7 @@
   )
   const configPreview = computed(() => JSON.stringify(buildConfig(false), null, 2))
 
-  const defaultConfig = (type: string) => {
+  const defaultConfig = (type: string): Record<string, any> => {
     if (type === 'table_count') return { table: '', conditions: [] }
     if (type === 'table_aggregate') {
       return {
@@ -422,7 +471,15 @@
       }
     }
     if (type === 'http_passthrough') return { path: '', params: {} }
-    return { table: '', fields: [], conditions: [], order: [], limit: 100 }
+    return {
+      table: '',
+      fields: [],
+      field_aliases: [],
+      computed_fields: [],
+      conditions: [],
+      order: [],
+      limit: 100
+    }
   }
 
   const normalizeConfig = (type: string, config: Record<string, any> = {}) => {
@@ -430,6 +487,8 @@
     if (!Array.isArray(next.conditions)) next.conditions = []
     if (type === 'table_raw') {
       if (!Array.isArray(next.fields)) next.fields = []
+      next.field_aliases = normalizeAliasRows(next.field_aliases)
+      next.computed_fields = normalizeComputedRows(next.computed_fields)
       if (!Array.isArray(next.order)) next.order = []
     }
     if (type === 'http_passthrough') {
@@ -512,6 +571,8 @@
 
   const onTableChange = async () => {
     form.config.fields = []
+    form.config.field_aliases = []
+    form.config.computed_fields = []
     form.config.order = []
     form.config.dimension = ''
     form.config.metric = ''
@@ -534,6 +595,8 @@
     config.conditions = normalizeConditions(config.conditions)
     if (form.dataset_type === 'table_raw') {
       config.fields = Array.isArray(config.fields) ? config.fields : []
+      config.field_aliases = normalizeFieldAliasMap(config.field_aliases, config.fields)
+      config.computed_fields = normalizeComputedRows(config.computed_fields, true)
       config.order = normalizeOrders(config.order)
       config.limit = Number(config.limit || 100)
     }
@@ -593,6 +656,34 @@
 
   const isDateField = (field: string) => dateColumnOptions.value.some((item) => item.name === field)
 
+  const onRawFieldsChange = () => {
+    const fields = Array.isArray(form.config.fields) ? form.config.fields : []
+    if (!fields.length || !Array.isArray(form.config.field_aliases)) return
+    form.config.field_aliases = form.config.field_aliases.filter((item: any) =>
+      fields.includes(item?.field)
+    )
+  }
+
+  const addFieldAlias = () => {
+    if (!Array.isArray(form.config.field_aliases)) form.config.field_aliases = []
+    const usedFields = new Set(form.config.field_aliases.map((item: any) => item?.field))
+    const first = aliasColumnOptions.value.find((item) => !usedFields.has(item.name))
+    form.config.field_aliases.push({ field: first?.name || '', alias: '' })
+  }
+
+  const removeFieldAlias = (index: number) => {
+    form.config.field_aliases.splice(index, 1)
+  }
+
+  const addComputedField = () => {
+    if (!Array.isArray(form.config.computed_fields)) form.config.computed_fields = []
+    form.config.computed_fields.push({ alias: '', expression: '' })
+  }
+
+  const removeComputedField = (index: number) => {
+    form.config.computed_fields.splice(index, 1)
+  }
+
   const removeCondition = (index: number) => {
     form.config.conditions.splice(index, 1)
   }
@@ -625,6 +716,45 @@
       }))
   }
 
+  function normalizeAliasRows(value: any) {
+    if (Array.isArray(value)) {
+      return value.map((item) => ({
+        field: String(item?.field || '').trim(),
+        alias: String(item?.alias || '').trim()
+      }))
+    }
+    if (value && typeof value === 'object') {
+      return Object.entries(value).map(([field, alias]) => ({
+        field,
+        alias: String(alias || '').trim()
+      }))
+    }
+    return []
+  }
+
+  function normalizeFieldAliasMap(rows: any[], fields: any[] = []) {
+    const selectedFields = new Set(
+      Array.isArray(fields) && fields.length ? fields.map((item) => String(item)) : []
+    )
+    const result: Record<string, string> = {}
+    for (const item of normalizeAliasRows(rows)) {
+      if (!item.field || !item.alias) continue
+      if (selectedFields.size && !selectedFields.has(item.field)) continue
+      result[item.field] = item.alias
+    }
+    return result
+  }
+
+  function normalizeComputedRows(rows: any = [], strict = false) {
+    if (!Array.isArray(rows)) return []
+    return rows
+      .map((item) => ({
+        alias: String(item?.alias || '').trim(),
+        expression: String(item?.expression || '').trim()
+      }))
+      .filter((item) => (strict ? item.alias && item.expression : item.alias || item.expression))
+  }
+
   function parseJson(text: string, strict = true) {
     try {
       return JSON.parse(text || '{}')
@@ -653,5 +783,20 @@
     grid-template-columns: minmax(160px, 1fr) 130px minmax(220px, 2fr) 64px;
     gap: 8px;
     margin-bottom: 8px;
+  }
+
+  .alias-row,
+  .computed-row {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .alias-row {
+    grid-template-columns: minmax(180px, 1fr) minmax(220px, 2fr) 64px;
+  }
+
+  .computed-row {
+    grid-template-columns: minmax(180px, 1fr) minmax(280px, 2fr) 64px;
   }
 </style>
