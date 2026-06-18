@@ -149,6 +149,7 @@
                 filterable
                 placeholder="默认前 8 列"
                 :disabled="!fieldOptions.length"
+                @change="syncSelectedTableColumns"
               >
                 <ElOption
                   v-for="field in fieldOptions"
@@ -157,6 +158,46 @@
                   :value="field"
                 />
               </ElSelect>
+            </ElFormItem>
+            <ElFormItem v-if="selectedComponent.type === 'data-table'" label="列配置">
+              <div class="table-column-config">
+                <ElText v-if="!selectedTableColumns.length" type="info" size="small">
+                  选择表格字段后可配置列别名、宽度和对齐
+                </ElText>
+                <div
+                  v-for="column in selectedTableColumns"
+                  :key="column.field"
+                  class="table-column-config__item"
+                >
+                  <ElText class="table-column-config__field" truncated>
+                    {{ column.field }}
+                  </ElText>
+                  <ElInput v-model="column.label" clearable placeholder="显示名，默认字段名" />
+                  <div class="table-column-config__controls">
+                    <ElInputNumber
+                      v-model="column.width"
+                      class="table-column-config__width"
+                      :min="60"
+                      :max="600"
+                      :step="10"
+                      :controls="false"
+                      placeholder="宽度"
+                    />
+                    <ElSelect
+                      v-model="column.align"
+                      class="table-column-config__align"
+                      placeholder="对齐"
+                    >
+                      <ElOption
+                        v-for="item in tableAlignOptions"
+                        :key="item.value"
+                        :label="item.label"
+                        :value="item.value"
+                      />
+                    </ElSelect>
+                  </div>
+                </div>
+              </div>
             </ElFormItem>
             <ElFormItem v-if="requiresDataset" label="数据预览">
               <ElText v-if="selectedPreviewError" type="danger" truncated>
@@ -310,7 +351,7 @@
     boardThemeOptions,
     normalizeBgConfig
   } from '../widgets/theme'
-  import type { BoardComponent, BoardLayout } from '../widgets/types'
+  import type { BoardComponent, BoardLayout, BoardTableColumn } from '../widgets/types'
 
   interface PreviewState {
     rows: Record<string, any>[]
@@ -348,6 +389,12 @@
     { label: '裁切铺满', value: 'cover' },
     { label: '非等比拉伸', value: 'stretch' }
   ]
+  const tableAlignOptions: Array<{ label: string; value: NonNullable<BoardTableColumn['align']> }> =
+    [
+      { label: '左对齐', value: 'left' },
+      { label: '居中', value: 'center' },
+      { label: '右对齐', value: 'right' }
+    ]
   const minRefreshSeconds = 10
   const maxRefreshSeconds = 3600
   const fieldMappingTypes = new Set([
@@ -382,6 +429,9 @@
   )
   const supportsFieldMapping = computed(() =>
     Boolean(selectedComponent.value && fieldMappingTypes.has(selectedComponent.value.type))
+  )
+  const selectedTableColumns = computed(
+    () => selectedComponent.value?.dataset.mapping?.tableColumns || []
   )
   const effectiveZoom = computed(() =>
     zoom.value === 'auto' ? autoZoom.value : Number(zoom.value)
@@ -432,16 +482,25 @@
       : []
   })
 
-  const normalizeDataset = (dataset: any = {}) => ({
-    queryTemplateId:
-      Number(dataset?.queryTemplateId || dataset?.query_template_id || 0) || undefined,
-    refresh: normalizeRefresh(dataset?.refresh),
-    mapping: {
-      labelField: dataset?.mapping?.labelField || dataset?.fieldMap?.label || '',
-      valueField: dataset?.mapping?.valueField || dataset?.fieldMap?.value || '',
-      tableFields: Array.isArray(dataset?.mapping?.tableFields) ? dataset.mapping.tableFields : []
+  const normalizeDataset = (dataset: any = {}) => {
+    const rawColumns = normalizeTableColumns(dataset?.mapping?.tableColumns)
+    const rawTableFields = normalizeTableFields(dataset?.mapping?.tableFields)
+    const tableFields = rawTableFields.length
+      ? rawTableFields
+      : rawColumns.map((column) => column.field)
+
+    return {
+      queryTemplateId:
+        Number(dataset?.queryTemplateId || dataset?.query_template_id || 0) || undefined,
+      refresh: normalizeRefresh(dataset?.refresh),
+      mapping: {
+        labelField: dataset?.mapping?.labelField || dataset?.fieldMap?.label || '',
+        valueField: dataset?.mapping?.valueField || dataset?.fieldMap?.value || '',
+        tableFields,
+        tableColumns: normalizeTableColumns(dataset?.mapping?.tableColumns, tableFields)
+      }
     }
-  })
+  }
 
   const updateAutoZoom = () => {
     const shell = canvasShellRef.value
@@ -489,6 +548,60 @@
     if (!Number.isFinite(seconds) || seconds <= 0) return 30
     return Math.min(maxRefreshSeconds, Math.max(minRefreshSeconds, Math.round(seconds)))
   }
+
+  const normalizeTableFields = (value: unknown): string[] => {
+    if (!Array.isArray(value)) return []
+
+    return Array.from(
+      new Set(value.map((field) => String(field || '').trim()).filter(Boolean))
+    ).slice(0, 8)
+  }
+
+  const normalizeTableColumns = (value: unknown, fields: string[] = []): BoardTableColumn[] => {
+    const configured = new Map<string, BoardTableColumn>()
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const field =
+          typeof item === 'string'
+            ? item.trim()
+            : String((item as Record<string, any>)?.field || '').trim()
+        if (!field || configured.has(field)) continue
+        configured.set(field, {
+          field,
+          label:
+            typeof (item as Record<string, any>)?.label === 'string'
+              ? String((item as Record<string, any>).label).trim()
+              : '',
+          width: normalizeTableColumnWidth((item as Record<string, any>)?.width),
+          align: normalizeTableColumnAlign((item as Record<string, any>)?.align)
+        })
+      }
+    }
+
+    const orderedFields = fields.length ? fields : Array.from(configured.keys())
+    return orderedFields
+      .map((field) => {
+        const config = configured.get(field)
+
+        return {
+          field,
+          label: config?.label || '',
+          width: config?.width,
+          align: config?.align || 'left'
+        }
+      })
+      .slice(0, 8)
+  }
+
+  const normalizeTableColumnWidth = (value: unknown) => {
+    if (value === '' || value === null || value === undefined) return undefined
+    const width = Number(value)
+    if (!Number.isFinite(width) || width <= 0) return undefined
+    return Math.min(600, Math.max(60, Math.round(width)))
+  }
+
+  const normalizeTableColumnAlign = (value: unknown): NonNullable<BoardTableColumn['align']> =>
+    value === 'center' || value === 'right' ? value : 'left'
 
   const componentRows = (component: BoardComponent) => {
     if (!componentNeedsData(component)) return []
@@ -538,7 +651,12 @@
 
   const onTemplateChange = async () => {
     if (!selectedComponent.value) return
-    selectedComponent.value.dataset.mapping = { labelField: '', valueField: '', tableFields: [] }
+    selectedComponent.value.dataset.mapping = {
+      labelField: '',
+      valueField: '',
+      tableFields: [],
+      tableColumns: []
+    }
     await refreshComponentData(selectedComponent.value)
   }
 
@@ -550,6 +668,7 @@
   const syncMappingWithRows = (component: BoardComponent, rows: Record<string, any>[]) => {
     ensureDataset(component)
     const fields = Object.keys(rows[0] || {})
+    if (!fields.length) return
     const mapping = component.dataset.mapping!
     if (mapping.labelField && !fields.includes(mapping.labelField)) mapping.labelField = ''
     if (mapping.valueField && !fields.includes(mapping.valueField)) mapping.valueField = ''
@@ -558,6 +677,21 @@
     } else {
       mapping.tableFields = []
     }
+    mapping.tableColumns = normalizeTableColumns(mapping.tableColumns, mapping.tableFields).filter(
+      (column) => fields.includes(column.field)
+    )
+  }
+
+  const syncSelectedTableColumns = () => {
+    if (!selectedComponent.value) return
+    syncTableColumnConfigs(selectedComponent.value)
+  }
+
+  const syncTableColumnConfigs = (component: BoardComponent) => {
+    ensureDataset(component)
+    const mapping = component.dataset.mapping!
+    mapping.tableFields = normalizeTableFields(mapping.tableFields)
+    mapping.tableColumns = normalizeTableColumns(mapping.tableColumns, mapping.tableFields)
   }
 
   const bringToFront = () => {
@@ -611,13 +745,21 @@
   })
 
   watch(selectedComponent, (component) => {
-    if (component) ensureDataset(component)
+    if (component) {
+      ensureDataset(component)
+      if (component.type === 'data-table') syncTableColumnConfigs(component)
+    }
   })
 
   watch(
     () => selectedComponent.value?.type,
     () => {
-      if (selectedComponent.value) ensureDataset(selectedComponent.value)
+      if (selectedComponent.value) {
+        ensureDataset(selectedComponent.value)
+        if (selectedComponent.value.type === 'data-table') {
+          syncTableColumnConfigs(selectedComponent.value)
+        }
+      }
     }
   )
 
@@ -676,6 +818,39 @@
     width: 100%;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px;
+  }
+
+  .table-column-config {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    gap: 8px;
+  }
+
+  .table-column-config__item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+    background: var(--default-bg-color);
+    border: 1px solid var(--default-border);
+    border-radius: 6px;
+  }
+
+  .table-column-config__field {
+    width: 100%;
+    font-size: 12px;
+  }
+
+  .table-column-config__controls {
+    display: grid;
+    grid-template-columns: 80px minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .table-column-config__width,
+  .table-column-config__align {
+    width: 100%;
   }
 
   .widget-button {

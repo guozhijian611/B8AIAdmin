@@ -185,7 +185,11 @@ saiadmin-artd/src/views/plugin/saiboard/
         "mapping": {
           "labelField": "label",
           "valueField": "value",
-          "tableFields": ["label", "value"]
+          "tableFields": ["label", "value"],
+          "tableColumns": [
+            { "field": "label", "label": "日期", "width": 120, "align": "left" },
+            { "field": "value", "label": "订单数", "width": 100, "align": "right" }
+          ]
         }
       },
       "option": {}
@@ -196,7 +200,7 @@ saiadmin-artd/src/views/plugin/saiboard/
 
 - `type` 直接对应 `widgets/` 注册表里的组件名，编辑器与运行时都靠它 `<component :is>` 渲染。
 - `id`（如 `w_1`）是组件在大屏内的稳定标识，**取数接口以 `code + id` 为键**，不接受前端传任意 `queryTemplateId`（见安全设计）。
-- `dataset.mapping` 是组件级字段映射：图表类用 `labelField` / `valueField`，表格用 `tableFields` 控制列顺序；未配置时运行时按 `label/value/total` 等常用字段自动兜底。
+- `dataset.mapping` 是组件级字段映射：图表类用 `labelField` / `valueField`，表格用 `tableFields` 控制列顺序，并可用 `tableColumns[]` 配置列显示名、宽度和对齐；未配置时运行时按 `label/value/total` 等常用字段自动兜底。
 - 保存时 `draft_layout` 整体入库（拖拽是原子操作）；发布时拷贝到 `layout`。
 - 运行时下发 `layout` 时保留 `queryTemplateId`，但**剥离所有数据源连接信息**，前端拿不到密钥。
 
@@ -446,9 +450,8 @@ php webman b8:migrate
 
 ### P1 能力增强（部分完成）
 
-- 已完成：主题预设、背景图与图片适配；横向柱图 / 雷达图 / 散点图；CSS 装饰边框；新增图表字段映射；装饰组件运行时免取数；查询模板条件分组 / OR 组合；公开运行时轮询下限、互斥回源和 stale 缓存兜底。
+- 已完成：主题预设、背景图与图片适配；横向柱图 / 雷达图 / 散点图；CSS 装饰边框；新增图表字段映射；表格列宽 / 对齐 / 字段别名展示；装饰组件运行时免取数；查询模板条件分组 / OR 组合；公开运行时轮询下限、互斥回源和 stale 缓存兜底。
 - 未完成：地图、轮播、更多图表样式和更多装饰组件。
-- 未完成：表格列宽 / 对齐 / 字段别名展示等细项。
 - 未完成：公开大屏更细的租户级 / IP 级限流、Redis 原子锁、多副本部署下的分布式互斥、指标监控和缓存命中率观测。
 - 未完成：编辑器多选、组合、图层面板、复制粘贴、撤销重做等高级编排能力。
 

@@ -64,9 +64,12 @@
         <ElTableColumn v-if="component.option?.showIndex" type="index" label="#" width="52" />
         <ElTableColumn
           v-for="column in tableColumns"
-          :key="column"
-          :prop="column"
-          :label="column"
+          :key="column.field"
+          :prop="column.field"
+          :label="column.label"
+          :width="column.width"
+          :align="column.align"
+          :header-align="column.align"
           show-overflow-tooltip
         />
       </ElTable>
@@ -89,7 +92,11 @@
   import ArtRadarChart from '@/components/core/charts/art-radar-chart/index.vue'
   import ArtRingChart from '@/components/core/charts/art-ring-chart/index.vue'
   import ArtScatterChart from '@/components/core/charts/art-scatter-chart/index.vue'
-  import type { BoardComponent } from './types'
+  import type { BoardComponent, BoardTableColumn } from './types'
+
+  type TableColumnAlign = NonNullable<BoardTableColumn['align']>
+  type RuntimeTableColumn = Required<Pick<BoardTableColumn, 'field' | 'label' | 'align'>> &
+    Pick<BoardTableColumn, 'width'>
 
   const chartTypes = new Set([
     'art-bar-chart',
@@ -125,14 +132,28 @@
   })
   const mapping = computed(() => props.component.dataset?.mapping || {})
   const hasBoundDataset = computed(() => Number(props.component.dataset?.queryTemplateId || 0) > 0)
-  const tableColumns = computed(() => {
+  const tableColumns = computed<RuntimeTableColumn[]>(() => {
     const first = tableRows.value[0] || {}
-    const mapped = Array.isArray(mapping.value.tableFields) ? mapping.value.tableFields : []
+    const mapped = normalizeTableFields(mapping.value.tableFields)
+    const configured = normalizeTableColumns(mapping.value.tableColumns)
+    const configuredMap = new Map(configured.map((column) => [column.field, column]))
+    const configuredFields = configured.map((column) => column.field)
     const available = Object.keys(first)
-    if (mapped.length) {
-      return mapped.filter((field) => available.includes(field)).slice(0, 8)
-    }
-    return available.slice(0, 8)
+    const fields = mapped.length ? mapped : configuredFields.length ? configuredFields : available
+
+    return fields
+      .filter((field) => !available.length || available.includes(field))
+      .slice(0, 8)
+      .map((field) => {
+        const config = configuredMap.get(field)
+
+        return {
+          field,
+          label: config?.label || field,
+          width: normalizeTableColumnWidth(config?.width),
+          align: normalizeTableColumnAlign(config?.align)
+        }
+      })
   })
 
   const axisKey = computed(() =>
@@ -254,6 +275,51 @@
     const opacity = Number(value ?? 0.85)
     if (!Number.isFinite(opacity)) return 0.85
     return Math.min(1, Math.max(0.1, opacity))
+  }
+
+  function normalizeTableFields(value: unknown): string[] {
+    if (!Array.isArray(value)) return []
+
+    return Array.from(
+      new Set(value.map((field) => String(field || '').trim()).filter(Boolean))
+    ).slice(0, 8)
+  }
+
+  function normalizeTableColumns(value: unknown): BoardTableColumn[] {
+    if (!Array.isArray(value)) return []
+
+    const columns: BoardTableColumn[] = []
+    const seen = new Set<string>()
+    for (const item of value) {
+      const field =
+        typeof item === 'string'
+          ? item.trim()
+          : String((item as Record<string, any>)?.field || '').trim()
+      if (!field || seen.has(field)) continue
+      seen.add(field)
+      columns.push({
+        field,
+        label:
+          typeof (item as Record<string, any>)?.label === 'string'
+            ? String((item as Record<string, any>).label).trim()
+            : '',
+        width: normalizeTableColumnWidth((item as Record<string, any>)?.width),
+        align: normalizeTableColumnAlign((item as Record<string, any>)?.align)
+      })
+    }
+
+    return columns
+  }
+
+  function normalizeTableColumnWidth(value: unknown) {
+    if (value === '' || value === null || value === undefined) return undefined
+    const width = Number(value)
+    if (!Number.isFinite(width) || width <= 0) return undefined
+    return Math.min(600, Math.max(60, Math.round(width)))
+  }
+
+  function normalizeTableColumnAlign(value: unknown): TableColumnAlign {
+    return value === 'center' || value === 'right' ? value : 'left'
   }
 
   function notifyChartResize() {

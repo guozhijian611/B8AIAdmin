@@ -6,6 +6,13 @@ export interface BoardRect {
   z: number
 }
 
+export interface BoardTableColumn {
+  field: string
+  label?: string
+  width?: number
+  align?: 'left' | 'center' | 'right'
+}
+
 export interface BoardDataset {
   queryTemplateId?: number
   refresh?: number
@@ -13,6 +20,7 @@ export interface BoardDataset {
     labelField?: string
     valueField?: string
     tableFields?: string[]
+    tableColumns?: BoardTableColumn[]
   }
 }
 
