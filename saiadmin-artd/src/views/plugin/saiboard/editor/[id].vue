@@ -42,6 +42,42 @@
           <ArtSvgIcon :icon="widget.icon" />
           <span>{{ widget.name }}</span>
         </button>
+        <div class="panel-title panel-title--layers">图层</div>
+        <div class="layer-list">
+          <ElText v-if="!layerItems.length" type="info" size="small">暂无组件</ElText>
+          <div
+            v-for="component in layerItems"
+            :key="component.id"
+            class="layer-item"
+            :class="{ 'is-active': selectedId === component.id }"
+            @click="selectLayer(component.id)"
+          >
+            <span class="layer-item__name">{{ component.title || componentName(component) }}</span>
+            <span class="layer-item__type">{{ componentName(component) }}</span>
+            <span class="layer-item__actions">
+              <button
+                type="button"
+                title="上移"
+                :disabled="isLayerTop(component)"
+                @click.stop="moveLayer(component, 'up')"
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                title="下移"
+                :disabled="isLayerBottom(component)"
+                @click.stop="moveLayer(component, 'down')"
+              >
+                ↓
+              </button>
+              <button type="button" title="置顶" @click.stop="sendLayerToTop(component)">顶</button>
+              <button type="button" title="置底" @click.stop="sendLayerToBottom(component)">
+                底
+              </button>
+            </span>
+          </div>
+        </div>
       </aside>
 
       <main ref="canvasShellRef" class="canvas-shell">
@@ -357,6 +393,7 @@
             <ElFormItem>
               <ElSpace>
                 <ElButton @click="bringToFront">置顶</ElButton>
+                <ElButton @click="sendSelectedToBottom">置底</ElButton>
                 <ElButton type="danger" @click="removeSelected">删除</ElButton>
               </ElSpace>
             </ElFormItem>
@@ -494,6 +531,7 @@
   const selectedComponent = computed(() =>
     layout.components.find((item) => item.id === selectedId.value)
   )
+  const layerItems = computed(() => orderedLayerComponents().slice().reverse())
   const requiresDataset = computed(() =>
     Boolean(selectedComponent.value && componentNeedsData(selectedComponent.value))
   )
@@ -903,10 +941,88 @@
     return normalizeLayout({ canvas: layout.canvas, components: [component] }).components[0]
   }
 
+  const componentName = (component: BoardComponent) =>
+    getWidgetMeta(component.type)?.name || component.type || '组件'
+
+  const selectLayer = (id: string) => {
+    selectedId.value = id
+  }
+
+  const orderedLayerComponents = () =>
+    layout.components.slice().sort((a, b) => {
+      const diff = Number(a.rect.z || 1) - Number(b.rect.z || 1)
+      if (diff !== 0) return diff
+      return layout.components.indexOf(a) - layout.components.indexOf(b)
+    })
+
+  const normalizeLayerOrder = (ordered: BoardComponent[]) => {
+    ordered.forEach((component, index) => {
+      component.rect.z = index + 1
+    })
+  }
+
+  const normalizedLayoutForSave = (): BoardLayout => {
+    const payloadLayout = clonePlain(layout)
+    const ordered = payloadLayout.components.slice().sort((a, b) => {
+      const diff = Number(a.rect.z || 1) - Number(b.rect.z || 1)
+      if (diff !== 0) return diff
+      return payloadLayout.components.indexOf(a) - payloadLayout.components.indexOf(b)
+    })
+    ordered.forEach((component, index) => {
+      component.rect.z = index + 1
+    })
+
+    return payloadLayout
+  }
+
+  const isLayerTop = (component: BoardComponent) => {
+    const ordered = orderedLayerComponents()
+    return ordered[ordered.length - 1]?.id === component.id
+  }
+
+  const isLayerBottom = (component: BoardComponent) => {
+    const ordered = orderedLayerComponents()
+    return ordered[0]?.id === component.id
+  }
+
+  const moveLayer = (component: BoardComponent, direction: 'up' | 'down') => {
+    flushLayoutHistory()
+    const ordered = orderedLayerComponents()
+    const index = ordered.findIndex((item) => item.id === component.id)
+    const targetIndex = direction === 'up' ? index + 1 : index - 1
+    if (index < 0 || targetIndex < 0 || targetIndex >= ordered.length) return
+    ;[ordered[index], ordered[targetIndex]] = [ordered[targetIndex], ordered[index]]
+    normalizeLayerOrder(ordered)
+    selectedId.value = component.id
+    recordLayoutHistory()
+  }
+
+  const sendLayerToTop = (component: BoardComponent) => {
+    flushLayoutHistory()
+    const ordered = orderedLayerComponents().filter((item) => item.id !== component.id)
+    ordered.push(component)
+    normalizeLayerOrder(ordered)
+    selectedId.value = component.id
+    recordLayoutHistory()
+  }
+
+  const sendLayerToBottom = (component: BoardComponent) => {
+    flushLayoutHistory()
+    const ordered = orderedLayerComponents().filter((item) => item.id !== component.id)
+    ordered.unshift(component)
+    normalizeLayerOrder(ordered)
+    selectedId.value = component.id
+    recordLayoutHistory()
+  }
+
   const bringToFront = () => {
     if (!selectedComponent.value) return
-    const maxZ = Math.max(0, ...layout.components.map((item) => Number(item.rect.z || 1)))
-    selectedComponent.value.rect.z = maxZ + 1
+    sendLayerToTop(selectedComponent.value)
+  }
+
+  const sendSelectedToBottom = () => {
+    if (!selectedComponent.value) return
+    sendLayerToBottom(selectedComponent.value)
   }
 
   const removeSelected = () => {
@@ -916,18 +1032,19 @@
   }
 
   const saveLayout = async () => {
+    const payloadLayout = normalizedLayoutForSave()
     await api.update({
       id: screen.id,
       name: screen.name,
       code: screen.code,
-      width: layout.canvas.width,
-      height: layout.canvas.height,
+      width: payloadLayout.canvas.width,
+      height: payloadLayout.canvas.height,
       bg_config: normalizeBgConfig(screen.bg_config),
       is_public: screen.is_public,
       access_token: screen.access_token,
       status: 2
     })
-    await api.saveLayout({ id: screen.id, layout })
+    await api.saveLayout({ id: screen.id, layout: payloadLayout })
     ElMessage.success('保存成功')
     await loadData()
   }
@@ -1078,6 +1195,79 @@
     background: transparent;
     border: 1px solid var(--default-border);
     border-radius: 6px;
+  }
+
+  .panel-title--layers {
+    padding-top: 8px;
+    margin-top: 10px;
+    border-top: 1px solid var(--default-border);
+  }
+
+  .layer-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .layer-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px 8px;
+    padding: 8px;
+    cursor: pointer;
+    border: 1px solid var(--default-border);
+    border-radius: 6px;
+  }
+
+  .layer-item.is-active {
+    color: var(--el-color-primary);
+    background: var(--el-color-primary-light-9);
+    border-color: var(--el-color-primary-light-5);
+  }
+
+  .layer-item__name,
+  .layer-item__type {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .layer-item__name {
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .layer-item__type {
+    grid-column: 1;
+    font-size: 12px;
+    color: var(--art-gray-500);
+  }
+
+  .layer-item__actions {
+    display: grid;
+    grid-row: 1 / span 2;
+    grid-column: 2;
+    grid-template-columns: repeat(2, 24px);
+    gap: 4px;
+    align-self: center;
+  }
+
+  .layer-item__actions button {
+    width: 24px;
+    height: 22px;
+    padding: 0;
+    font-size: 12px;
+    color: var(--art-gray-700);
+    cursor: pointer;
+    background: var(--default-box-color);
+    border: 1px solid var(--default-border);
+    border-radius: 4px;
+  }
+
+  .layer-item__actions button:disabled {
+    cursor: not-allowed;
+    opacity: 0.42;
   }
 
   .canvas-shell {
