@@ -31,6 +31,10 @@ class QueryTemplate extends BaseModel
 
     public function getConfigAttr($value): array
     {
+        if (is_array($value)) {
+            return $value;
+        }
+
         return json_decode((string) $value, true) ?: [];
     }
 
