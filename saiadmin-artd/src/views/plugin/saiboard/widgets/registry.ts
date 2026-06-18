@@ -71,6 +71,21 @@ export const widgetRegistry: WidgetMeta[] = [
     }
   },
   {
+    type: 'geo-point-map',
+    name: '点位地图',
+    icon: 'ri:map-pin-line',
+    defaultRect: { x: 1080, y: 40, w: 560, h: 360, z: 1 },
+    defaultOption: {
+      lngField: '',
+      latField: '',
+      nameField: '',
+      valueField: '',
+      region: 'china',
+      pointSize: 12,
+      showLabel: true
+    }
+  },
+  {
     type: 'decor-border',
     name: '装饰边框',
     icon: 'ri:rounded-corner',

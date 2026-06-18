@@ -99,6 +99,25 @@
         </ElCarousel>
         <div v-else class="carousel-empty">暂无图片</div>
       </div>
+      <div v-else-if="component.type === 'geo-point-map'" class="geo-map">
+        <div class="geo-map__grid"></div>
+        <div class="geo-map__region">{{ geoRegionName }}</div>
+        <template v-if="geoPoints.length">
+          <div
+            v-for="(point, index) in geoPoints"
+            :key="`${point.name}-${index}`"
+            class="geo-map__point"
+            :style="geoPointStyle(point)"
+          >
+            <span class="geo-map__dot"></span>
+            <span v-if="point.name && component.option?.showLabel !== false" class="geo-map__label">
+              {{ point.name }}
+              <strong v-if="point.value !== ''">{{ point.value }}</strong>
+            </span>
+          </div>
+        </template>
+        <div v-else class="geo-map__empty">{{ geoMapEmptyText }}</div>
+      </div>
       <div
         v-else-if="component.type === 'decor-border'"
         class="decor-border"
@@ -123,6 +142,13 @@
   type TableColumnAlign = NonNullable<BoardTableColumn['align']>
   type RuntimeTableColumn = Required<Pick<BoardTableColumn, 'field' | 'label' | 'align'>> &
     Pick<BoardTableColumn, 'width'>
+  interface GeoPoint {
+    x: number
+    y: number
+    name: string
+    value: string
+    size: number
+  }
 
   const chartTypes = new Set([
     'art-bar-chart',
@@ -289,6 +315,25 @@
   const carouselIndicatorPosition = computed(() =>
     props.component.option?.showDots === false ? 'none' : ''
   )
+  const geoPoints = computed(() => {
+    const points = normalizeGeoPoints()
+    if (points.length) return points
+    if (hasBoundDataset.value) return []
+
+    return [
+      createGeoPoint(116.4, 39.9, '北京', '128'),
+      createGeoPoint(121.47, 31.23, '上海', '96'),
+      createGeoPoint(113.26, 23.13, '广州', '88')
+    ].filter(Boolean) as GeoPoint[]
+  })
+  const geoRegionName = computed(() =>
+    props.component.option?.region === 'world' ? 'World' : 'China'
+  )
+  const geoMapEmptyText = computed(() => {
+    if (!hasBoundDataset.value || !tableRows.value.length) return '暂无点位'
+    if (!hasGeoCoordinateFields()) return '未识别经纬度字段'
+    return '暂无有效点位'
+  })
 
   const decorStyle = computed(() => {
     const value = String(props.component.option?.borderStyle || 'corner')
@@ -417,6 +462,99 @@
 
   function normalizeCarouselImageFit(value: unknown) {
     return value === 'contain' || value === 'fill' ? value : 'cover'
+  }
+
+  function normalizeGeoPoints() {
+    if (!tableRows.value.length) return []
+
+    const lngKey = geoLongitudeKey()
+    const latKey = geoLatitudeKey()
+    if (!lngKey || !latKey) return []
+
+    const nameKey = findOptionalKey(props.component.option?.nameField, [
+      'name',
+      'title',
+      'label',
+      'city',
+      'province',
+      'area',
+      '名称'
+    ])
+    const geoValueKey = findOptionalKey(props.component.option?.valueField, [
+      'value',
+      'count',
+      'total',
+      'amount',
+      'num',
+      '数量'
+    ])
+
+    return tableRows.value
+      .map((row, index) =>
+        createGeoPoint(
+          Number(row[lngKey]),
+          Number(row[latKey]),
+          nameKey ? String(row[nameKey] ?? '').trim() : `#${index + 1}`,
+          geoValueKey ? String(row[geoValueKey] ?? '').trim() : ''
+        )
+      )
+      .filter(Boolean) as GeoPoint[]
+  }
+
+  function hasGeoCoordinateFields() {
+    return Boolean(geoLongitudeKey() && geoLatitudeKey())
+  }
+
+  function geoLongitudeKey() {
+    return findOptionalKey(props.component.option?.lngField, [
+      'lng',
+      'lon',
+      'longitude',
+      'x',
+      '经度'
+    ])
+  }
+
+  function geoLatitudeKey() {
+    return findOptionalKey(props.component.option?.latField, ['lat', 'latitude', 'y', '纬度'])
+  }
+
+  function createGeoPoint(lng: number, lat: number, name: string, value: string) {
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return undefined
+    const bounds = geoBounds()
+    if (lng < bounds.minLng || lng > bounds.maxLng || lat < bounds.minLat || lat > bounds.maxLat) {
+      return undefined
+    }
+
+    return {
+      x: ((lng - bounds.minLng) / (bounds.maxLng - bounds.minLng)) * 100,
+      y: ((bounds.maxLat - lat) / (bounds.maxLat - bounds.minLat)) * 100,
+      name,
+      value,
+      size: normalizeGeoPointSize(props.component.option?.pointSize)
+    }
+  }
+
+  function geoBounds() {
+    if (props.component.option?.region === 'world') {
+      return { minLng: -180, maxLng: 180, minLat: -60, maxLat: 85 }
+    }
+
+    return { minLng: 73, maxLng: 135, minLat: 18, maxLat: 54 }
+  }
+
+  function normalizeGeoPointSize(value: unknown) {
+    const size = Number(value ?? 12)
+    if (!Number.isFinite(size) || size <= 0) return 12
+    return Math.min(28, Math.max(6, Math.round(size)))
+  }
+
+  function geoPointStyle(point: GeoPoint) {
+    return {
+      left: `${point.x}%`,
+      top: `${point.y}%`,
+      '--geo-point-size': `${point.size}px`
+    }
   }
 
   function notifyChartResize() {
@@ -619,6 +757,100 @@
     background: rgb(255 255 255 / 4%);
     border: 1px dashed rgb(255 255 255 / 16%);
     border-radius: 4px;
+  }
+
+  .geo-map {
+    position: relative;
+    height: 100%;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at 50% 42%, rgb(104 166 255 / 18%), transparent 42%),
+      linear-gradient(135deg, rgb(255 255 255 / 5%), transparent 44%), rgb(7 17 31 / 88%);
+    border: 1px solid rgb(104 166 255 / 16%);
+    border-radius: 4px;
+  }
+
+  .geo-map::before {
+    position: absolute;
+    inset: 12% 10%;
+    pointer-events: none;
+    content: '';
+    border: 1px solid rgb(104 166 255 / 28%);
+    border-radius: 44% 56% 48% 52%;
+    box-shadow: inset 0 0 28px rgb(104 166 255 / 12%);
+    transform: rotate(-8deg);
+  }
+
+  .geo-map__grid {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(rgb(255 255 255 / 5%) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(255 255 255 / 5%) 1px, transparent 1px);
+    background-size: 40px 40px;
+    mask-image: radial-gradient(circle at center, #000 42%, transparent 78%);
+  }
+
+  .geo-map__region {
+    position: absolute;
+    top: 10px;
+    left: 12px;
+    font-size: 12px;
+    font-weight: 700;
+    color: rgb(215 231 255 / 68%);
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .geo-map__point {
+    position: absolute;
+    z-index: 2;
+    transform: translate(-50%, -50%);
+  }
+
+  .geo-map__dot {
+    position: relative;
+    display: block;
+    width: var(--geo-point-size);
+    height: var(--geo-point-size);
+    background: var(--saiboard-accent, #8ab4f8);
+    border: 2px solid rgb(255 255 255 / 86%);
+    border-radius: 50%;
+    box-shadow:
+      0 0 0 5px rgb(104 166 255 / 18%),
+      0 0 18px rgb(104 166 255 / 72%);
+  }
+
+  .geo-map__label {
+    position: absolute;
+    top: calc(var(--geo-point-size) + 5px);
+    left: 50%;
+    max-width: 120px;
+    padding: 3px 6px;
+    overflow: hidden;
+    font-size: 12px;
+    color: #f8fbff;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    background: rgb(7 17 31 / 72%);
+    border: 1px solid rgb(104 166 255 / 22%);
+    border-radius: 4px;
+    transform: translateX(-50%);
+  }
+
+  .geo-map__label strong {
+    margin-left: 4px;
+    color: var(--saiboard-accent, #8ab4f8);
+  }
+
+  .geo-map__empty {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgb(215 231 255 / 72%);
   }
 
   .widget-error,

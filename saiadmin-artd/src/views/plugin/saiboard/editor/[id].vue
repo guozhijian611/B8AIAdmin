@@ -370,6 +370,94 @@
                 <ElSwitch v-model="selectedComponent.option!.showDots" />
               </ElFormItem>
             </template>
+            <template v-if="selectedComponent.type === 'geo-point-map'">
+              <ElFormItem label="经度字段">
+                <ElSelect
+                  v-model="selectedComponent.option!.lngField"
+                  clearable
+                  filterable
+                  placeholder="自动识别"
+                  :disabled="!fieldOptions.length"
+                >
+                  <ElOption
+                    v-for="field in fieldOptions"
+                    :key="field"
+                    :label="field"
+                    :value="field"
+                  />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="纬度字段">
+                <ElSelect
+                  v-model="selectedComponent.option!.latField"
+                  clearable
+                  filterable
+                  placeholder="自动识别"
+                  :disabled="!fieldOptions.length"
+                >
+                  <ElOption
+                    v-for="field in fieldOptions"
+                    :key="field"
+                    :label="field"
+                    :value="field"
+                  />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="名称字段">
+                <ElSelect
+                  v-model="selectedComponent.option!.nameField"
+                  clearable
+                  filterable
+                  placeholder="自动识别"
+                  :disabled="!fieldOptions.length"
+                >
+                  <ElOption
+                    v-for="field in fieldOptions"
+                    :key="field"
+                    :label="field"
+                    :value="field"
+                  />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="数值字段">
+                <ElSelect
+                  v-model="selectedComponent.option!.valueField"
+                  clearable
+                  filterable
+                  placeholder="自动识别"
+                  :disabled="!fieldOptions.length"
+                >
+                  <ElOption
+                    v-for="field in fieldOptions"
+                    :key="field"
+                    :label="field"
+                    :value="field"
+                  />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="地图范围">
+                <ElSelect v-model="selectedComponent.option!.region">
+                  <ElOption
+                    v-for="item in mapRegionOptions"
+                    :key="item.value"
+                    :label="item.label"
+                    :value="item.value"
+                  />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="点大小">
+                <ElInputNumber
+                  v-model="selectedComponent.option!.pointSize"
+                  :min="6"
+                  :max="28"
+                  :step="1"
+                  step-strictly
+                />
+              </ElFormItem>
+              <ElFormItem label="点标签">
+                <ElSwitch v-model="selectedComponent.option!.showLabel" />
+              </ElFormItem>
+            </template>
             <template v-if="selectedComponent.type === 'decor-border'">
               <ElFormItem label="样式">
                 <ElSelect v-model="selectedComponent.option!.borderStyle">
@@ -507,6 +595,10 @@
     { label: '完整显示', value: 'contain' },
     { label: '拉伸填满', value: 'fill' }
   ]
+  const mapRegionOptions = [
+    { label: '中国', value: 'china' },
+    { label: '世界', value: 'world' }
+  ]
   const tableAlignOptions: Array<{ label: string; value: NonNullable<BoardTableColumn['align']> }> =
     [
       { label: '左对齐', value: 'left' },
@@ -524,7 +616,8 @@
     'art-scatter-chart',
     'stat-number',
     'data-table',
-    'image-carousel'
+    'image-carousel',
+    'geo-point-map'
   ])
   const componentNeedsData = (component: BoardComponent) => component.type !== 'decor-border'
 

@@ -34,6 +34,7 @@ export type WidgetType =
   | 'stat-number'
   | 'data-table'
   | 'image-carousel'
+  | 'geo-point-map'
   | 'decor-border'
 
 export interface BoardBgConfig {
