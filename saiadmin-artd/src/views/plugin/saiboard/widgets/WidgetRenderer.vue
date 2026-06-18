@@ -2,7 +2,7 @@
   <div
     ref="widgetRef"
     class="board-widget"
-    :class="{ 'is-runtime': runtime, 'is-decor': component.type === 'decor-border' }"
+    :class="{ 'is-runtime': runtime, 'is-decor': decorTypes.has(component.type) }"
   >
     <div v-if="component.title" class="widget-title">{{ component.title }}</div>
     <div class="widget-body">
@@ -27,6 +27,21 @@
         :x-axis-data="axisData"
         v-bind="component.option"
       />
+      <ArtDualBarCompareChart
+        v-else-if="component.type === 'art-dual-bar-compare-chart' && dualCompareReady"
+        height="100%"
+        :positive-data="dualPositiveData"
+        :negative-data="dualNegativeData"
+        :x-axis-data="axisData"
+        :positive-name="component.option?.positiveName || '正向'"
+        :negative-name="component.option?.negativeName || '负向'"
+        :y-axis-min="dualAxisMin"
+        :y-axis-max="dualAxisMax"
+        v-bind="component.option"
+      />
+      <div v-else-if="component.type === 'art-dual-bar-compare-chart'" class="chart-empty">
+        {{ dualCompareEmptyText }}
+      </div>
       <ArtRingChart
         v-else-if="component.type === 'art-ring-chart'"
         height="100%"
@@ -124,6 +139,14 @@
         :class="`is-${decorStyle}`"
         :style="decorStyleVars"
       ></div>
+      <div
+        v-else-if="component.type === 'decor-scanline'"
+        class="decor-scanline"
+        :class="`is-${scanlineDirection}`"
+        :style="scanlineStyleVars"
+      >
+        <span class="decor-scanline__beam"></span>
+      </div>
       <div v-else class="unsupported">组件不可用</div>
     </div>
     <div v-if="error" class="widget-error">{{ error }}</div>
@@ -132,6 +155,7 @@
 
 <script setup lang="ts">
   import ArtBarChart from '@/components/core/charts/art-bar-chart/index.vue'
+  import ArtDualBarCompareChart from '@/components/core/charts/art-dual-bar-compare-chart/index.vue'
   import ArtHBarChart from '@/components/core/charts/art-h-bar-chart/index.vue'
   import ArtLineChart from '@/components/core/charts/art-line-chart/index.vue'
   import ArtRadarChart from '@/components/core/charts/art-radar-chart/index.vue'
@@ -154,10 +178,12 @@
     'art-bar-chart',
     'art-line-chart',
     'art-h-bar-chart',
+    'art-dual-bar-compare-chart',
     'art-ring-chart',
     'art-radar-chart',
     'art-scatter-chart'
   ])
+  const decorTypes = new Set(['decor-border', 'decor-scanline'])
 
   const props = withDefaults(
     defineProps<{
@@ -215,6 +241,32 @@
     findNumberKeys(mapping.value.valueField, ['value', 'count', 'total', 'amount', 'y'])
   )
   const valueKey = computed(() => valueKeys.value[0] || 'value')
+  const dualPositiveKey = computed(() =>
+    findOptionalKey(props.component.option?.positiveField, [
+      'positive',
+      'in',
+      'income',
+      'current',
+      'value',
+      'count',
+      'total',
+      'amount'
+    ])
+  )
+  const dualEffectivePositiveKey = computed(
+    () => dualPositiveKey.value || valueKeys.value[0] || valueKey.value
+  )
+  const dualNegativeKey = computed(() =>
+    findOptionalKey(props.component.option?.negativeField, [
+      'negative',
+      'out',
+      'expense',
+      'previous',
+      'last',
+      'contrast',
+      'compare'
+    ])
+  )
 
   const axisData = computed(() => {
     if (!tableRows.value.length) return hasBoundDataset.value ? [] : ['A', 'B', 'C', 'D', 'E']
@@ -232,6 +284,34 @@
       data: tableRows.value.map((row) => Number(row[key] ?? 0))
     }))
   })
+  const dualPositiveData = computed(() => {
+    if (!tableRows.value.length) return hasBoundDataset.value ? [] : [12, 28, 19, 35, 24]
+    return tableRows.value.map((row) => toFiniteNumber(row[dualEffectivePositiveKey.value]))
+  })
+  const dualNegativeData = computed(() => {
+    if (!tableRows.value.length) return hasBoundDataset.value ? [] : [8, 16, 13, 21, 18]
+    const key =
+      dualNegativeKey.value ||
+      valueKeys.value.find((item) => item !== dualEffectivePositiveKey.value)
+    if (key) return tableRows.value.map((row) => toFiniteNumber(row[key]))
+    return []
+  })
+  const dualAxisMax = computed(() => {
+    const configured = Number(props.component.option?.yAxisMax)
+    if (Number.isFinite(configured) && configured > 0) return configured
+    const values = [...dualPositiveData.value, ...dualNegativeData.value.map(Math.abs)].filter(
+      (value) => Number.isFinite(value)
+    )
+    const max = Math.max(1, ...values)
+    return Math.ceil(max * 1.2)
+  })
+  const dualAxisMin = computed(() => -dualAxisMax.value)
+  const dualCompareReady = computed(
+    () => dualPositiveData.value.length > 0 && dualNegativeData.value.length > 0
+  )
+  const dualCompareEmptyText = computed(() =>
+    hasBoundDataset.value ? '请配置两个数值字段' : '暂无对比数据'
+  )
 
   const ringData = computed(() => {
     if (!tableRows.value.length) {
@@ -343,6 +423,17 @@
     '--decor-accent': String(props.component.option?.accent || 'var(--saiboard-accent, #69b7ff)'),
     '--decor-opacity': String(normalizeOpacity(props.component.option?.opacity))
   }))
+  const scanlineDirection = computed(() => {
+    const value = String(props.component.option?.direction || 'horizontal')
+    return value === 'vertical' ? 'vertical' : 'horizontal'
+  })
+  const scanlineStyleVars = computed(() => ({
+    '--scanline-accent': String(
+      props.component.option?.accent || 'var(--saiboard-accent, #23d8ff)'
+    ),
+    '--scanline-opacity': String(normalizeOpacity(props.component.option?.opacity ?? 0.68)),
+    '--scanline-duration': `${normalizeScanlineSpeed(props.component.option?.speed)}s`
+  }))
 
   const metricValue = computed(() => {
     if (!tableRows.value.length) return hasBoundDataset.value ? '-' : '0'
@@ -367,6 +458,18 @@
     const opacity = Number(value ?? 0.85)
     if (!Number.isFinite(opacity)) return 0.85
     return Math.min(1, Math.max(0.1, opacity))
+  }
+
+  function normalizeScanlineSpeed(value: unknown) {
+    const speed = Number(value ?? 4)
+    if (!Number.isFinite(speed) || speed <= 0) return 4
+    return Math.min(12, Math.max(1, speed))
+  }
+
+  function toFiniteNumber(value: unknown, fallback = 0) {
+    const normalized = typeof value === 'string' ? value.replace(/,/g, '').trim() : value
+    const number = Number(normalized)
+    return Number.isFinite(number) ? number : fallback
   }
 
   function normalizeTableFields(value: unknown): string[] {
@@ -759,6 +862,17 @@
     border-radius: 4px;
   }
 
+  .chart-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: rgb(215 231 255 / 72%);
+    background: rgb(255 255 255 / 4%);
+    border: 1px dashed rgb(255 255 255 / 16%);
+    border-radius: 4px;
+  }
+
   .geo-map {
     position: relative;
     height: 100%;
@@ -907,6 +1021,71 @@
     box-shadow:
       inset 0 0 22px color-mix(in srgb, var(--decor-accent) 28%, transparent),
       0 0 28px color-mix(in srgb, var(--decor-accent) 18%, transparent);
+  }
+
+  .decor-scanline {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    opacity: var(--scanline-opacity);
+    background:
+      linear-gradient(rgb(255 255 255 / 5%) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(255 255 255 / 5%) 1px, transparent 1px),
+      radial-gradient(
+        circle at 50% 50%,
+        color-mix(in srgb, var(--scanline-accent) 18%, transparent),
+        transparent 58%
+      );
+    background-size:
+      28px 28px,
+      28px 28px,
+      100% 100%;
+    border: 1px solid color-mix(in srgb, var(--scanline-accent) 24%, transparent);
+    border-radius: 4px;
+    box-shadow: inset 0 0 24px color-mix(in srgb, var(--scanline-accent) 14%, transparent);
+  }
+
+  .decor-scanline__beam {
+    position: absolute;
+    display: block;
+    pointer-events: none;
+    background: var(--scanline-accent);
+    box-shadow: 0 0 22px var(--scanline-accent);
+  }
+
+  .decor-scanline.is-horizontal .decor-scanline__beam {
+    right: 0;
+    left: 0;
+    height: 2px;
+    animation: saiboard-scanline-y var(--scanline-duration) linear infinite;
+  }
+
+  .decor-scanline.is-vertical .decor-scanline__beam {
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    animation: saiboard-scanline-x var(--scanline-duration) linear infinite;
+  }
+
+  @keyframes saiboard-scanline-y {
+    from {
+      top: -2px;
+    }
+
+    to {
+      top: 100%;
+    }
+  }
+
+  @keyframes saiboard-scanline-x {
+    from {
+      left: -2px;
+    }
+
+    to {
+      left: 100%;
+    }
   }
 
   :deep(.el-table) {

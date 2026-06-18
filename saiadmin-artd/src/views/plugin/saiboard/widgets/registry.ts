@@ -23,6 +23,21 @@ export const widgetRegistry: WidgetMeta[] = [
     defaultOption: { showLegend: false }
   },
   {
+    type: 'art-dual-bar-compare-chart',
+    name: '双向对比柱图',
+    icon: 'ri:bar-chart-grouped-line',
+    defaultRect: { x: 40, y: 760, w: 620, h: 320, z: 1 },
+    defaultOption: {
+      positiveField: '',
+      negativeField: '',
+      positiveName: '正向',
+      negativeName: '负向',
+      showLegend: true,
+      showDataLabel: false,
+      barWidth: 16
+    }
+  },
+  {
     type: 'art-ring-chart',
     name: '环形图',
     icon: 'ri:donut-chart-line',
@@ -91,6 +106,18 @@ export const widgetRegistry: WidgetMeta[] = [
     icon: 'ri:rounded-corner',
     defaultRect: { x: 1080, y: 760, w: 480, h: 180, z: 1 },
     defaultOption: { borderStyle: 'corner', accent: '#69b7ff', opacity: 0.85 }
+  },
+  {
+    type: 'decor-scanline',
+    name: '扫描线',
+    icon: 'ri:scan-line',
+    defaultRect: { x: 720, y: 760, w: 520, h: 180, z: 1 },
+    defaultOption: {
+      direction: 'horizontal',
+      speed: 4,
+      accent: '#23d8ff',
+      opacity: 0.68
+    }
   }
 ]
 
@@ -101,7 +128,7 @@ export const createDefaultComponent = (type: WidgetType | string, order: number)
   return {
     id: `w_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
     type: meta.type,
-    title: meta.type === 'decor-border' ? '' : meta.name,
+    title: meta.type === 'decor-border' || meta.type === 'decor-scanline' ? '' : meta.name,
     rect: {
       ...meta.defaultRect,
       x: meta.defaultRect.x + order * 20,

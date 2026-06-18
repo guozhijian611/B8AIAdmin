@@ -314,6 +314,52 @@
                 <ElSwitch v-model="selectedComponent.option!.rowStripe" />
               </ElFormItem>
             </template>
+            <template v-if="selectedComponent.type === 'art-dual-bar-compare-chart'">
+              <ElFormItem label="正向字段">
+                <ElSelect
+                  v-model="selectedComponent.option!.positiveField"
+                  clearable
+                  filterable
+                  placeholder="自动识别"
+                  :disabled="!numericFieldOptions.length"
+                >
+                  <ElOption
+                    v-for="field in numericFieldOptions"
+                    :key="field"
+                    :label="field"
+                    :value="field"
+                  />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="负向字段">
+                <ElSelect
+                  v-model="selectedComponent.option!.negativeField"
+                  clearable
+                  filterable
+                  placeholder="自动识别"
+                  :disabled="!numericFieldOptions.length"
+                >
+                  <ElOption
+                    v-for="field in numericFieldOptions"
+                    :key="field"
+                    :label="field"
+                    :value="field"
+                  />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="正向名称">
+                <ElInput v-model="selectedComponent.option!.positiveName" />
+              </ElFormItem>
+              <ElFormItem label="负向名称">
+                <ElInput v-model="selectedComponent.option!.negativeName" />
+              </ElFormItem>
+              <ElFormItem label="显示图例">
+                <ElSwitch v-model="selectedComponent.option!.showLegend" />
+              </ElFormItem>
+              <ElFormItem label="数值标签">
+                <ElSwitch v-model="selectedComponent.option!.showDataLabel" />
+              </ElFormItem>
+            </template>
             <template v-if="selectedComponent.type === 'image-carousel'">
               <ElFormItem label="图片字段">
                 <ElSelect
@@ -478,6 +524,34 @@
                 />
               </ElFormItem>
             </template>
+            <template v-if="selectedComponent.type === 'decor-scanline'">
+              <ElFormItem label="方向">
+                <ElSelect v-model="selectedComponent.option!.direction">
+                  <ElOption label="横向" value="horizontal" />
+                  <ElOption label="纵向" value="vertical" />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="强调色">
+                <ElColorPicker v-model="selectedComponent.option!.accent" />
+              </ElFormItem>
+              <ElFormItem label="速度秒">
+                <ElInputNumber
+                  v-model="selectedComponent.option!.speed"
+                  :min="1"
+                  :max="12"
+                  :step="0.5"
+                  step-strictly
+                />
+              </ElFormItem>
+              <ElFormItem label="透明度">
+                <ElSlider
+                  v-model="selectedComponent.option!.opacity"
+                  :min="0.1"
+                  :max="1"
+                  :step="0.05"
+                />
+              </ElFormItem>
+            </template>
             <ElFormItem>
               <ElSpace>
                 <ElButton @click="bringToFront">置顶</ElButton>
@@ -611,6 +685,7 @@
     'art-bar-chart',
     'art-line-chart',
     'art-h-bar-chart',
+    'art-dual-bar-compare-chart',
     'art-ring-chart',
     'art-radar-chart',
     'art-scatter-chart',
@@ -619,7 +694,8 @@
     'image-carousel',
     'geo-point-map'
   ])
-  const componentNeedsData = (component: BoardComponent) => component.type !== 'decor-border'
+  const decorTypes = new Set(['decor-border', 'decor-scanline'])
+  const componentNeedsData = (component: BoardComponent) => !decorTypes.has(component.type)
 
   const selectedComponent = computed(() =>
     layout.components.find((item) => item.id === selectedId.value)
@@ -964,6 +1040,10 @@
       tableFields: [],
       tableColumns: []
     }
+    if (selectedComponent.value.type === 'art-dual-bar-compare-chart') {
+      selectedComponent.value.option!.positiveField = ''
+      selectedComponent.value.option!.negativeField = ''
+    }
     await refreshComponentData(selectedComponent.value)
   }
 
@@ -987,6 +1067,14 @@
     mapping.tableColumns = normalizeTableColumns(mapping.tableColumns, mapping.tableFields).filter(
       (column) => fields.includes(column.field)
     )
+    if (component.type === 'art-dual-bar-compare-chart') {
+      if (component.option?.positiveField && !fields.includes(component.option.positiveField)) {
+        component.option.positiveField = ''
+      }
+      if (component.option?.negativeField && !fields.includes(component.option.negativeField)) {
+        component.option.negativeField = ''
+      }
+    }
   }
 
   const syncSelectedTableColumns = () => {

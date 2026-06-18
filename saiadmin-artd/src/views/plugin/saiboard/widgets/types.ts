@@ -28,6 +28,7 @@ export type WidgetType =
   | 'art-bar-chart'
   | 'art-line-chart'
   | 'art-h-bar-chart'
+  | 'art-dual-bar-compare-chart'
   | 'art-ring-chart'
   | 'art-radar-chart'
   | 'art-scatter-chart'
@@ -36,6 +37,7 @@ export type WidgetType =
   | 'image-carousel'
   | 'geo-point-map'
   | 'decor-border'
+  | 'decor-scanline'
 
 export interface BoardBgConfig {
   color?: string

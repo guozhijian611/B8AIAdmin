@@ -67,7 +67,8 @@
     top: fit.y + 'px',
     transform: `scale(${fit.scaleX}, ${fit.scaleY})`
   }))
-  const componentNeedsData = (component: BoardComponent) => component.type !== 'decor-border'
+  const decorTypes = new Set(['decor-border', 'decor-scanline'])
+  const componentNeedsData = (component: BoardComponent) => !decorTypes.has(component.type)
 
   const loadScreen = async () => {
     loading.value = true
