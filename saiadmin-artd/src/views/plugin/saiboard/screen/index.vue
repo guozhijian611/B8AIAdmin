@@ -36,6 +36,9 @@
         <ElTableColumn label="尺寸" width="130">
           <template #default="{ row }">{{ row.width }} x {{ row.height }}</template>
         </ElTableColumn>
+        <ElTableColumn label="适配" width="110">
+          <template #default="{ row }">{{ fitModeLabel(row.bg_config?.fit_mode) }}</template>
+        </ElTableColumn>
         <ElTableColumn label="访问" width="110">
           <template #default="{ row }">
             <ElTag :type="row.is_public === 1 ? 'success' : 'warning'">
@@ -110,6 +113,9 @@
         <ElFormItem label="背景色">
           <ElColorPicker v-model="form.bgColor" />
         </ElFormItem>
+        <ElFormItem label="适配模式">
+          <ElSegmented v-model="form.fitMode" :options="fitModeOptions" />
+        </ElFormItem>
         <ElFormItem label="访问方式" prop="is_public">
           <ElRadioGroup v-model="form.is_public">
             <ElRadioButton :label="1">公开</ElRadioButton>
@@ -157,10 +163,18 @@
     width: 1920,
     height: 1080,
     bgColor: '#07111f',
+    fitMode: 'contain',
+    bg_config: {} as Record<string, any>,
     is_public: 1,
     access_token: '',
     status: 2
   })
+
+  const fitModeOptions = [
+    { label: '完整显示', value: 'contain' },
+    { label: '裁切铺满', value: 'cover' },
+    { label: '非等比拉伸', value: 'stretch' }
+  ]
 
   const rules: FormRules = {
     name: [{ required: true, message: '名称必填', trigger: 'blur' }],
@@ -191,12 +205,17 @@
       width: 1920,
       height: 1080,
       bgColor: '#07111f',
+      fitMode: 'contain',
+      bg_config: {},
       is_public: 1,
       access_token: '',
       status: 2
     })
     if (row) {
-      Object.assign(form, row, { bgColor: row.bg_config?.color || '#07111f' })
+      Object.assign(form, row, {
+        bgColor: row.bg_config?.color || '#07111f',
+        fitMode: normalizeFitMode(row.bg_config?.fit_mode)
+      })
     }
     dialogVisible.value = true
   }
@@ -205,7 +224,11 @@
     await formRef.value?.validate()
     const payload: Record<string, any> = {
       ...form,
-      bg_config: { color: form.bgColor }
+      bg_config: {
+        ...(form.bg_config || {}),
+        color: form.bgColor,
+        fit_mode: normalizeFitMode(form.fitMode)
+      }
     }
     if (!form.id) {
       payload.draft_layout = {
@@ -256,6 +279,14 @@
     ElMessage.success('删除成功')
     loadData()
   }
+
+  const normalizeFitMode = (mode: unknown) => {
+    const value = String(mode || '')
+    return ['contain', 'cover', 'stretch'].includes(value) ? value : 'contain'
+  }
+
+  const fitModeLabel = (mode: unknown) =>
+    fitModeOptions.find((item) => item.value === normalizeFitMode(mode))?.label || '完整显示'
 
   onMounted(loadData)
 </script>

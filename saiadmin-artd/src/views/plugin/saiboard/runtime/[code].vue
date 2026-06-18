@@ -3,10 +3,7 @@
     <div v-if="loading" class="runtime-state">加载中</div>
     <div v-else-if="error" class="runtime-state">{{ error }}</div>
     <div v-else ref="viewportRef" class="runtime-viewport">
-      <div
-        class="runtime-canvas"
-        :style="canvasStyle"
-      >
+      <div class="runtime-canvas" :style="canvasStyle">
         <div
           v-for="component in layout.components"
           :key="component.id"
@@ -40,7 +37,7 @@
   const viewportRef = ref<HTMLElement>()
   const loading = ref(true)
   const error = ref('')
-  const fit = reactive({ scale: 1, x: 0, y: 0 })
+  const fit = reactive({ scaleX: 1, scaleY: 1, x: 0, y: 0 })
   const timers: number[] = []
   let resizeObserver: ResizeObserver | undefined
   const screen = reactive<any>({ bg_config: { color: '#07111f' } })
@@ -50,12 +47,13 @@
   const code = computed(() => String(route.params.code || ''))
   const token = computed(() => String(route.query.token || ''))
   const bgColor = computed(() => screen.bg_config?.color || '#07111f')
+  const fitMode = computed(() => normalizeFitMode(screen.bg_config?.fit_mode))
   const canvasStyle = computed(() => ({
     width: layout.canvas.width + 'px',
     height: layout.canvas.height + 'px',
     left: fit.x + 'px',
     top: fit.y + 'px',
-    transform: `scale(${fit.scale})`,
+    transform: `scale(${fit.scaleX}, ${fit.scaleY})`,
     background: bgColor.value
   }))
 
@@ -107,10 +105,30 @@
     const canvasHeight = Math.max(1, Number(layout.canvas.height || 1080))
     const viewportWidth = el.clientWidth
     const viewportHeight = el.clientHeight
-    const nextScale = Math.min(viewportWidth / canvasWidth, viewportHeight / canvasHeight)
-    fit.scale = Number.isFinite(nextScale) && nextScale > 0 ? nextScale : 1
-    fit.x = Math.max(0, (viewportWidth - canvasWidth * fit.scale) / 2)
-    fit.y = Math.max(0, (viewportHeight - canvasHeight * fit.scale) / 2)
+    const scaleX = viewportWidth / canvasWidth
+    const scaleY = viewportHeight / canvasHeight
+    if (fitMode.value === 'stretch') {
+      fit.scaleX = validScale(scaleX)
+      fit.scaleY = validScale(scaleY)
+      fit.x = 0
+      fit.y = 0
+      return
+    }
+
+    const nextScale =
+      fitMode.value === 'cover' ? Math.max(scaleX, scaleY) : Math.min(scaleX, scaleY)
+    const scale = validScale(nextScale)
+    fit.scaleX = scale
+    fit.scaleY = scale
+    fit.x = (viewportWidth - canvasWidth * scale) / 2
+    fit.y = (viewportHeight - canvasHeight * scale) / 2
+  }
+
+  const validScale = (value: number) => (Number.isFinite(value) && value > 0 ? value : 1)
+
+  const normalizeFitMode = (mode: unknown) => {
+    const value = String(mode || '')
+    return ['contain', 'cover', 'stretch'].includes(value) ? value : 'contain'
   }
 
   const observeViewport = () => {

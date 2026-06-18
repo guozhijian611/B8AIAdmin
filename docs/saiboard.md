@@ -133,7 +133,7 @@ saiadmin-artd/src/views/plugin/saiboard/
 | `code` | varchar(32) | 对外访问编码，唯一索引。 |
 | `name` | varchar(60) | 大屏名称。 |
 | `width` / `height` | int | 画布设计尺寸，如 1920×1080。 |
-| `bg_config` | json | 背景：颜色 / 图片 / 网格。 |
+| `bg_config` | json | 背景与运行时适配：颜色、`fit_mode` 等。 |
 | `is_public` | tinyint unsigned | 1对外公开 2需鉴权。 |
 | `access_token` | varchar(64) NULL | `is_public=2` 时校验用，空则要求后台登录态。 |
 | `draft_layout` | json | **编辑中的**组件树，`saveLayout` 只写这里。 |
@@ -275,7 +275,8 @@ getScreen / data 接口入口：
 ### 对外运行时页 `/screen/:code`（静态公开路由，复用 widgets/）
 
 - 在 `staticRoutes.ts` 显式注册，不进后台布局、不依赖动态菜单；页面级是否放行交给后端 `getScreen` / `data` 接口按大屏配置判定。
-- 复用 `widgets/` 同一套组件，外层只读容器；按 `screen.width/height` 设计稿做**整屏等比缩放**（`transform: scale`，监听 resize），适配任意投屏分辨率。
+- 复用 `widgets/` 同一套组件，外层只读容器；按 `screen.width/height` 设计稿做运行时适配（监听 resize）。
+- `bg_config.fit_mode` 支持 `contain` / `cover` / `stretch`：`contain` 完整显示设计稿并居中留边，`cover` 等比铺满视口并允许边缘裁切，`stretch` 按视口宽高分别拉伸，适合固定比例投屏。
 - 按各组件 `dataset.refresh` 轮询 `/data`；深色科技风默认主题，配色在 `screen.bg_config`。
 
 ### 数据源管理页 `/plugin/saiboard/datasource`
@@ -391,7 +392,7 @@ php webman b8:migrate
 | 后端 | `SqlBuilder`（`table_raw` / `table_count` / `table_aggregate`）+ `DataSourceExecutor`（mysql / http + SSRF 防护 + Cache 缓存）。 |
 | 后端 | `ScreenController` 标准 CRUD + `saveLayout` / `publish`；`BoardController`（`getScreen` / `data`，IDOR 绑定校验）。 |
 | 前端 | `DraggableItem.vue`（封装 `vue3-draggable-resizable`）+ `widgets/` 注册表，复用 3~4 个 `art-*` 图表（柱/折线/环形 + 单值翻牌 / 表格）。 |
-| 前端 | 拖拽编辑器 + 编辑态真实数据预览 / 字段映射 + 查询模板表单化配置 + 对外运行时页（静态 `/screen/:code`、等比缩放、is_public / token 鉴权）。 |
+| 前端 | 拖拽编辑器 + 编辑态真实数据预览 / 字段映射 + 查询模板表单化配置 + 对外运行时页（静态 `/screen/:code`、适配模式、is_public / token 鉴权）。 |
 
 ### P1 能力增强
 

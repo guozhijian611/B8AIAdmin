@@ -9,7 +9,8 @@
         <ElTag v-else>草稿</ElTag>
       </ElSpace>
       <ElSpace>
-        <ElSelect v-model="zoom" style="width: 110px">
+        <ElSelect v-model="zoom" style="width: 130px">
+          <ElOption label="适应窗口" value="auto" />
           <ElOption label="50%" :value="0.5" />
           <ElOption label="75%" :value="0.75" />
           <ElOption label="100%" :value="1" />
@@ -38,13 +39,13 @@
         </button>
       </aside>
 
-      <main class="canvas-shell">
+      <main ref="canvasShellRef" class="canvas-shell">
         <div
           class="canvas"
           :style="{
             width: layout.canvas.width + 'px',
             height: layout.canvas.height + 'px',
-            transform: `scale(${zoom})`,
+            transform: `scale(${effectiveZoom})`,
             background: screen.bg_config?.color || '#07111f'
           }"
           @mousedown.self="selectedId = ''"
@@ -220,6 +221,9 @@
             <ElFormItem label="背景色">
               <ElColorPicker v-model="screen.bg_config.color" />
             </ElFormItem>
+            <ElFormItem label="适配模式">
+              <ElSegmented v-model="screen.bg_config.fit_mode" :options="fitModeOptions" />
+            </ElFormItem>
           </ElForm>
         </template>
       </aside>
@@ -242,15 +246,18 @@
   }
 
   const route = useRoute()
-  const zoom = ref(0.75)
+  const zoom = ref<'auto' | number>('auto')
+  const autoZoom = ref(0.75)
+  const canvasShellRef = ref<HTMLElement>()
   const selectedId = ref('')
   const templateOptions = ref<any[]>([])
   const previewMap = reactive<Record<string, PreviewState>>({})
+  let canvasResizeObserver: ResizeObserver | undefined
   const screen = reactive<any>({
     id: 0,
     name: '',
     status: 2,
-    bg_config: { color: '#07111f' }
+    bg_config: { color: '#07111f', fit_mode: 'contain' }
   })
   const layout = reactive<BoardLayout>({
     canvas: { width: 1920, height: 1080 },
@@ -262,6 +269,11 @@
     { label: '周三', value: 150 },
     { label: '周四', value: 220 },
     { label: '周五', value: 260 }
+  ]
+  const fitModeOptions = [
+    { label: '完整显示', value: 'contain' },
+    { label: '裁切铺满', value: 'cover' },
+    { label: '非等比拉伸', value: 'stretch' }
   ]
 
   const selectedComponent = computed(() =>
@@ -287,14 +299,19 @@
         )
     )
   )
+  const effectiveZoom = computed(() =>
+    zoom.value === 'auto' ? autoZoom.value : Number(zoom.value)
+  )
 
   const loadData = async () => {
     const id = Number(route.params.id)
     const data = await api.read(id)
-    Object.assign(screen, data, { bg_config: data.bg_config || { color: '#07111f' } })
+    Object.assign(screen, data, { bg_config: normalizeBgConfig(data.bg_config) })
     const draft = normalizeLayout(data.draft_layout || data.layout || {})
     Object.assign(layout.canvas, draft.canvas)
     layout.components.splice(0, layout.components.length, ...draft.components)
+    await nextTick()
+    updateAutoZoom()
     await refreshAllComponentData()
   }
 
@@ -335,6 +352,35 @@
       tableFields: Array.isArray(dataset?.mapping?.tableFields) ? dataset.mapping.tableFields : []
     }
   })
+
+  const normalizeBgConfig = (config: any = {}) => ({
+    ...(config || {}),
+    color: config?.color || '#07111f',
+    fit_mode: normalizeFitMode(config?.fit_mode)
+  })
+
+  const normalizeFitMode = (mode: unknown) => {
+    const value = String(mode || '')
+    return ['contain', 'cover', 'stretch'].includes(value) ? value : 'contain'
+  }
+
+  const updateAutoZoom = () => {
+    const shell = canvasShellRef.value
+    if (!shell) return
+    const availableWidth = Math.max(1, shell.clientWidth - 64)
+    const availableHeight = Math.max(1, shell.clientHeight - 64)
+    const canvasWidth = Math.max(1, Number(layout.canvas.width || 1920))
+    const canvasHeight = Math.max(1, Number(layout.canvas.height || 1080))
+    const nextZoom = Math.min(1, availableWidth / canvasWidth, availableHeight / canvasHeight)
+    autoZoom.value = Number.isFinite(nextZoom) && nextZoom > 0 ? nextZoom : 0.75
+  }
+
+  const observeCanvasShell = () => {
+    if (!canvasShellRef.value || !('ResizeObserver' in window)) return
+    const observer = new ResizeObserver(updateAutoZoom)
+    observer.observe(canvasShellRef.value)
+    return observer
+  }
 
   const addWidget = (type: string) => {
     const component = createDefaultComponent(type, layout.components.length) as BoardComponent
@@ -460,11 +506,19 @@
 
   onMounted(async () => {
     await Promise.all([loadData(), loadTemplates()])
+    canvasResizeObserver = observeCanvasShell()
+    updateAutoZoom()
+  })
+
+  onBeforeUnmount(() => {
+    canvasResizeObserver?.disconnect()
   })
 
   watch(selectedComponent, (component) => {
     if (component) ensureDataset(component)
   })
+
+  watch(() => [layout.canvas.width, layout.canvas.height], updateAutoZoom)
 </script>
 
 <style scoped lang="scss">
