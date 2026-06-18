@@ -47,10 +47,11 @@ class RuntimeMetrics
     {
         $window = $this->window();
         $bucket = $this->bucket();
-        $buckets = [$bucket];
+        $buckets = [$bucket, $bucket - $window];
         $result = [
             'enabled' => $this->enabled(),
-            'window' => $window,
+            'window' => $window * 2,
+            'bucket_window' => $window,
             'current_bucket' => $bucket,
             'totals' => [],
             'screen' => $screenId > 0 ? [] : null,

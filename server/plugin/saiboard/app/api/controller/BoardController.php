@@ -8,6 +8,7 @@ use plugin\saiboard\app\model\QueryTemplate;
 use plugin\saiboard\app\model\Screen;
 use plugin\saiboard\app\service\DataSourceExecutor;
 use plugin\saiboard\app\service\RuntimeGuard;
+use RuntimeException;
 use support\Request;
 use support\Response;
 use Throwable;
@@ -101,6 +102,12 @@ class BoardController
                 'screen' => (string) $screen->id,
                 'owner' => (string) ((int) ($screen->created_by ?? 0)),
             ]));
+        } catch (RuntimeException $exception) {
+            if ($exception->getMessage() === '数据缓存刷新中') {
+                return $this->cacheRefreshing();
+            }
+
+            return fail('数据源执行失败');
         } catch (InvalidArgumentException) {
             return fail('数据源执行失败');
         } catch (Throwable) {
@@ -210,6 +217,14 @@ class BoardController
             'X-Saiboard-RateLimit-Scope' => (string) ($limited['scope'] ?? 'runtime'),
             'X-Saiboard-RateLimit-Limit' => (string) max(0, (int) ($limited['limit'] ?? 0)),
             'X-Saiboard-RateLimit-Window' => (string) max(1, (int) ($limited['window'] ?? 1)),
+        ]);
+    }
+
+    private function cacheRefreshing(): Response
+    {
+        return fail('数据缓存刷新中，请稍后重试', 429)->withHeaders([
+            'Retry-After' => '3',
+            'X-Saiboard-Cache-State' => 'refreshing',
         ]);
     }
 }

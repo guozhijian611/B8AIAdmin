@@ -80,7 +80,12 @@
                     <ElDropdownItem v-permission="'saiboard:screen:copy'" @click="copy(row)">
                       复制
                     </ElDropdownItem>
-                    <ElDropdownItem @click="openMetrics(row)">运行统计</ElDropdownItem>
+                    <ElDropdownItem
+                      v-permission="'saiboard:screen:index'"
+                      @click="openMetrics(row)"
+                    >
+                      运行统计
+                    </ElDropdownItem>
                     <ElDropdownItem
                       v-permission="'saiboard:screen:destroy'"
                       @click="deleteRow(row)"
