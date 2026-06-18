@@ -24,5 +24,6 @@ class DatasourceValidate extends BaseValidate
     protected $scene = [
         'save' => ['name', 'type', 'status'],
         'update' => ['name', 'type', 'status'],
+        'test' => ['name', 'type', 'status'],
     ];
 }

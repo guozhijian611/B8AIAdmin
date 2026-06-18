@@ -391,13 +391,15 @@ php webman b8:migrate
 | 数据库 | 3 张表（含 `draft_layout`/`layout` 分离）+ Phinx 迁移（含菜单权限）。 |
 | 后端 | `SqlBuilder`（`table_raw` / `table_count` / `table_aggregate`）+ `DataSourceExecutor`（mysql / http + SSRF 防护 + Cache 缓存）。 |
 | 后端 | `ScreenController` 标准 CRUD + `saveLayout` / `publish`；`BoardController`（`getScreen` / `data`，IDOR 绑定校验）。 |
+| 后端 | `DatasourceController::test` 支持新增态 payload 测试校验，连接失败写入 `last_error` 并返回稳定错误消息。 |
 | 前端 | `DraggableItem.vue`（封装 `vue3-draggable-resizable`）+ `widgets/` 注册表，复用 3~4 个 `art-*` 图表（柱/折线/环形 + 单值翻牌 / 表格）。 |
 | 前端 | 拖拽编辑器 + 编辑态真实数据预览 / 字段映射 + 查询模板表单化配置 + 对外运行时页（静态 `/screen/:code`、适配模式、is_public / token 鉴权）。 |
+| 前端 | 数据源新增/编辑态测试前先做表单校验；指标组件支持前缀 / 小数位 / 单位，表格支持最大行数 / 序号列 / 斑马纹，图表组件缩放后自动触发 resize。 |
 
-### P1 能力增强
+### P1 能力增强（部分完成）
 
 - 查询模板继续补多指标聚合、表达式函数和参数化高级条件。
-- 图表组件补全：地图、表格增强、翻牌、轮播；纯 CSS/SVG 装饰边框（不引第三方分支）。
+- 图表组件继续补全：地图、轮播、纯 CSS/SVG 装饰边框、更多图表样式；表格列宽 / 对齐 / 别名等细项可继续增强。
 - 大屏主题与背景增强。
 
 ### P2 进阶
@@ -409,7 +411,7 @@ php webman b8:migrate
 
 ## 已知边界与后续风险
 
-1. **拖拽交互完善度**：`vue3-draggable-resizable` 已提供拖动 + 缩放 + 对齐线 + 父级边界，P0 直接用其能力即可；多选、组合等增量在 P1 视需要补，避免一开始过度设计。
+1. **拖拽交互完善度**：`vue3-draggable-resizable` 已提供拖动 + 缩放 + 对齐线 + 父级边界；图表缩放后已通过组件容器 `ResizeObserver` 触发 resize。多选、组合等增量在 P1 视需要补，避免一开始过度设计。
 2. **生产数据源只读账号**：预置模板已能防注入，但强烈建议生产 MySQL 数据源配只读账号作为第二道防线，需在文档和部署指引中强制说明。
 3. **SSRF 防护清单**：HTTP 数据源已拒绝 localhost、内网和保留地址；实际部署如需进一步收紧，可加出网域名白名单。
 4. **缓存击穿与轮询频率**：P0 已支持 `cache_ttl` 缓存，但尚未实现互斥回源和后端轮询频率下限，公开大屏高并发场景需在 P1 补齐。

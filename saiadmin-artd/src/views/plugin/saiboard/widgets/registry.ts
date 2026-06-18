@@ -26,13 +26,15 @@ export const widgetRegistry: WidgetMeta[] = [
     type: 'stat-number',
     name: '指标',
     icon: 'ri:number-1',
-    defaultRect: { x: 40, y: 400, w: 320, h: 160, z: 1 }
+    defaultRect: { x: 40, y: 400, w: 320, h: 160, z: 1 },
+    defaultOption: { prefix: '', unit: '', decimals: 0 }
   },
   {
     type: 'data-table',
     name: '表格',
     icon: 'ri:table-line',
-    defaultRect: { x: 400, y: 400, w: 640, h: 320, z: 1 }
+    defaultRect: { x: 400, y: 400, w: 640, h: 320, z: 1 },
+    defaultOption: { showIndex: false, rowStripe: false, maxRows: 0 }
   }
 ]
 
@@ -44,7 +46,11 @@ export const createDefaultComponent = (type: string, order: number) => {
     id: `w_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
     type: meta.type,
     title: meta.name,
-    rect: { ...meta.defaultRect, x: meta.defaultRect.x + order * 20, y: meta.defaultRect.y + order * 20 },
+    rect: {
+      ...meta.defaultRect,
+      x: meta.defaultRect.x + order * 20,
+      y: meta.defaultRect.y + order * 20
+    },
     dataset: { queryTemplateId: undefined, refresh: 30 },
     option: { ...(meta.defaultOption || {}) }
   }

@@ -64,25 +64,33 @@
       <ElForm ref="formRef" :model="form" :rules="rules" label-width="110px">
         <ElFormItem label="名称" prop="name"><ElInput v-model="form.name" /></ElFormItem>
         <ElFormItem label="类型" prop="type">
-          <ElRadioGroup v-model="form.type">
+          <ElRadioGroup v-model="form.type" @change="onDatasourceTypeChange">
             <ElRadioButton label="mysql">MySQL</ElRadioButton>
             <ElRadioButton label="http">HTTP</ElRadioButton>
           </ElRadioGroup>
         </ElFormItem>
         <template v-if="form.type === 'mysql'">
-          <ElFormItem label="主机"><ElInput v-model="form.config.host" /></ElFormItem>
+          <ElFormItem label="主机" prop="config.host"
+            ><ElInput v-model="form.config.host"
+          /></ElFormItem>
           <ElFormItem label="端口"
             ><ElInputNumber v-model="form.config.port" :min="1" :max="65535"
           /></ElFormItem>
-          <ElFormItem label="数据库"><ElInput v-model="form.config.database" /></ElFormItem>
-          <ElFormItem label="用户名"><ElInput v-model="form.config.username" /></ElFormItem>
+          <ElFormItem label="数据库" prop="config.database"
+            ><ElInput v-model="form.config.database"
+          /></ElFormItem>
+          <ElFormItem label="用户名" prop="config.username"
+            ><ElInput v-model="form.config.username"
+          /></ElFormItem>
           <ElFormItem label="密码"
             ><ElInput v-model="form.config.password" show-password
           /></ElFormItem>
           <ElFormItem label="字符集"><ElInput v-model="form.config.charset" /></ElFormItem>
         </template>
         <template v-else>
-          <ElFormItem label="URL"><ElInput v-model="form.config.url" /></ElFormItem>
+          <ElFormItem label="URL" prop="config.url"
+            ><ElInput v-model="form.config.url"
+          /></ElFormItem>
           <ElFormItem label="请求头">
             <ElInput v-model="headersText" type="textarea" :rows="4" />
           </ElFormItem>
@@ -102,7 +110,12 @@
       </ElForm>
       <template #footer>
         <ElButton @click="dialogVisible = false">取消</ElButton>
-        <ElButton v-permission="'saiboard:datasource:test'" @click="test(form)">测试</ElButton>
+        <ElButton
+          v-permission="'saiboard:datasource:test'"
+          :loading="testLoading"
+          @click="test(form)"
+          >测试</ElButton
+        >
         <ElButton
           v-permission="form.id ? 'saiboard:datasource:update' : 'saiboard:datasource:save'"
           type="primary"
@@ -122,6 +135,7 @@
 
   const rows = ref<any[]>([])
   const loading = ref(false)
+  const testLoading = ref(false)
   const dialogVisible = ref(false)
   const formRef = ref<FormInstance>()
   const search = reactive({ name: '', type: '' })
@@ -138,7 +152,11 @@
 
   const rules: FormRules = {
     name: [{ required: true, message: '名称必填', trigger: 'blur' }],
-    type: [{ required: true, message: '类型必选', trigger: 'change' }]
+    type: [{ required: true, message: '类型必选', trigger: 'change' }],
+    'config.host': [{ required: true, message: '主机必填', trigger: 'blur' }],
+    'config.database': [{ required: true, message: '数据库必填', trigger: 'blur' }],
+    'config.username': [{ required: true, message: '用户名必填', trigger: 'blur' }],
+    'config.url': [{ required: true, message: 'URL 必填', trigger: 'blur' }]
   }
 
   const mysqlDefaults = () => ({
@@ -148,6 +166,13 @@
     username: '',
     password: '',
     charset: 'utf8mb4'
+  })
+
+  const httpDefaults = () => ({
+    url: '',
+    method: 'GET',
+    headers: {},
+    params: {}
   })
 
   const loadData = async () => {
@@ -189,6 +214,13 @@
     return { ...form, config }
   }
 
+  const onDatasourceTypeChange = () => {
+    form.config = form.type === 'mysql' ? mysqlDefaults() : httpDefaults()
+    headersText.value = '{}'
+    paramsText.value = '{}'
+    formRef.value?.clearValidate()
+  }
+
   const submit = async () => {
     await formRef.value?.validate()
     const payload = buildPayload()
@@ -203,8 +235,17 @@
   }
 
   const test = async (row: any) => {
-    await api.test(row.id ? { id: row.id } : buildPayload())
-    ElMessage.success('连接成功')
+    const isFormTesting = row === form
+    if (isFormTesting) {
+      await formRef.value?.validate()
+      testLoading.value = true
+    }
+    try {
+      await api.test(isFormTesting ? buildPayload() : { id: row.id })
+      ElMessage.success('连接成功')
+    } finally {
+      if (isFormTesting) testLoading.value = false
+    }
   }
 
   const changeStatus = async (row: any, status: number) => {

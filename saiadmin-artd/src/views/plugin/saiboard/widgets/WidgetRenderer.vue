@@ -1,5 +1,5 @@
 <template>
-  <div class="board-widget" :class="{ 'is-runtime': runtime }">
+  <div ref="widgetRef" class="board-widget" :class="{ 'is-runtime': runtime }">
     <div v-if="component.title" class="widget-title">{{ component.title }}</div>
     <div class="widget-body">
       <ArtBarChart
@@ -23,6 +23,9 @@
         v-bind="component.option"
       />
       <div v-else-if="component.type === 'stat-number'" class="metric">
+        <span v-if="component.option?.prefix" class="metric-prefix">{{
+          component.option.prefix
+        }}</span>
         <span class="metric-value">{{ metricValue }}</span>
         <span class="metric-unit">{{ component.option?.unit || '' }}</span>
       </div>
@@ -31,7 +34,10 @@
         :data="tableRows"
         size="small"
         height="100%"
+        :stripe="Boolean(component.option?.rowStripe)"
+        empty-text="暂无数据"
       >
+        <ElTableColumn v-if="component.option?.showIndex" type="index" label="#" width="52" />
         <ElTableColumn
           v-for="column in tableColumns"
           :key="column"
@@ -52,6 +58,8 @@
   import ArtRingChart from '@/components/core/charts/art-ring-chart/index.vue'
   import type { BoardComponent } from './types'
 
+  const chartTypes = new Set(['art-bar-chart', 'art-line-chart', 'art-ring-chart'])
+
   const props = withDefaults(
     defineProps<{
       component: BoardComponent
@@ -66,7 +74,15 @@
     }
   )
 
-  const tableRows = computed(() => props.rows || [])
+  const widgetRef = ref<HTMLElement>()
+  let widgetResizeObserver: ResizeObserver | undefined
+  let chartResizeFrame = 0
+
+  const tableRows = computed(() => {
+    const rows = props.rows || []
+    const maxRows = Number(props.component.option?.maxRows || 0)
+    return maxRows > 0 ? rows.slice(0, maxRows) : rows
+  })
   const mapping = computed(() => props.component.dataset?.mapping || {})
   const hasBoundDataset = computed(() => Number(props.component.dataset?.queryTemplateId || 0) > 0)
   const tableColumns = computed(() => {
@@ -115,8 +131,29 @@
     if (!tableRows.value.length) return hasBoundDataset.value ? '-' : '0'
     const raw = tableRows.value[0][valueKey.value]
     const value = Number(raw ?? 0)
-    return Number.isFinite(value) ? value.toLocaleString() : String(raw ?? '-')
+    if (!Number.isFinite(value)) return String(raw ?? '-')
+
+    const decimals = normalizeDecimals(props.component.option?.decimals)
+    return value.toLocaleString(undefined, {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals
+    })
   })
+
+  function normalizeDecimals(value: unknown) {
+    const decimals = Number(value ?? 0)
+    if (!Number.isFinite(decimals)) return 0
+    return Math.min(6, Math.max(0, Math.round(decimals)))
+  }
+
+  function notifyChartResize() {
+    if (!chartTypes.has(props.component.type)) return
+    if (chartResizeFrame) window.cancelAnimationFrame(chartResizeFrame)
+    chartResizeFrame = window.requestAnimationFrame(() => {
+      chartResizeFrame = 0
+      window.dispatchEvent(new Event('resize'))
+    })
+  }
 
   function findKey(mapped: string | undefined, preferred: string[]) {
     const first = tableRows.value[0] || {}
@@ -143,6 +180,24 @@
       'value'
     )
   }
+
+  onMounted(() => {
+    if (widgetRef.value && 'ResizeObserver' in window) {
+      widgetResizeObserver = new ResizeObserver(notifyChartResize)
+      widgetResizeObserver.observe(widgetRef.value)
+    }
+    notifyChartResize()
+  })
+
+  onBeforeUnmount(() => {
+    widgetResizeObserver?.disconnect()
+    if (chartResizeFrame) window.cancelAnimationFrame(chartResizeFrame)
+  })
+
+  watch(
+    () => [props.component.type, props.component.rect?.w, props.component.rect?.h],
+    notifyChartResize
+  )
 </script>
 
 <style scoped lang="scss">
@@ -183,19 +238,31 @@
     align-items: baseline;
     justify-content: center;
     height: 100%;
+    min-width: 0;
+    gap: 8px;
+    overflow: hidden;
     color: #f8fbff;
   }
 
   .metric-value {
+    min-width: 0;
+    overflow: hidden;
     font-size: 42px;
     font-weight: 700;
     line-height: 1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .metric-prefix,
+  .metric-unit {
+    flex: 0 0 auto;
+    font-size: 15px;
+    color: #8ab4f8;
   }
 
   .metric-unit {
-    margin-left: 8px;
-    font-size: 15px;
-    color: #8ab4f8;
+    margin-left: 0;
   }
 
   .widget-error,

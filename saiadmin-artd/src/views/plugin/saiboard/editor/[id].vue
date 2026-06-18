@@ -198,9 +198,40 @@
             <ElFormItem label="层级">
               <ElInputNumber v-model="selectedComponent.rect.z" :min="1" :max="999" />
             </ElFormItem>
-            <ElFormItem label="单位" v-if="selectedComponent.type === 'stat-number'">
-              <ElInput v-model="selectedComponent.option!.unit" />
-            </ElFormItem>
+            <template v-if="selectedComponent.type === 'stat-number'">
+              <ElFormItem label="前缀">
+                <ElInput v-model="selectedComponent.option!.prefix" placeholder="例如 ¥" />
+              </ElFormItem>
+              <ElFormItem label="小数位">
+                <ElInputNumber
+                  v-model="selectedComponent.option!.decimals"
+                  :min="0"
+                  :max="6"
+                  :step="1"
+                  step-strictly
+                />
+              </ElFormItem>
+              <ElFormItem label="单位">
+                <ElInput v-model="selectedComponent.option!.unit" placeholder="例如 单、元、%" />
+              </ElFormItem>
+            </template>
+            <template v-if="selectedComponent.type === 'data-table'">
+              <ElFormItem label="最大行数">
+                <ElInputNumber
+                  v-model="selectedComponent.option!.maxRows"
+                  :min="0"
+                  :max="1000"
+                  :step="1"
+                  step-strictly
+                />
+              </ElFormItem>
+              <ElFormItem label="序号列">
+                <ElSwitch v-model="selectedComponent.option!.showIndex" />
+              </ElFormItem>
+              <ElFormItem label="斑马纹">
+                <ElSwitch v-model="selectedComponent.option!.rowStripe" />
+              </ElFormItem>
+            </template>
             <ElFormItem>
               <ElSpace>
                 <ElButton @click="bringToFront">置顶</ElButton>
@@ -236,7 +267,7 @@
   import api from '../api/screen'
   import templateApi from '../api/query-template'
   import DraggableItem from '../widgets/DraggableItem.vue'
-  import { createDefaultComponent, widgetRegistry } from '../widgets/registry'
+  import { createDefaultComponent, getWidgetMeta, widgetRegistry } from '../widgets/registry'
   import type { BoardComponent, BoardLayout } from '../widgets/types'
 
   interface PreviewState {
@@ -337,7 +368,7 @@
             z: Number(component.rect?.z || 1)
           },
           dataset: normalizeDataset(component.dataset),
-          option: component.option || {}
+          option: normalizeOption(component.type || 'art-bar-chart', component.option)
         }))
       : []
   })
@@ -397,7 +428,13 @@
 
   const ensureDataset = (component: BoardComponent) => {
     component.dataset = normalizeDataset(component.dataset)
+    component.option = normalizeOption(component.type, component.option)
   }
+
+  const normalizeOption = (type: string, option: Record<string, any> = {}) => ({
+    ...(getWidgetMeta(type)?.defaultOption || {}),
+    ...(option || {})
+  })
 
   const componentRows = (component: BoardComponent) => {
     if (!component.dataset?.queryTemplateId) return sampleRows
@@ -517,6 +554,13 @@
   watch(selectedComponent, (component) => {
     if (component) ensureDataset(component)
   })
+
+  watch(
+    () => selectedComponent.value?.type,
+    () => {
+      if (selectedComponent.value) ensureDataset(selectedComponent.value)
+    }
+  )
 
   watch(() => [layout.canvas.width, layout.canvas.height], updateAutoZoom)
 </script>
