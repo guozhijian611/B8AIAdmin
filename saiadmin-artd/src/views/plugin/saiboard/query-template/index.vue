@@ -292,60 +292,140 @@
 
           <ElFormItem label="条件">
             <div class="config-list">
-              <div
-                v-for="(condition, index) in form.config.conditions"
-                :key="index"
-                class="config-row"
-              >
-                <ElSelect v-model="condition.field" filterable placeholder="字段">
-                  <ElOption
-                    v-for="item in conditionColumnOptions(condition)"
-                    :key="item.name"
-                    :label="item.name"
-                    :value="item.name"
+              <template v-for="(condition, index) in form.config.conditions" :key="index">
+                <div v-if="isConditionGroup(condition)" class="condition-group">
+                  <div class="condition-group__header">
+                    <ElSpace>
+                      <span class="condition-group__title">条件组</span>
+                      <ElSelect v-model="condition.logic" style="width: 130px">
+                        <ElOption
+                          v-for="item in conditionLogicOptions"
+                          :key="item.value"
+                          :label="item.label"
+                          :value="item.value"
+                        />
+                      </ElSelect>
+                    </ElSpace>
+                    <ElButton text type="danger" @click="removeCondition(index)">删除组</ElButton>
+                  </div>
+                  <div
+                    v-for="(child, childIndex) in condition.conditions"
+                    :key="childIndex"
+                    class="config-row"
+                  >
+                    <ElSelect v-model="child.field" filterable placeholder="字段">
+                      <ElOption
+                        v-for="item in conditionColumnOptions(child)"
+                        :key="item.name"
+                        :label="item.name"
+                        :value="item.name"
+                      />
+                    </ElSelect>
+                    <ElSelect
+                      v-model="child.op"
+                      placeholder="操作符"
+                      @change="onConditionOperatorChange(child)"
+                    >
+                      <ElOption
+                        v-for="item in operatorOptions"
+                        :key="item.value"
+                        :label="item.label"
+                        :value="item.value"
+                      />
+                    </ElSelect>
+                    <ElSelect
+                      v-if="child.op === 'time_range'"
+                      v-model="child.value"
+                      placeholder="选择时间范围"
+                    >
+                      <ElOption
+                        v-for="item in timeRangeOptions"
+                        :key="item.value"
+                        :label="item.label"
+                        :value="item.value"
+                      />
+                      <ElOption
+                        v-for="item in timeRangeParamOptions"
+                        :key="item.value"
+                        :label="item.label"
+                        :value="item.value"
+                      />
+                    </ElSelect>
+                    <ElInput
+                      v-else
+                      v-model="child.value"
+                      placeholder="值或 :参数名，in/between 可用逗号分隔"
+                    />
+                    <ElButton
+                      text
+                      type="danger"
+                      @click="removeGroupCondition(condition, childIndex)"
+                    >
+                      删除
+                    </ElButton>
+                  </div>
+                  <ElButton @click="addGroupCondition(condition)">
+                    <template #icon><ArtSvgIcon icon="ri:add-line" /></template>
+                    组内条件
+                  </ElButton>
+                </div>
+                <div v-else class="config-row">
+                  <ElSelect v-model="condition.field" filterable placeholder="字段">
+                    <ElOption
+                      v-for="item in conditionColumnOptions(condition)"
+                      :key="item.name"
+                      :label="item.name"
+                      :value="item.name"
+                    />
+                  </ElSelect>
+                  <ElSelect
+                    v-model="condition.op"
+                    placeholder="操作符"
+                    @change="onConditionOperatorChange(condition)"
+                  >
+                    <ElOption
+                      v-for="item in operatorOptions"
+                      :key="item.value"
+                      :label="item.label"
+                      :value="item.value"
+                    />
+                  </ElSelect>
+                  <ElSelect
+                    v-if="condition.op === 'time_range'"
+                    v-model="condition.value"
+                    placeholder="选择时间范围"
+                  >
+                    <ElOption
+                      v-for="item in timeRangeOptions"
+                      :key="item.value"
+                      :label="item.label"
+                      :value="item.value"
+                    />
+                    <ElOption
+                      v-for="item in timeRangeParamOptions"
+                      :key="item.value"
+                      :label="item.label"
+                      :value="item.value"
+                    />
+                  </ElSelect>
+                  <ElInput
+                    v-else
+                    v-model="condition.value"
+                    placeholder="值或 :参数名，in/between 可用逗号分隔"
                   />
-                </ElSelect>
-                <ElSelect
-                  v-model="condition.op"
-                  placeholder="操作符"
-                  @change="onConditionOperatorChange(condition)"
-                >
-                  <ElOption
-                    v-for="item in operatorOptions"
-                    :key="item.value"
-                    :label="item.label"
-                    :value="item.value"
-                  />
-                </ElSelect>
-                <ElSelect
-                  v-if="condition.op === 'time_range'"
-                  v-model="condition.value"
-                  placeholder="选择时间范围"
-                >
-                  <ElOption
-                    v-for="item in timeRangeOptions"
-                    :key="item.value"
-                    :label="item.label"
-                    :value="item.value"
-                  />
-                  <ElOption
-                    v-for="item in timeRangeParamOptions"
-                    :key="item.value"
-                    :label="item.label"
-                    :value="item.value"
-                  />
-                </ElSelect>
-                <ElInput
-                  v-else
-                  v-model="condition.value"
-                  placeholder="值或 :参数名，in/between 可用逗号分隔"
-                />
-                <ElButton text type="danger" @click="removeCondition(index)">删除</ElButton>
-              </div>
-              <ElButton @click="addCondition">
-                <template #icon><ArtSvgIcon icon="ri:add-line" /></template>
-                添加条件
-              </ElButton>
+                  <ElButton text type="danger" @click="removeCondition(index)">删除</ElButton>
+                </div>
+              </template>
+              <ElSpace wrap>
+                <ElButton @click="addCondition">
+                  <template #icon><ArtSvgIcon icon="ri:add-line" /></template>
+                  添加条件
+                </ElButton>
+                <ElButton @click="addConditionGroup">
+                  <template #icon><ArtSvgIcon icon="ri:git-branch-line" /></template>
+                  添加条件组
+                </ElButton>
+              </ElSpace>
             </div>
           </ElFormItem>
 
@@ -453,6 +533,20 @@
     required: boolean
   }
 
+  interface QueryCondition {
+    field: string
+    op: string
+    value: any
+  }
+
+  interface QueryConditionGroup {
+    type: 'group'
+    logic: 'and' | 'or'
+    conditions: QueryCondition[]
+  }
+
+  type QueryConditionItem = QueryCondition | QueryConditionGroup
+
   const rows = ref<any[]>([])
   const datasourceOptions = ref<DatasourceOption[]>([])
   const tableOptions = ref<{ name: string }[]>([])
@@ -491,6 +585,10 @@
     { label: '在列表 in', value: 'in' },
     { label: '区间 between', value: 'between' },
     { label: '时间范围', value: 'time_range' }
+  ]
+  const conditionLogicOptions = [
+    { label: '全部满足 AND', value: 'and' },
+    { label: '任一满足 OR', value: 'or' }
   ]
   const timeRangeOptions = [
     { label: '今天', value: 'today' },
@@ -593,7 +691,7 @@
 
   const normalizeConfig = (type: string, config: Record<string, any> = {}) => {
     const next = { ...defaultConfig(type), ...(config || {}) }
-    if (!Array.isArray(next.conditions)) next.conditions = []
+    next.conditions = normalizeConditions(next.conditions, false)
     if (type !== 'http_passthrough') {
       next.params = normalizeParamRows(next.params)
     }
@@ -689,6 +787,7 @@
     form.config.field_aliases = []
     form.config.computed_fields = []
     form.config.order = []
+    form.config.conditions = []
     form.config.dimension = ''
     form.config.metrics = [{ alias: '数量', aggregate: 'count', field: '' }]
     await loadSchema(form.config.table)
@@ -763,7 +862,15 @@
   }
 
   const addCondition = () => {
-    form.config.conditions.push({ field: '', op: '=', value: '' })
+    form.config.conditions.push(createCondition())
+  }
+
+  const addConditionGroup = () => {
+    form.config.conditions.push(createConditionGroup())
+  }
+
+  const addGroupCondition = (group: QueryConditionGroup) => {
+    group.conditions.push(createCondition())
   }
 
   const addParam = () => {
@@ -844,6 +951,13 @@
     form.config.conditions.splice(index, 1)
   }
 
+  const removeGroupCondition = (group: QueryConditionGroup, index: number) => {
+    group.conditions.splice(index, 1)
+    if (!group.conditions.length) {
+      group.conditions.push(createCondition())
+    }
+  }
+
   const addOrder = () => {
     form.config.order.push({ field: '', direction: 'asc' })
   }
@@ -857,9 +971,80 @@
   const datasetTypeLabel = (value: string) =>
     [...mysqlDatasetTypes, ...httpDatasetTypes].find((item) => item.value === value)?.label || value
 
-  function normalizeConditions(conditions: any[]) {
+  function createCondition(): QueryCondition {
+    return { field: '', op: '=', value: '' }
+  }
+
+  function createConditionGroup(): QueryConditionGroup {
+    return { type: 'group', logic: 'or', conditions: [createCondition()] }
+  }
+
+  function isConditionGroup(condition: any): condition is QueryConditionGroup {
+    return (
+      condition &&
+      typeof condition === 'object' &&
+      (condition.type === 'group' ||
+        Array.isArray(condition.conditions) ||
+        Array.isArray(condition.children))
+    )
+  }
+
+  function normalizeConditions(conditions: any, strict = true): QueryConditionItem[] {
+    if (isConditionGroup(conditions)) {
+      const group = normalizeConditionGroup(conditions, strict)
+      return group ? [group] : []
+    }
     if (!Array.isArray(conditions)) return []
-    return conditions.filter((item) => item?.field && item?.op && item?.value !== '')
+
+    const result: QueryConditionItem[] = []
+    for (const item of conditions) {
+      const next = isConditionGroup(item)
+        ? normalizeConditionGroup(item, strict)
+        : normalizeConditionRow(item, strict)
+      if (next) result.push(next)
+    }
+
+    return result
+  }
+
+  function normalizeConditionGroup(group: any, strict: boolean): QueryConditionGroup | null {
+    const children = normalizeConditions(group.conditions || group.children || [], strict).flatMap(
+      (item) => (isConditionGroup(item) ? item.conditions : [item])
+    )
+    if (strict && !children.length) return null
+
+    return {
+      type: 'group',
+      logic: normalizeConditionLogic(group.logic),
+      conditions: children.length ? children : [createCondition()]
+    }
+  }
+
+  function normalizeConditionRow(item: any, strict: boolean): QueryCondition | null {
+    const value = normalizeConditionValue(item?.value)
+    const condition = {
+      field: String(item?.field || '').trim(),
+      op: normalizeConditionOperator(item?.op),
+      value
+    }
+    const hasValue = Array.isArray(value) ? value.length > 0 : value !== ''
+    const filled = condition.field && condition.op && hasValue
+    if (strict ? !filled : !condition.field && !hasValue) return null
+
+    return condition
+  }
+
+  function normalizeConditionLogic(value: string) {
+    return value === 'or' ? 'or' : 'and'
+  }
+
+  function normalizeConditionOperator(value: string) {
+    return operatorOptions.some((item) => item.value === value) ? value : '='
+  }
+
+  function normalizeConditionValue(value: any) {
+    if (Array.isArray(value)) return value
+    return String(value ?? '').trim()
   }
 
   function normalizeParamRows(rows: any = [], strict = false): TemplateParam[] {
@@ -1027,6 +1212,25 @@
     grid-template-columns: minmax(160px, 1fr) 130px minmax(220px, 2fr) 64px;
     gap: 8px;
     margin-bottom: 8px;
+  }
+
+  .condition-group {
+    padding: 10px;
+    margin-bottom: 8px;
+    border: 1px solid var(--default-border);
+    border-radius: 6px;
+  }
+
+  .condition-group__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  .condition-group__title {
+    font-size: 13px;
+    font-weight: 600;
   }
 
   .alias-row,

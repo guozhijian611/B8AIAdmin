@@ -703,6 +703,36 @@ class SqlBuilder
         if (!is_array($conditions) || $conditions === []) {
             return ['', []];
         }
+        if (!array_is_list($conditions)) {
+            if (!$this->isConditionGroup($conditions)) {
+                throw new InvalidArgumentException('查询条件配置不正确');
+            }
+            $conditions = [$conditions];
+        }
+
+        [$parts, $bindings] = $this->buildConditionParts(
+            $columns,
+            $conditions,
+            $columnTypes,
+            $templateParams
+        );
+
+        return $parts === [] ? ['', []] : [' WHERE ' . implode(' AND ', $parts), $bindings];
+    }
+
+    private function buildConditionParts(
+        array $columns,
+        array $conditions,
+        array $columnTypes,
+        array $templateParams,
+        int $depth = 0
+    ): array {
+        if ($depth > 3) {
+            throw new InvalidArgumentException('查询条件分组最多支持 3 层');
+        }
+        if (count($conditions) > 50) {
+            throw new InvalidArgumentException('单层查询条件最多支持 50 项');
+        }
 
         $parts = [];
         $bindings = [];
@@ -711,28 +741,92 @@ class SqlBuilder
                 continue;
             }
 
-            $field = trim((string) ($condition['field'] ?? ''));
-            if (!$this->isIdentifier($field) || !in_array($field, $columns, true)) {
-                throw new InvalidArgumentException("条件字段 {$field} 不存在或不允许访问");
-            }
+            if ($this->isConditionGroup($condition)) {
+                [$groupParts, $groupBindings] = $this->buildConditionParts(
+                    $columns,
+                    $this->conditionChildren($condition),
+                    $columnTypes,
+                    $templateParams,
+                    $depth + 1
+                );
+                if ($groupParts === []) {
+                    continue;
+                }
 
-            $operator = strtolower(trim((string) ($condition['op'] ?? '=')));
-            $value = $this->resolveConditionValue($condition['value'] ?? null, $templateParams);
-            if ($value === null || $value === '') {
+                $logic = $this->normalizeConditionLogic($condition['logic'] ?? 'and');
+                $parts[] = '(' . implode(" {$logic} ", $groupParts) . ')';
+                array_push($bindings, ...$groupBindings);
                 continue;
             }
 
-            match ($operator) {
-                '=', '!=', '>', '>=', '<', '<=' => $this->appendSimpleWhere($parts, $bindings, $field, $operator, $value),
-                'like' => $this->appendLikeWhere($parts, $bindings, $field, $value),
-                'in' => $this->appendInWhere($parts, $bindings, $field, $value),
-                'between' => $this->appendBetweenWhere($parts, $bindings, $field, $value),
-                'time_range' => $this->appendTimeRangeWhere($parts, $bindings, $field, $value, $columnTypes[$field] ?? ''),
-                default => throw new InvalidArgumentException("条件操作符 {$operator} 不支持"),
-            };
+            [$part, $partBindings] = $this->buildSingleCondition(
+                $columns,
+                $condition,
+                $columnTypes,
+                $templateParams
+            );
+            if ($part === '') {
+                continue;
+            }
+
+            $parts[] = $part;
+            array_push($bindings, ...$partBindings);
         }
 
-        return $parts === [] ? ['', []] : [' WHERE ' . implode(' AND ', $parts), $bindings];
+        return [$parts, $bindings];
+    }
+
+    private function isConditionGroup(array $condition): bool
+    {
+        return ($condition['type'] ?? '') === 'group'
+            || isset($condition['conditions'])
+            || isset($condition['children']);
+    }
+
+    private function conditionChildren(array $condition): array
+    {
+        $children = $condition['conditions'] ?? $condition['children'] ?? [];
+        if (!is_array($children) || !array_is_list($children)) {
+            throw new InvalidArgumentException('查询条件分组配置不正确');
+        }
+
+        return $children;
+    }
+
+    private function normalizeConditionLogic(mixed $logic): string
+    {
+        return strtolower((string) $logic) === 'or' ? 'OR' : 'AND';
+    }
+
+    private function buildSingleCondition(
+        array $columns,
+        array $condition,
+        array $columnTypes,
+        array $templateParams
+    ): array {
+        $field = trim((string) ($condition['field'] ?? ''));
+        if (!$this->isIdentifier($field) || !in_array($field, $columns, true)) {
+            throw new InvalidArgumentException("条件字段 {$field} 不存在或不允许访问");
+        }
+
+        $operator = strtolower(trim((string) ($condition['op'] ?? '=')));
+        $value = $this->resolveConditionValue($condition['value'] ?? null, $templateParams);
+        if ($value === null || $value === '') {
+            return ['', []];
+        }
+
+        $parts = [];
+        $bindings = [];
+        match ($operator) {
+            '=', '!=', '>', '>=', '<', '<=' => $this->appendSimpleWhere($parts, $bindings, $field, $operator, $value),
+            'like' => $this->appendLikeWhere($parts, $bindings, $field, $value),
+            'in' => $this->appendInWhere($parts, $bindings, $field, $value),
+            'between' => $this->appendBetweenWhere($parts, $bindings, $field, $value),
+            'time_range' => $this->appendTimeRangeWhere($parts, $bindings, $field, $value, $columnTypes[$field] ?? ''),
+            default => throw new InvalidArgumentException("条件操作符 {$operator} 不支持"),
+        };
+
+        return [$parts[0] ?? '', $bindings];
     }
 
     private function appendSimpleWhere(array &$parts, array &$bindings, string $field, string $operator, mixed $value): void
@@ -792,7 +886,7 @@ class SqlBuilder
         }
 
         [$start, $end] = $this->timeRangeBounds((string) $value);
-        $parts[] = "`{$field}` >= ? AND `{$field}` < ?";
+        $parts[] = "(`{$field}` >= ? AND `{$field}` < ?)";
         $bindings[] = $start->format('Y-m-d H:i:s');
         $bindings[] = $end->format('Y-m-d H:i:s');
     }

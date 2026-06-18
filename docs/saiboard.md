@@ -290,7 +290,7 @@ getScreen / data 接口入口：
 - `table_raw` 可选返回字段、字段别名、计算字段、条件、排序和 limit。
 - `table_count` 可选条件，统一返回 `{rows, total}`，其中 `total` 是计数值。
 - `table_aggregate` 可选维度字段、日期粒度、多个聚合指标、条件、排序和 limit，统一返回 `{rows, total}`；每行结构为 `label + 指标列`，指标最多 8 项，非 `count` 指标必须选择数值字段。
-- 条件支持 `= / != / > / >= / < / <= / like / in / between / time_range`。`time_range` 只允许日期 / 时间字段，`value` 可用 `today`、`yesterday`、`last_7_days`、`last_30_days`、`this_week`、`this_month`、`last_month`、`this_year`。
+- 条件支持 `= / != / > / >= / < / <= / like / in / between / time_range`，并支持条件组内 `AND / OR` 组合；顶层条件按 `AND` 合并，老的平铺条件数组继续兼容。`time_range` 只允许日期 / 时间字段，`value` 可用 `today`、`yesterday`、`last_7_days`、`last_30_days`、`this_week`、`this_month`、`last_month`、`this_year`。
 - MySQL 查询模板支持 `params[]` 参数白名单；条件值可写 `:param_name`，预览和公开运行时传入的同名参数会按 `string` / `number` / `date` / `datetime` / `time_range` 类型清洗后再进入参数绑定。未声明参数、非法参数名、类型不匹配或必填参数缺失都会被拒绝；URL 上的未知参数会被忽略。
 - `table_raw.field_aliases` 用真实字段名映射输出字段名；`computed_fields` 支持数值字段、数字、括号、`+ - * /` 四则运算，以及 `round` / `abs` / `ceil` / `floor` 安全函数白名单，不开放裸 SQL、任意函数、子查询或条件表达式。
 - HTTP 数据源使用 `http_passthrough`，配置路径和请求参数 JSON。
@@ -307,11 +307,25 @@ getScreen / data 接口入口：
       "type": "string",
       "default": "wechat",
       "required": false
+    },
+    {
+      "name": "keyword",
+      "label": "订单关键词",
+      "type": "string",
+      "default": "",
+      "required": false
     }
   ],
   "conditions": [
     { "field": "create_time", "op": "time_range", "value": "last_7_days" },
-    { "field": "pay_method", "op": "=", "value": ":pay_method" }
+    {
+      "type": "group",
+      "logic": "or",
+      "conditions": [
+        { "field": "pay_method", "op": "=", "value": ":pay_method" },
+        { "field": "order_name", "op": "like", "value": ":keyword" }
+      ]
+    }
   ]
 }
 ```
@@ -425,15 +439,14 @@ php webman b8:migrate
 | 后端 | `DatasourceController::test` 支持新增态 payload 测试校验，连接失败写入 `last_error` 并返回稳定错误消息。 |
 | 后端 | `table_aggregate` 支持 `metrics[]` 多指标聚合，指标 alias 白名单化、最多 8 项，排序只允许维度或已校验指标。 |
 | 后端 | `table_raw.computed_fields` 支持 `round` / `abs` / `ceil` / `floor` 安全函数白名单，仍禁止裸 SQL、任意函数、子查询和条件表达式。 |
-| 后端/前端 | MySQL 查询模板支持 `params[]` 参数白名单和 `:param_name` 条件占位符；预览与公开运行时按白名单参数清洗后执行。 |
+| 后端/前端 | MySQL 查询模板支持 `params[]` 参数白名单、`:param_name` 条件占位符、条件分组和组内 `AND / OR`；预览与公开运行时按白名单参数清洗后执行。 |
 | 前端 | `DraggableItem.vue`（封装 `vue3-draggable-resizable`）+ `widgets/` 注册表，复用 `art-*` 图表（柱/折线/横向柱/环形/雷达/散点 + 单值指标 / 表格）并提供 CSS 装饰边框。 |
 | 前端 | 拖拽编辑器 + 编辑态真实数据预览 / 字段映射 + 查询模板表单化配置 + 对外运行时页（静态 `/screen/:code`、适配模式、is_public / token 鉴权）。 |
 | 前端 | 数据源新增/编辑态测试前先做表单校验；查询模板支持多指标聚合配置；指标组件支持前缀 / 小数位 / 单位，表格支持最大行数 / 序号列 / 斑马纹，图表组件缩放后自动触发 resize。 |
 
 ### P1 能力增强（部分完成）
 
-- 已完成：主题预设、背景图与图片适配；横向柱图 / 雷达图 / 散点图；CSS 装饰边框；新增图表字段映射；装饰组件运行时免取数。
-- 未完成：查询模板条件分组 / OR 组合等高级条件。
+- 已完成：主题预设、背景图与图片适配；横向柱图 / 雷达图 / 散点图；CSS 装饰边框；新增图表字段映射；装饰组件运行时免取数；查询模板条件分组 / OR 组合。
 - 未完成：地图、轮播、更多图表样式和更多装饰组件。
 - 未完成：表格列宽 / 对齐 / 字段别名展示等细项。
 - 未完成：公开大屏高并发下的后端轮询频率下限、互斥回源和更细缓存策略。
