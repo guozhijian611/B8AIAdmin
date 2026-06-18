@@ -37,6 +37,12 @@ export const staticRoutes: AppRouteRecordRaw[] = [
     meta: { title: 'menus.forgetPassword.title', isHideTab: true }
   },
   {
+    path: '/screen/:code',
+    name: 'SaiboardRuntime',
+    component: () => import('@views/plugin/saiboard/runtime/[code].vue'),
+    meta: { title: 'SAI Board', isHideTab: true, isFullPage: true }
+  },
+  {
     path: '/403',
     name: 'Exception403',
     component: () => import('@views/exception/403/index.vue'),

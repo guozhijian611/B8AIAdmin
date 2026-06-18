@@ -1,6 +1,6 @@
-# SAI Board 大屏可视化插件说明（待开发）
+# SAI Board 大屏可视化插件说明（P0 已落地）
 
-本文档说明 `saiboard` 插件在 B8AIadmin 中的功能边界、技术选型、数据库设计、后端分层、前端集成、鉴权模型和开发计划。**本插件尚未实现，文档作为开发设计依据，落地时以实际代码和迁移为准。**
+本文档说明 `saiboard` 插件在 B8AIadmin 中的功能边界、技术选型、数据库设计、后端分层、前端集成、鉴权模型和后续计划。当前已完成 P0 最小可用版本，实际入口以 `server/plugin/saiboard`、`saiadmin-artd/src/views/plugin/saiboard` 和 `Database/migrations/20260619000100_add_saiboard_plugin.php` 为准。
 
 > 设计第一原则：**尽可能简单**。只用项目已有依赖（Vue 3 + Element Plus + echarts 6），不引入 go-view、naive-ui、DataV 等需要长期 fork 维护的重型前端工程；**编辑器与对外运行时共用同一套图表渲染组件**，保证「编辑所见 = 运行所得」，避免双引擎割裂。
 
@@ -14,10 +14,10 @@
 | 数据源管理 | `server/plugin/saiboard/app/admin/controller/DatasourceController.php` | 维护 MySQL/HTTP 数据源连接配置，支持连接测试。 |
 | 查询模板 | `server/plugin/saiboard/app/admin/controller/QueryTemplateController.php` | 维护预置取数模板（原始行、计数、HTTP 透传），不暴露裸 SQL。 |
 | 拖拽编辑器 | `saiadmin-artd/src/views/plugin/saiboard/editor/` | Element Plus 外壳 + 薄拖拽层，组件拖拽布局、绑定查询模板，画布直接渲染真实图表组件。 |
-| 对外运行时 | `saiadmin-artd/src/views/plugin/saiboard/runtime/` | 无布局菜单路由，复用**同一套** `art-*` 图表组件，全屏等比缩放渲染。 |
+| 对外运行时 | `saiadmin-artd/src/views/plugin/saiboard/runtime/` | 前端静态公开路由 `/screen/:code`，复用**同一套** `art-*` 图表组件，全屏等比缩放渲染。 |
 | 对外取数 | `server/plugin/saiboard/app/api/controller/BoardController.php` | 按组件绑定的查询模板执行数据源，返回脱敏结果。 |
 
-后台编辑器与数据源管理都在 `saiadmin-artd/src/views/plugin/saiboard/`（Element Plus，主应用内），对外运行时也在该目录下的 `runtime/`，通过后台**无布局菜单**对外访问，后端插件位于 `server/plugin/saiboard`。
+后台编辑器与数据源管理都在 `saiadmin-artd/src/views/plugin/saiboard/`（Element Plus，主应用内），对外运行时也在该目录下的 `runtime/`，通过 `staticRoutes.ts` 暴露 `/screen/:code` 静态路由，后端插件位于 `server/plugin/saiboard`。
 
 ## 整体架构
 
@@ -28,7 +28,7 @@
 └──────────────────────────┬──────────────────────────────────────────┘
                            │ layout JSON（仅组件树+绑定关系）入库
                            ▼
-┌──────────────── 对外运行时（无布局菜单路由，复用同一套 art-* 组件）────────┐
+┌──────────────── 对外运行时（前端静态公开路由，复用同一套 art-* 组件）──────┐
 │ /screen/:code → 后端下发大屏配置（脱敏：不含 DB 密码/token）             │
 │   ↓ 组件按 refresh 轮询                                                 │
 │ /app/saiboard/api/data?code=xx&cid=w_1 → 后端代执行                     │
@@ -52,7 +52,7 @@
 | 数据存储 | 自定义 layout JSON（组件树 + 绑定关系） | 结构极简，只存「放了哪些组件、各自绑哪个查询模板」。 |
 | SQL 安全 | 预置查询模板，不暴露裸 SQL | 用户选表 + 字段 + 条件，后端拼参数化 SELECT，从源头杜绝注入。 |
 | 鉴权粒度 | 大屏级：公开 / token / 登录 | 简单清晰，覆盖展厅公开、客户专属、内部报表三类场景。 |
-| 运行时页 | 后台前端项目内，无布局菜单路由 | 复用构建链，一套代码；后台直接配「无布局菜单」对外，无需第二个前端工程。 |
+| 运行时页 | 后台前端项目内，静态公开路由 `/screen/:code` | 复用构建链，一套代码；无需第二个前端工程。 |
 
 > **被刻意放弃的选项**：go-view（需 fork 自维护、naive-ui 污染、编辑/运行双引擎割裂）、DataV-Vue3 装饰组件（社区非官方分支）。装饰边框等纯视觉效果如确有需要，放到 P1 用 CSS/SVG 自实现，不绑第三方分支。
 
@@ -82,9 +82,11 @@ server/plugin/saiboard/
 │   │   └── SqlBuilder.php           ← 预置模板拼装（参数化 SELECT，替代裸 SQL）
 │   └── model/            Screen, Datasource, QueryTemplate
 ├── config/
-│   ├── route.php         ← 对外路由 + admin 路由
+│   ├── route.php         ← 显式注册 admin 路由 + api 路由
 │   └── middleware.php    ← admin: CheckLogin+CheckAuth+SystemLog；api: 空（自鉴权）
 ```
+
+数据库结构、菜单和权限由 Phinx 迁移 `Database/migrations/20260619000100_add_saiboard_plugin.php` 维护，不使用插件 `install.sql`。
 
 ### 前端
 
@@ -95,12 +97,12 @@ saiadmin-artd/src/views/plugin/saiboard/
 ├── datasource/     数据源管理（含测试连接 + 查询模板子管理）
 ├── editor/         拖拽编辑器（Element Plus 外壳 + DraggableItem + art-* 画布）
 │   └── [id].vue
-├── runtime/        对外运行时（无布局菜单路由，复用 widgets/）
+├── runtime/        对外运行时（静态 /screen/:code 路由，复用 widgets/）
 │   └── [code].vue
 └── widgets/        大屏组件注册表 + DraggableItem.vue（封装 vue3-draggable-resizable，编辑器与运行时共用）
 ```
 
-> 编辑器与运行时都是主应用里的普通 Element Plus 页面：编辑器是带后台布局的菜单页，运行时配成**无布局菜单**（并加入免登录白名单，供对外公开访问），渲染组件全部复用 `widgets/`，无独立工程、无特殊构建处理。
+`/screen/:code` 在 `saiadmin-artd/src/router/routes/staticRoutes.ts` 中显式注册，静态路由不依赖后台动态菜单和登录态；页面级是否允许取数由后端 `BoardController` 按大屏配置判断。后台动态菜单只负责「大屏管理 / 数据源管理 / 查询模板 / 大屏编辑器」等管理入口。
 
 ## 数据库设计
 
@@ -215,15 +217,15 @@ saiadmin-artd/src/views/plugin/saiboard/
 
 **`DataSourceExecutor`**
 
-- `mysql`：`Db::connect($config)` 临时连接（按数据源配置即时建连、用完释放），执行 `SqlBuilder` 产出的 SELECT，返回 rows。
-- `http`：Workerman HTTP 客户端，按 config（含自定义请求头）发请求，解析 JSON；**发请求前做 SSRF 校验**。
-- 带 `cache_ttl` **redis** 缓存（Webman 多进程下不用文件缓存），缓存键含 `query_template_id` + 参数指纹，防高频轮询打爆源库，并发回源加互斥锁防击穿。
+- `mysql`：按数据源配置即时创建 PDO 连接，执行 `SqlBuilder` 产出的参数化 SELECT，返回 rows。
+- `http`：只支持 GET，按数据源 config 和模板 config 拼 URL，携带自定义请求头，使用 curl（无 curl 时降级 `file_get_contents`）请求 JSON；**发请求前做 SSRF 校验**。
+- 支持 `cache_ttl` 通过 `support\think\Cache` 缓存结果，缓存键含 `query_template_id`、数据源配置和模板配置指纹，降低运行时轮询压力。
 
 **`SqlBuilder`**
 
 - 输入：`dataset_type` + `config`（表名、字段、条件、排序、limit）。
 - 输出：**参数化** SELECT。
-- 表名、字段名走**白名单校验**：只能是指定 datasource 库里真实存在的表 / 列（启动时按数据源缓存一份 `information_schema` 表列清单）。
+- 表名、字段名走**白名单校验**：只能是指定 datasource 库里真实存在的表 / 列，运行时通过 `SHOW TABLES` / `SHOW COLUMNS` 复核。
 - 强烈建议生产仍给数据源配**只读 MySQL 账号**，作为第二道防线。
 
 ## 安全设计
@@ -234,7 +236,7 @@ saiadmin-artd/src/views/plugin/saiboard/
 | 越权取数（IDOR） | `data` 接口以 `code + cid` 为键，组件绑定的 `queryTemplateId` 由服务端从该大屏 `layout` 解析，**前端不能指定任意模板/数据源 id**。 |
 | SSRF（HTTP 数据源） | 后端代发 GET 前解析目标域名 → 拒绝内网 / 环回 / 链路本地地址（`127.0.0.0/8`、`10/8`、`172.16/12`、`192.168/16`、`169.254/16`、`::1` 等）与云元数据地址；可选出网域名白名单。 |
 | 密钥泄露 | 数据源 `config`（DB 密码、请求头 token）只在后端持有，`getScreen` 下发时剥离。 |
-| 公开大屏被刷 | redis 缓存 + 互斥回源；轮询频率下限在后端兜底，避免前端配过低 `refresh`。 |
+| 公开大屏被刷 | `cache_ttl` 通过 Webman Cache 缓存结果；前端组件按 `refresh` 轮询，后续可补后端频率下限和互斥回源。 |
 | 日志脱敏 | 连接配置、token、Bearer 在日志/调试页脱敏，仅 `last_error` 存非敏感错误摘要。 |
 
 ## 鉴权模型
@@ -260,9 +262,9 @@ getScreen / data 接口入口：
 - 保存写 `draft_layout`；点「发布」才拷贝到 `layout` 上线。
 - 编辑器内不取真实数据可用占位/示例数据预览，避免编辑态频繁回源。
 
-### 对外运行时页 `/screen/:code`（无布局菜单路由，复用 widgets/）
+### 对外运行时页 `/screen/:code`（静态公开路由，复用 widgets/）
 
-- 后台配成**无布局菜单**并加入免登录白名单（对外公开访问），不进后台布局；页面级是否放行交给后端 `data` 接口按大屏配置判定。
+- 在 `staticRoutes.ts` 显式注册，不进后台布局、不依赖动态菜单；页面级是否放行交给后端 `getScreen` / `data` 接口按大屏配置判定。
 - 复用 `widgets/` 同一套组件，外层只读容器；按 `screen.width/height` 设计稿做**整屏等比缩放**（`transform: scale`，监听 resize），适配任意投屏分辨率。
 - 按各组件 `dataset.refresh` 轮询 `/data`；深色科技风默认主题，配色在 `screen.bg_config`。
 
@@ -301,19 +303,19 @@ getScreen / data 接口入口：
 }
 ```
 
-## 安装和迁移（计划）
+## 安装和迁移（已落地）
 
-前端只新增**一个轻量组件库** `vue3-draggable-resizable`：图表用已有 echarts 6 + `art-*` 组件，UI 用已有 Element Plus，拖拽/缩放/对齐线由该库提供。
+前端已新增**一个轻量组件库** `vue3-draggable-resizable@1.6.5`：图表用已有 echarts 6 + `art-*` 组件，UI 用已有 Element Plus，拖拽/缩放由该库提供。
 
 ```bash
 cd server
-composer install   # 如缺 Workerman HTTP 客户端，补该依赖；其余无新增
+composer install
 
 cd ../saiadmin-artd
-pnpm add vue3-draggable-resizable   # 唯一新增前端依赖（轻量，无 go-view / naive-ui / DataV）
+pnpm install
 ```
 
-数据库结构和预设数据由 Phinx 迁移维护，文件放在 `Database/migrations/`：
+数据库结构和预设数据由 Phinx 迁移 `Database/migrations/20260619000100_add_saiboard_plugin.php` 维护：
 
 ```bash
 cd server
@@ -322,7 +324,7 @@ php webman b8:migrate --dry-run
 php webman b8:migrate
 ```
 
-迁移需包含：
+迁移包含：
 
 - 建表 `saiboard_datasource` / `saiboard_screen` / `saiboard_query_template`，幂等。
 - 后台菜单「大屏管理 / 数据源管理 / 查询模板 / 大屏编辑器」，权限 slug 见后端分层表。
@@ -330,15 +332,15 @@ php webman b8:migrate
 
 ## 开发计划
 
-### P0 最小可用（打通全链路）
+### P0 最小可用（已完成）
 
-| 模块 | 内容 |
+| 模块 | 已落地内容 |
 | --- | --- |
 | 数据库 | 3 张表（含 `draft_layout`/`layout` 分离）+ Phinx 迁移（含菜单权限）。 |
-| 后端 | `SqlBuilder`（`table_raw` / `table_count`）+ `DataSourceExecutor`（mysql / http + SSRF 防护 + redis 缓存）。 |
+| 后端 | `SqlBuilder`（`table_raw` / `table_count`）+ `DataSourceExecutor`（mysql / http + SSRF 防护 + Cache 缓存）。 |
 | 后端 | `ScreenController` 标准 CRUD + `saveLayout` / `publish`；`BoardController`（`getScreen` / `data`，IDOR 绑定校验）。 |
 | 前端 | `DraggableItem.vue`（封装 `vue3-draggable-resizable`）+ `widgets/` 注册表，复用 3~4 个 `art-*` 图表（柱/折线/环形 + 单值翻牌 / 表格）。 |
-| 前端 | 拖拽编辑器 + 对外运行时页（无布局菜单、等比缩放、is_public / token 鉴权）。 |
+| 前端 | 拖拽编辑器 + 对外运行时页（静态 `/screen/:code`、等比缩放、is_public / token 鉴权）。 |
 
 ### P1 能力增强
 
@@ -353,12 +355,16 @@ php webman b8:migrate
 - 多 token 子表（`saiboard_screen_token`，按客户分发可独立吊销）。
 - 数据权限 `scope`（按 `created_by` 隔离大屏归属，在对应 Logic 显式 `protected bool $scope = true;`）。
 
-## 待确认风险点
+## 已知边界与后续风险
 
 1. **拖拽交互完善度**：`vue3-draggable-resizable` 已提供拖动 + 缩放 + 对齐线 + 父级边界，P0 直接用其能力即可；多选、组合等增量在 P1 视需要补，避免一开始过度设计。
 2. **生产数据源只读账号**：预置模板已能防注入，但强烈建议生产 MySQL 数据源配只读账号作为第二道防线，需在文档和部署指引中强制说明。
-3. **SSRF 防护清单**：HTTP 数据源的内网/元数据地址拦截规则需随实际部署网络环境复核，必要时加出网域名白名单。
+3. **SSRF 防护清单**：HTTP 数据源已拒绝 localhost、内网和保留地址；实际部署如需进一步收紧，可加出网域名白名单。
+4. **缓存击穿与轮询频率**：P0 已支持 `cache_ttl` 缓存，但尚未实现互斥回源和后端轮询频率下限，公开大屏高并发场景需在 P1 补齐。
 
-## 排障（待补充）
+## 排障
 
-落地后按实际接入情况补充：连接测试失败、SQL 白名单拦截、对外访问 401、SSRF 拦截、缓存命中、轮询超载等。
+- 运行时 401：检查大屏是否公开；如为 token 模式，访问 `/screen/:code?token=...` 或请求头传递 `X-Saiboard-Token`。
+- SQL 白名单拦截：确认查询模板里的 `table`、`fields`、`conditions.field`、`order.field` 都是目标数据源真实存在的表和字段。
+- HTTP 数据源失败：确认 URL 是公网 `http/https` 地址；localhost、内网 IP、保留地址和无法 DNS 解析的域名会被 SSRF 防护拦截。
+- 数据不刷新：检查数据源 `cache_ttl` 和组件 `dataset.refresh`；预览接口会强制绕过缓存，运行时接口会按 `cache_ttl` 复用结果。
