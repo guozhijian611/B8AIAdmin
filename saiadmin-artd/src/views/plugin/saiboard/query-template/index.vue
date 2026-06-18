@@ -37,6 +37,7 @@
         <ElTableColumn label="状态" width="110">
           <template #default="{ row }">
             <ElSwitch
+              v-permission="'saiboard:query_template:changeStatus'"
               v-model="row.status"
               :active-value="1"
               :inactive-value="2"
@@ -47,7 +48,13 @@
         <ElTableColumn label="操作" width="170" fixed="right">
           <template #default="{ row }">
             <ElSpace>
-              <ElButton size="small" @click="preview(row)">预览</ElButton>
+              <ElButton
+                v-permission="'saiboard:query_template:preview'"
+                size="small"
+                @click="preview(row)"
+              >
+                预览
+              </ElButton>
               <SaButton
                 v-permission="'saiboard:query_template:update'"
                 type="secondary"
@@ -269,8 +276,16 @@
       </ElForm>
       <template #footer>
         <ElButton @click="dialogVisible = false">取消</ElButton>
-        <ElButton @click="preview(form)">预览</ElButton>
-        <ElButton type="primary" @click="submit">提交</ElButton>
+        <ElButton v-permission="'saiboard:query_template:preview'" @click="preview(form)"
+          >预览</ElButton
+        >
+        <ElButton
+          v-permission="form.id ? 'saiboard:query_template:update' : 'saiboard:query_template:save'"
+          type="primary"
+          @click="submit"
+        >
+          提交
+        </ElButton>
       </template>
     </ElDialog>
 

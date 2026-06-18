@@ -14,8 +14,12 @@
           <ElOption label="75%" :value="0.75" />
           <ElOption label="100%" :value="1" />
         </ElSelect>
-        <ElButton type="primary" @click="saveLayout">保存</ElButton>
-        <ElButton type="success" @click="publish">发布</ElButton>
+        <ElButton v-permission="'saiboard:screen:saveLayout'" type="primary" @click="saveLayout">
+          保存
+        </ElButton>
+        <ElButton v-permission="'saiboard:screen:publish'" type="success" @click="publish">
+          发布
+        </ElButton>
       </ElSpace>
     </div>
 
@@ -91,6 +95,7 @@
                   />
                 </ElSelect>
                 <ElButton
+                  v-permission="'saiboard:query_template:preview'"
                   :disabled="!selectedComponent.dataset.queryTemplateId"
                   :loading="selectedPreviewLoading"
                   @click="previewSelectedData"

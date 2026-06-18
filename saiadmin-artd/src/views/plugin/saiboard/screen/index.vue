@@ -54,9 +54,19 @@
         <ElTableColumn label="操作" width="300" fixed="right">
           <template #default="{ row }">
             <ElSpace>
-              <ElButton size="small" @click="goEditor(row)">编辑器</ElButton>
+              <ElButton
+                v-permission="'saiboard:screen:saveLayout'"
+                size="small"
+                @click="goEditor(row)"
+              >
+                编辑器
+              </ElButton>
               <ElButton size="small" @click="openRuntime(row)">预览</ElButton>
-              <SaButton v-permission="'saiboard:screen:update'" type="secondary" @click="openDialog(row)" />
+              <SaButton
+                v-permission="'saiboard:screen:update'"
+                type="secondary"
+                @click="openDialog(row)"
+              />
               <ElDropdown>
                 <SaButton type="info" />
                 <template #dropdown>
@@ -67,7 +77,10 @@
                     <ElDropdownItem v-permission="'saiboard:screen:copy'" @click="copy(row)">
                       复制
                     </ElDropdownItem>
-                    <ElDropdownItem v-permission="'saiboard:screen:destroy'" @click="deleteRow(row)">
+                    <ElDropdownItem
+                      v-permission="'saiboard:screen:destroy'"
+                      @click="deleteRow(row)"
+                    >
                       删除
                     </ElDropdownItem>
                   </ElDropdownMenu>
@@ -115,7 +128,13 @@
       </ElForm>
       <template #footer>
         <ElButton @click="dialogVisible = false">取消</ElButton>
-        <ElButton type="primary" @click="submit">提交</ElButton>
+        <ElButton
+          v-permission="form.id ? 'saiboard:screen:update' : 'saiboard:screen:save'"
+          type="primary"
+          @click="submit"
+        >
+          提交
+        </ElButton>
       </template>
     </ElDialog>
   </div>
@@ -198,7 +217,11 @@
         components: []
       }
     }
-    form.id ? await api.update(payload) : await api.save(payload)
+    if (form.id) {
+      await api.update(payload)
+    } else {
+      await api.save(payload)
+    }
     ElMessage.success('保存成功')
     dialogVisible.value = false
     loadData()
@@ -209,7 +232,10 @@
   }
 
   const openRuntime = (row: any) => {
-    window.open(`#/screen/${row.code}${row.access_token ? `?token=${row.access_token}` : ''}`, '_blank')
+    window.open(
+      `#/screen/${row.code}${row.access_token ? `?token=${row.access_token}` : ''}`,
+      '_blank'
+    )
   }
 
   const publish = async (row: any) => {

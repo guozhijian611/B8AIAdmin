@@ -30,6 +30,7 @@
         <ElTableColumn label="状态" width="110">
           <template #default="{ row }">
             <ElSwitch
+              v-permission="'saiboard:datasource:changeStatus'"
               v-model="row.status"
               :active-value="1"
               :inactive-value="2"
@@ -40,9 +41,19 @@
         <ElTableColumn label="操作" width="170" fixed="right">
           <template #default="{ row }">
             <ElSpace>
-              <ElButton size="small" @click="test(row)">测试</ElButton>
-              <SaButton v-permission="'saiboard:datasource:update'" type="secondary" @click="openDialog(row)" />
-              <SaButton v-permission="'saiboard:datasource:destroy'" type="error" @click="deleteRow(row)" />
+              <ElButton v-permission="'saiboard:datasource:test'" size="small" @click="test(row)">
+                测试
+              </ElButton>
+              <SaButton
+                v-permission="'saiboard:datasource:update'"
+                type="secondary"
+                @click="openDialog(row)"
+              />
+              <SaButton
+                v-permission="'saiboard:datasource:destroy'"
+                type="error"
+                @click="deleteRow(row)"
+              />
             </ElSpace>
           </template>
         </ElTableColumn>
@@ -60,10 +71,14 @@
         </ElFormItem>
         <template v-if="form.type === 'mysql'">
           <ElFormItem label="主机"><ElInput v-model="form.config.host" /></ElFormItem>
-          <ElFormItem label="端口"><ElInputNumber v-model="form.config.port" :min="1" :max="65535" /></ElFormItem>
+          <ElFormItem label="端口"
+            ><ElInputNumber v-model="form.config.port" :min="1" :max="65535"
+          /></ElFormItem>
           <ElFormItem label="数据库"><ElInput v-model="form.config.database" /></ElFormItem>
           <ElFormItem label="用户名"><ElInput v-model="form.config.username" /></ElFormItem>
-          <ElFormItem label="密码"><ElInput v-model="form.config.password" show-password /></ElFormItem>
+          <ElFormItem label="密码"
+            ><ElInput v-model="form.config.password" show-password
+          /></ElFormItem>
           <ElFormItem label="字符集"><ElInput v-model="form.config.charset" /></ElFormItem>
         </template>
         <template v-else>
@@ -75,7 +90,9 @@
             <ElInput v-model="paramsText" type="textarea" :rows="4" />
           </ElFormItem>
         </template>
-        <ElFormItem label="缓存秒"><ElInputNumber v-model="form.cache_ttl" :min="0" :max="86400" /></ElFormItem>
+        <ElFormItem label="缓存秒"
+          ><ElInputNumber v-model="form.cache_ttl" :min="0" :max="86400"
+        /></ElFormItem>
         <ElFormItem label="状态">
           <ElRadioGroup v-model="form.status">
             <ElRadioButton :label="1">启用</ElRadioButton>
@@ -85,8 +102,14 @@
       </ElForm>
       <template #footer>
         <ElButton @click="dialogVisible = false">取消</ElButton>
-        <ElButton @click="test(form)">测试</ElButton>
-        <ElButton type="primary" @click="submit">提交</ElButton>
+        <ElButton v-permission="'saiboard:datasource:test'" @click="test(form)">测试</ElButton>
+        <ElButton
+          v-permission="form.id ? 'saiboard:datasource:update' : 'saiboard:datasource:save'"
+          type="primary"
+          @click="submit"
+        >
+          提交
+        </ElButton>
       </template>
     </ElDialog>
   </div>
@@ -169,7 +192,11 @@
   const submit = async () => {
     await formRef.value?.validate()
     const payload = buildPayload()
-    form.id ? await api.update(payload) : await api.save(payload)
+    if (form.id) {
+      await api.update(payload)
+    } else {
+      await api.save(payload)
+    }
     ElMessage.success('保存成功')
     dialogVisible.value = false
     loadData()
