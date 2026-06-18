@@ -58,6 +58,19 @@ export const widgetRegistry: WidgetMeta[] = [
     defaultOption: { showIndex: false, rowStripe: false, maxRows: 0 }
   },
   {
+    type: 'image-carousel',
+    name: '图片轮播',
+    icon: 'ri:image-line',
+    defaultRect: { x: 1080, y: 400, w: 520, h: 300, z: 1 },
+    defaultOption: {
+      imageField: '',
+      titleField: '',
+      interval: 3000,
+      imageFit: 'cover',
+      showDots: true
+    }
+  },
+  {
     type: 'decor-border',
     name: '装饰边框',
     icon: 'ri:rounded-corner',

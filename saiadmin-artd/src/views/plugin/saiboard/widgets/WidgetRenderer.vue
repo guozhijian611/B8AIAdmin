@@ -73,6 +73,32 @@
           show-overflow-tooltip
         />
       </ElTable>
+      <div v-else-if="component.type === 'image-carousel'" class="image-carousel">
+        <ElCarousel
+          v-if="carouselSlides.length"
+          height="100%"
+          :interval="carouselInterval"
+          :indicator-position="carouselIndicatorPosition"
+          arrow="hover"
+        >
+          <ElCarouselItem v-for="(slide, index) in carouselSlides" :key="`${index}-${slide.title}`">
+            <div class="carousel-slide">
+              <img
+                v-if="slide.image"
+                class="carousel-slide__image"
+                :src="slide.image"
+                :alt="slide.title || `slide-${index + 1}`"
+                :style="{ objectFit: carouselImageFit }"
+              />
+              <div v-else class="carousel-slide__fallback">
+                {{ slide.title || `轮播 ${index + 1}` }}
+              </div>
+              <div v-if="slide.title" class="carousel-slide__title">{{ slide.title }}</div>
+            </div>
+          </ElCarouselItem>
+        </ElCarousel>
+        <div v-else class="carousel-empty">暂无图片</div>
+      </div>
       <div
         v-else-if="component.type === 'decor-border'"
         class="decor-border"
@@ -243,6 +269,27 @@
     }))
   })
 
+  const carouselSlides = computed(() => {
+    const slides = normalizeCarouselSlides()
+    if (slides.length) return slides
+    if (hasBoundDataset.value) return []
+
+    return [
+      { image: '', title: '示例轮播 1' },
+      { image: '', title: '示例轮播 2' },
+      { image: '', title: '示例轮播 3' }
+    ]
+  })
+  const carouselInterval = computed(() =>
+    normalizeCarouselInterval(props.component.option?.interval)
+  )
+  const carouselImageFit = computed(() =>
+    normalizeCarouselImageFit(props.component.option?.imageFit)
+  )
+  const carouselIndicatorPosition = computed(() =>
+    props.component.option?.showDots === false ? 'none' : ''
+  )
+
   const decorStyle = computed(() => {
     const value = String(props.component.option?.borderStyle || 'corner')
     return ['corner', 'line', 'glow'].includes(value) ? value : 'corner'
@@ -322,6 +369,56 @@
     return value === 'center' || value === 'right' ? value : 'left'
   }
 
+  function normalizeCarouselSlides() {
+    if (!tableRows.value.length) return []
+
+    const imageKey = findOptionalKey(props.component.option?.imageField, [
+      'image',
+      'image_url',
+      'cover',
+      'cover_url',
+      'thumbnail',
+      'thumb',
+      'picture',
+      'pic',
+      'img',
+      'poster',
+      'poster_url',
+      'banner',
+      'banner_url',
+      'src',
+      'url',
+      'avatar'
+    ])
+    if (!imageKey) return []
+
+    const titleKey = findOptionalKey(props.component.option?.titleField, [
+      'title',
+      'name',
+      'label',
+      'summary',
+      'description'
+    ])
+
+    return tableRows.value
+      .map((row, index) => ({
+        image: String(row[imageKey] ?? '').trim(),
+        title: titleKey ? String(row[titleKey] ?? '').trim() : `#${index + 1}`
+      }))
+      .filter((slide) => slide.image)
+      .slice(0, 20)
+  }
+
+  function normalizeCarouselInterval(value: unknown) {
+    const interval = Number(value ?? 3000)
+    if (!Number.isFinite(interval) || interval <= 0) return 3000
+    return Math.min(60000, Math.max(1000, Math.round(interval)))
+  }
+
+  function normalizeCarouselImageFit(value: unknown) {
+    return value === 'contain' || value === 'fill' ? value : 'cover'
+  }
+
   function notifyChartResize() {
     if (!chartTypes.has(props.component.type)) return
     if (chartResizeFrame) window.cancelAnimationFrame(chartResizeFrame)
@@ -342,6 +439,12 @@
       Object.keys(first)[0] ||
       'label'
     )
+  }
+
+  function findOptionalKey(mapped: string | undefined, preferred: string[]) {
+    const first = tableRows.value[0] || {}
+    if (mapped && mapped in first) return mapped
+    return preferred.find((key) => key in first) || ''
   }
 
   function findNumberKeys(mapped: string | undefined, preferred: string[]) {
@@ -452,6 +555,70 @@
 
   .metric-unit {
     margin-left: 0;
+  }
+
+  .image-carousel,
+  :deep(.image-carousel .el-carousel),
+  :deep(.image-carousel .el-carousel__container) {
+    height: 100%;
+  }
+
+  .carousel-slide {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background:
+      linear-gradient(135deg, rgb(104 166 255 / 22%), transparent 52%), rgb(7 17 31 / 86%);
+    border-radius: 4px;
+  }
+
+  .carousel-slide__image {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .carousel-slide__fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    padding: 16px;
+    overflow: hidden;
+    font-size: 20px;
+    font-weight: 600;
+    color: #f8fbff;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .carousel-slide__title {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    padding: 18px 14px 10px;
+    overflow: hidden;
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    background: linear-gradient(180deg, transparent, rgb(0 0 0 / 62%));
+  }
+
+  .carousel-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: rgb(215 231 255 / 72%);
+    background: rgb(255 255 255 / 4%);
+    border: 1px dashed rgb(255 255 255 / 16%);
+    border-radius: 4px;
   }
 
   .widget-error,

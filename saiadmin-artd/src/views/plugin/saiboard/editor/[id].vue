@@ -278,6 +278,62 @@
                 <ElSwitch v-model="selectedComponent.option!.rowStripe" />
               </ElFormItem>
             </template>
+            <template v-if="selectedComponent.type === 'image-carousel'">
+              <ElFormItem label="图片字段">
+                <ElSelect
+                  v-model="selectedComponent.option!.imageField"
+                  clearable
+                  filterable
+                  placeholder="自动识别"
+                  :disabled="!fieldOptions.length"
+                >
+                  <ElOption
+                    v-for="field in fieldOptions"
+                    :key="field"
+                    :label="field"
+                    :value="field"
+                  />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="标题字段">
+                <ElSelect
+                  v-model="selectedComponent.option!.titleField"
+                  clearable
+                  filterable
+                  placeholder="自动识别"
+                  :disabled="!fieldOptions.length"
+                >
+                  <ElOption
+                    v-for="field in fieldOptions"
+                    :key="field"
+                    :label="field"
+                    :value="field"
+                  />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="切换毫秒">
+                <ElInputNumber
+                  v-model="selectedComponent.option!.interval"
+                  :min="1000"
+                  :max="60000"
+                  :step="500"
+                  step-strictly
+                />
+              </ElFormItem>
+              <ElFormItem label="图片适配">
+                <ElSelect v-model="selectedComponent.option!.imageFit">
+                  <ElOption
+                    v-for="item in imageFitOptions"
+                    :key="item.value"
+                    :label="item.label"
+                    :value="item.value"
+                  />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="指示点">
+                <ElSwitch v-model="selectedComponent.option!.showDots" />
+              </ElFormItem>
+            </template>
             <template v-if="selectedComponent.type === 'decor-border'">
               <ElFormItem label="样式">
                 <ElSelect v-model="selectedComponent.option!.borderStyle">
@@ -409,6 +465,11 @@
     { label: '裁切铺满', value: 'cover' },
     { label: '非等比拉伸', value: 'stretch' }
   ]
+  const imageFitOptions = [
+    { label: '裁切铺满', value: 'cover' },
+    { label: '完整显示', value: 'contain' },
+    { label: '拉伸填满', value: 'fill' }
+  ]
   const tableAlignOptions: Array<{ label: string; value: NonNullable<BoardTableColumn['align']> }> =
     [
       { label: '左对齐', value: 'left' },
@@ -425,7 +486,8 @@
     'art-radar-chart',
     'art-scatter-chart',
     'stat-number',
-    'data-table'
+    'data-table',
+    'image-carousel'
   ])
   const componentNeedsData = (component: BoardComponent) => component.type !== 'decor-border'
 

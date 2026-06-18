@@ -33,6 +33,7 @@ export type WidgetType =
   | 'art-scatter-chart'
   | 'stat-number'
   | 'data-table'
+  | 'image-carousel'
   | 'decor-border'
 
 export interface BoardBgConfig {
