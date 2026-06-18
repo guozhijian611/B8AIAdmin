@@ -17,6 +17,7 @@ Route::group('/app/saiboard/admin', function () {
     Route::post('/Datasource/changeStatus', [DatasourceController::class, 'changeStatus']);
     Route::post('/Datasource/test', [DatasourceController::class, 'test']);
     Route::get('/Datasource/options', [DatasourceController::class, 'options']);
+    Route::get('/Datasource/schema', [DatasourceController::class, 'schema']);
 
     fastRoute('QueryTemplate', QueryTemplateController::class);
     Route::post('/QueryTemplate/changeStatus', [QueryTemplateController::class, 'changeStatus']);

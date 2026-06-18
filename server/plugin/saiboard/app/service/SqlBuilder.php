@@ -8,12 +8,14 @@ use PDO;
 class SqlBuilder
 {
     private array $columnsCache = [];
+    private array $columnTypesCache = [];
 
     public function build(PDO $pdo, string $datasetType, array $config): array
     {
         return match ($datasetType) {
             'table_raw' => $this->buildRaw($pdo, $config),
             'table_count' => $this->buildCount($pdo, $config),
+            'table_aggregate' => $this->buildAggregate($pdo, $config),
             default => throw new InvalidArgumentException('不支持的 MySQL 取数类型'),
         };
     }
@@ -48,6 +50,46 @@ class SqlBuilder
         return [sprintf('SELECT COUNT(*) AS total FROM `%s`%s', $table, $whereSql), $bindings, 'count'];
     }
 
+    private function buildAggregate(PDO $pdo, array $config): array
+    {
+        $table = $this->assertTable($pdo, (string) ($config['table'] ?? ''));
+        $columns = $this->columns($pdo, $table);
+        $dimension = $this->assertColumn($columns, (string) ($config['dimension'] ?? ''), '维度字段');
+        $aggregate = strtolower(trim((string) ($config['aggregate'] ?? 'count')));
+        if (!in_array($aggregate, ['count', 'sum', 'avg', 'min', 'max'], true)) {
+            throw new InvalidArgumentException('聚合方式不支持');
+        }
+
+        $valueExpression = 'COUNT(*)';
+        if ($aggregate !== 'count') {
+            $metric = $this->assertColumn($columns, (string) ($config['metric'] ?? ''), '指标字段');
+            $columnTypes = $this->columnTypes($pdo, $table);
+            if (!$this->isNumericType($columnTypes[$metric] ?? '')) {
+                throw new InvalidArgumentException('指标字段必须是数值类型');
+            }
+            $valueExpression = strtoupper($aggregate) . "(`{$metric}`)";
+        }
+
+        [$whereSql, $bindings] = $this->buildWhere($columns, $config['conditions'] ?? []);
+        $labelExpression = $this->dimensionExpression($dimension, (string) ($config['dimension_type'] ?? 'raw'));
+        $orderBy = strtolower((string) ($config['order_by'] ?? 'label')) === 'value' ? 'value' : 'label';
+        $direction = strtolower((string) ($config['order_type'] ?? 'asc')) === 'desc' ? 'DESC' : 'ASC';
+        $limit = $this->normalizeLimit($config['limit'] ?? 100);
+
+        $sql = sprintf(
+            'SELECT %s AS `label`, %s AS `value` FROM `%s`%s GROUP BY `label` ORDER BY `%s` %s LIMIT %d',
+            $labelExpression,
+            $valueExpression,
+            $table,
+            $whereSql,
+            $orderBy,
+            $direction,
+            $limit
+        );
+
+        return [$sql, $bindings, 'raw'];
+    }
+
     private function assertTable(PDO $pdo, string $table): string
     {
         $table = trim($table);
@@ -79,6 +121,22 @@ class SqlBuilder
         return $this->columnsCache[$table] = $columns;
     }
 
+    private function columnTypes(PDO $pdo, string $table): array
+    {
+        if (isset($this->columnTypesCache[$table])) {
+            return $this->columnTypesCache[$table];
+        }
+
+        $stmt = $pdo->query("SHOW COLUMNS FROM `{$table}`");
+        $rows = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
+        $types = [];
+        foreach ($rows as $row) {
+            $types[(string) $row['Field']] = strtolower((string) $row['Type']);
+        }
+
+        return $this->columnTypesCache[$table] = $types;
+    }
+
     private function normalizeFields(mixed $fields, array $columns): array
     {
         if (is_string($fields)) {
@@ -98,6 +156,26 @@ class SqlBuilder
         }
 
         return array_values(array_unique($result));
+    }
+
+    private function assertColumn(array $columns, string $field, string $label): string
+    {
+        $field = trim($field);
+        if (!$this->isIdentifier($field) || !in_array($field, $columns, true)) {
+            throw new InvalidArgumentException("{$label}不存在或不允许访问");
+        }
+
+        return $field;
+    }
+
+    private function dimensionExpression(string $field, string $type): string
+    {
+        return match (strtolower(trim($type))) {
+            'date', 'day' => "DATE(`{$field}`)",
+            'month' => "DATE_FORMAT(`{$field}`, '%Y-%m')",
+            'year' => "YEAR(`{$field}`)",
+            default => "`{$field}`",
+        };
     }
 
     private function buildWhere(array $columns, mixed $conditions): array
@@ -210,5 +288,10 @@ class SqlBuilder
     private function isIdentifier(string $value): bool
     {
         return preg_match('/^[A-Za-z0-9_]+$/', $value) === 1;
+    }
+
+    private function isNumericType(string $type): bool
+    {
+        return preg_match('/int|decimal|double|float|real|numeric|bit|bool/', strtolower($type)) === 1;
     }
 }

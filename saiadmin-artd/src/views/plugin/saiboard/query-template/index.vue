@@ -5,7 +5,12 @@
         <ElFormItem label="名称"><ElInput v-model="search.name" clearable /></ElFormItem>
         <ElFormItem label="数据源">
           <ElSelect v-model="search.datasource_id" clearable style="width: 180px">
-            <ElOption v-for="item in datasourceOptions" :key="item.id" :label="item.name" :value="item.id" />
+            <ElOption
+              v-for="item in datasourceOptions"
+              :key="item.id"
+              :label="item.name"
+              :value="item.id"
+            />
           </ElSelect>
         </ElFormItem>
         <ElFormItem><ElButton type="primary" @click="loadData">搜索</ElButton></ElFormItem>
@@ -26,7 +31,9 @@
         <ElTableColumn label="数据源" min-width="160">
           <template #default="{ row }">{{ datasourceName(row.datasource_id) }}</template>
         </ElTableColumn>
-        <ElTableColumn prop="dataset_type" label="类型" width="160" />
+        <ElTableColumn label="类型" width="150">
+          <template #default="{ row }">{{ datasetTypeLabel(row.dataset_type) }}</template>
+        </ElTableColumn>
         <ElTableColumn label="状态" width="110">
           <template #default="{ row }">
             <ElSwitch
@@ -41,31 +48,217 @@
           <template #default="{ row }">
             <ElSpace>
               <ElButton size="small" @click="preview(row)">预览</ElButton>
-              <SaButton v-permission="'saiboard:query_template:update'" type="secondary" @click="openDialog(row)" />
-              <SaButton v-permission="'saiboard:query_template:destroy'" type="error" @click="deleteRow(row)" />
+              <SaButton
+                v-permission="'saiboard:query_template:update'"
+                type="secondary"
+                @click="openDialog(row)"
+              />
+              <SaButton
+                v-permission="'saiboard:query_template:destroy'"
+                type="error"
+                @click="deleteRow(row)"
+              />
             </ElSpace>
           </template>
         </ElTableColumn>
       </ElTable>
     </ElCard>
 
-    <ElDialog v-model="dialogVisible" :title="form.id ? '编辑查询模板' : '新增查询模板'" width="760px">
+    <ElDialog
+      v-model="dialogVisible"
+      :title="form.id ? '编辑查询模板' : '新增查询模板'"
+      width="980px"
+    >
       <ElForm ref="formRef" :model="form" :rules="rules" label-width="120px">
         <ElFormItem label="名称" prop="name"><ElInput v-model="form.name" /></ElFormItem>
         <ElFormItem label="数据源" prop="datasource_id">
-          <ElSelect v-model="form.datasource_id" style="width: 100%">
-            <ElOption v-for="item in datasourceOptions" :key="item.id" :label="item.name" :value="item.id" />
+          <ElSelect v-model="form.datasource_id" style="width: 100%" @change="onDatasourceChange">
+            <ElOption
+              v-for="item in datasourceOptions"
+              :key="item.id"
+              :label="item.name"
+              :value="item.id"
+            />
           </ElSelect>
         </ElFormItem>
         <ElFormItem label="取数类型" prop="dataset_type">
-          <ElSelect v-model="form.dataset_type" style="width: 100%" @change="resetConfig">
-            <ElOption label="表原始行" value="table_raw" />
-            <ElOption label="表计数" value="table_count" />
-            <ElOption label="HTTP 透传" value="http_passthrough" />
+          <ElSelect v-model="form.dataset_type" style="width: 100%" @change="onDatasetTypeChange">
+            <ElOption
+              v-for="item in datasetTypeOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            />
           </ElSelect>
         </ElFormItem>
-        <ElFormItem label="配置 JSON">
-          <ElInput v-model="configText" type="textarea" :rows="12" />
+
+        <template v-if="isMysqlTemplate">
+          <ElFormItem label="数据表">
+            <ElSelect
+              v-model="form.config.table"
+              filterable
+              :loading="schemaLoading"
+              style="width: 100%"
+              @change="onTableChange"
+            >
+              <ElOption
+                v-for="item in tableOptions"
+                :key="item.name"
+                :label="item.name"
+                :value="item.name"
+              />
+            </ElSelect>
+          </ElFormItem>
+
+          <ElFormItem v-if="form.dataset_type === 'table_raw'" label="返回字段">
+            <ElSelect
+              v-model="form.config.fields"
+              multiple
+              collapse-tags
+              collapse-tags-tooltip
+              style="width: 100%"
+            >
+              <ElOption
+                v-for="item in columnOptions"
+                :key="item.name"
+                :label="`${item.name} (${item.type})`"
+                :value="item.name"
+              />
+            </ElSelect>
+          </ElFormItem>
+
+          <template v-if="form.dataset_type === 'table_aggregate'">
+            <ElFormItem label="维度字段">
+              <ElSelect v-model="form.config.dimension" filterable style="width: 100%">
+                <ElOption
+                  v-for="item in columnOptions"
+                  :key="item.name"
+                  :label="`${item.name} (${item.type})`"
+                  :value="item.name"
+                />
+              </ElSelect>
+            </ElFormItem>
+            <ElFormItem label="维度粒度">
+              <ElSelect v-model="form.config.dimension_type" style="width: 100%">
+                <ElOption label="原始值" value="raw" />
+                <ElOption label="按日" value="day" />
+                <ElOption label="按月" value="month" />
+                <ElOption label="按年" value="year" />
+              </ElSelect>
+            </ElFormItem>
+            <ElFormItem label="聚合方式">
+              <ElSelect
+                v-model="form.config.aggregate"
+                style="width: 100%"
+                @change="onAggregateChange"
+              >
+                <ElOption label="计数 count" value="count" />
+                <ElOption label="求和 sum" value="sum" />
+                <ElOption label="平均 avg" value="avg" />
+                <ElOption label="最小 min" value="min" />
+                <ElOption label="最大 max" value="max" />
+              </ElSelect>
+            </ElFormItem>
+            <ElFormItem v-if="form.config.aggregate !== 'count'" label="指标字段">
+              <ElSelect v-model="form.config.metric" filterable style="width: 100%">
+                <ElOption
+                  v-for="item in numericColumnOptions"
+                  :key="item.name"
+                  :label="`${item.name} (${item.type})`"
+                  :value="item.name"
+                />
+              </ElSelect>
+            </ElFormItem>
+            <ElFormItem label="排序">
+              <ElSpace wrap>
+                <ElSelect v-model="form.config.order_by" style="width: 160px">
+                  <ElOption label="按维度" value="label" />
+                  <ElOption label="按数值" value="value" />
+                </ElSelect>
+                <ElSelect v-model="form.config.order_type" style="width: 140px">
+                  <ElOption label="升序" value="asc" />
+                  <ElOption label="降序" value="desc" />
+                </ElSelect>
+              </ElSpace>
+            </ElFormItem>
+          </template>
+
+          <ElFormItem label="条件">
+            <div class="config-list">
+              <div
+                v-for="(condition, index) in form.config.conditions"
+                :key="index"
+                class="config-row"
+              >
+                <ElSelect v-model="condition.field" filterable placeholder="字段">
+                  <ElOption
+                    v-for="item in columnOptions"
+                    :key="item.name"
+                    :label="item.name"
+                    :value="item.name"
+                  />
+                </ElSelect>
+                <ElSelect v-model="condition.op" placeholder="操作符">
+                  <ElOption
+                    v-for="item in operatorOptions"
+                    :key="item"
+                    :label="item"
+                    :value="item"
+                  />
+                </ElSelect>
+                <ElInput v-model="condition.value" placeholder="值，in/between 可用逗号分隔" />
+                <ElButton text type="danger" @click="removeCondition(index)">删除</ElButton>
+              </div>
+              <ElButton @click="addCondition">
+                <template #icon><ArtSvgIcon icon="ri:add-line" /></template>
+                添加条件
+              </ElButton>
+            </div>
+          </ElFormItem>
+
+          <ElFormItem v-if="form.dataset_type === 'table_raw'" label="排序">
+            <div class="config-list">
+              <div v-for="(order, index) in form.config.order" :key="index" class="config-row">
+                <ElSelect v-model="order.field" filterable placeholder="字段">
+                  <ElOption
+                    v-for="item in columnOptions"
+                    :key="item.name"
+                    :label="item.name"
+                    :value="item.name"
+                  />
+                </ElSelect>
+                <ElSelect v-model="order.direction" placeholder="方向">
+                  <ElOption label="升序" value="asc" />
+                  <ElOption label="降序" value="desc" />
+                </ElSelect>
+                <ElButton text type="danger" @click="removeOrder(index)">删除</ElButton>
+              </div>
+              <ElButton @click="addOrder">
+                <template #icon><ArtSvgIcon icon="ri:add-line" /></template>
+                添加排序
+              </ElButton>
+            </div>
+          </ElFormItem>
+
+          <ElFormItem v-if="form.dataset_type !== 'table_count'" label="返回条数">
+            <ElInputNumber v-model="form.config.limit" :min="1" :max="1000" />
+          </ElFormItem>
+        </template>
+
+        <template v-else>
+          <ElFormItem label="请求路径">
+            <ElInput
+              v-model="form.config.path"
+              placeholder="例如 /metrics/orders，可留空直接请求数据源 URL"
+            />
+          </ElFormItem>
+          <ElFormItem label="请求参数">
+            <ElInput v-model="paramsText" type="textarea" :rows="6" />
+          </ElFormItem>
+        </template>
+
+        <ElFormItem label="配置预览">
+          <ElInput :model-value="configPreview" type="textarea" :rows="8" readonly />
         </ElFormItem>
         <ElFormItem label="状态">
           <ElRadioGroup v-model="form.status">
@@ -93,13 +286,28 @@
   import datasourceApi from '../api/datasource'
   import api from '../api/query-template'
 
+  interface DatasourceOption {
+    id: number
+    name: string
+    type: 'mysql' | 'http'
+  }
+
+  interface SchemaColumn {
+    name: string
+    type: string
+    kind: 'string' | 'number' | 'date'
+  }
+
   const rows = ref<any[]>([])
-  const datasourceOptions = ref<any[]>([])
+  const datasourceOptions = ref<DatasourceOption[]>([])
+  const tableOptions = ref<{ name: string }[]>([])
+  const columnOptions = ref<SchemaColumn[]>([])
   const loading = ref(false)
+  const schemaLoading = ref(false)
   const dialogVisible = ref(false)
   const previewVisible = ref(false)
   const previewText = ref('')
-  const configText = ref('')
+  const paramsText = ref('{}')
   const formRef = ref<FormInstance>()
   const search = reactive({ name: '', datasource_id: undefined as number | undefined })
   const form = reactive<any>({
@@ -117,10 +325,56 @@
     dataset_type: [{ required: true, message: '取数类型必选', trigger: 'change' }]
   }
 
+  const operatorOptions = ['=', '!=', '>', '>=', '<', '<=', 'like', 'in', 'between']
+  const mysqlDatasetTypes = [
+    { label: '表原始行', value: 'table_raw' },
+    { label: '表计数', value: 'table_count' },
+    { label: '表聚合', value: 'table_aggregate' }
+  ]
+  const httpDatasetTypes = [{ label: 'HTTP 透传', value: 'http_passthrough' }]
+
+  const currentDatasource = computed(() =>
+    datasourceOptions.value.find((item) => Number(item.id) === Number(form.datasource_id))
+  )
+  const isMysqlTemplate = computed(() => currentDatasource.value?.type !== 'http')
+  const datasetTypeOptions = computed(() =>
+    currentDatasource.value?.type === 'http' ? httpDatasetTypes : mysqlDatasetTypes
+  )
+  const numericColumnOptions = computed(() =>
+    columnOptions.value.filter((item) => item.kind === 'number')
+  )
+  const configPreview = computed(() => JSON.stringify(buildConfig(false), null, 2))
+
   const defaultConfig = (type: string) => {
     if (type === 'table_count') return { table: '', conditions: [] }
+    if (type === 'table_aggregate') {
+      return {
+        table: '',
+        dimension: '',
+        dimension_type: 'raw',
+        aggregate: 'count',
+        metric: '',
+        conditions: [],
+        order_by: 'label',
+        order_type: 'asc',
+        limit: 100
+      }
+    }
     if (type === 'http_passthrough') return { path: '', params: {} }
     return { table: '', fields: [], conditions: [], order: [], limit: 100 }
+  }
+
+  const normalizeConfig = (type: string, config: Record<string, any> = {}) => {
+    const next = { ...defaultConfig(type), ...(config || {}) }
+    if (!Array.isArray(next.conditions)) next.conditions = []
+    if (type === 'table_raw') {
+      if (!Array.isArray(next.fields)) next.fields = []
+      if (!Array.isArray(next.order)) next.order = []
+    }
+    if (type === 'http_passthrough') {
+      paramsText.value = JSON.stringify(next.params || {}, null, 2)
+    }
+    return next
   }
 
   const loadOptions = async () => {
@@ -137,30 +391,106 @@
     }
   }
 
-  const openDialog = (row?: any) => {
+  const loadSchema = async (table = form.config.table) => {
+    if (!form.datasource_id || !isMysqlTemplate.value) {
+      tableOptions.value = []
+      columnOptions.value = []
+      return
+    }
+
+    schemaLoading.value = true
+    try {
+      const result = await datasourceApi.schema({
+        id: form.datasource_id,
+        table: table || undefined
+      })
+      tableOptions.value = result.tables || []
+      columnOptions.value = result.columns || []
+    } finally {
+      schemaLoading.value = false
+    }
+  }
+
+  const openDialog = async (row?: any) => {
+    const firstDatasource = datasourceOptions.value[0]
     Object.assign(form, {
       id: undefined,
-      datasource_id: datasourceOptions.value[0]?.id,
+      datasource_id: firstDatasource?.id,
       name: '',
-      dataset_type: 'table_raw',
-      config: defaultConfig('table_raw'),
+      dataset_type: firstDatasource?.type === 'http' ? 'http_passthrough' : 'table_raw',
+      config: defaultConfig(firstDatasource?.type === 'http' ? 'http_passthrough' : 'table_raw'),
       status: 1
     })
-    if (row) Object.assign(form, { ...row, config: row.config || {} })
-    configText.value = JSON.stringify(form.config || defaultConfig(form.dataset_type), null, 2)
+    paramsText.value = '{}'
+    tableOptions.value = []
+    columnOptions.value = []
+    if (row) {
+      Object.assign(form, {
+        ...row,
+        config: normalizeConfig(row.dataset_type, row.config || {})
+      })
+    }
     dialogVisible.value = true
+    await nextTick()
+    await loadSchema(form.config.table)
   }
 
-  const resetConfig = () => {
-    configText.value = JSON.stringify(defaultConfig(form.dataset_type), null, 2)
+  const onDatasourceChange = async () => {
+    const nextType = currentDatasource.value?.type === 'http' ? 'http_passthrough' : 'table_raw'
+    form.dataset_type = nextType
+    form.config = normalizeConfig(nextType)
+    tableOptions.value = []
+    columnOptions.value = []
+    await loadSchema()
   }
 
-  const buildPayload = () => ({ ...form, config: parseConfig() })
+  const onDatasetTypeChange = async () => {
+    form.config = normalizeConfig(form.dataset_type)
+    await loadSchema()
+  }
+
+  const onTableChange = async () => {
+    form.config.fields = []
+    form.config.order = []
+    form.config.dimension = ''
+    form.config.metric = ''
+    await loadSchema(form.config.table)
+  }
+
+  const onAggregateChange = () => {
+    if (form.config.aggregate === 'count') form.config.metric = ''
+  }
+
+  const buildPayload = () => ({ ...form, config: buildConfig(true) })
+
+  const buildConfig = (strict = true) => {
+    const config = JSON.parse(JSON.stringify(form.config || {}))
+    if (form.dataset_type === 'http_passthrough') {
+      config.params = parseJson(paramsText.value, strict)
+      return config
+    }
+
+    config.conditions = normalizeConditions(config.conditions)
+    if (form.dataset_type === 'table_raw') {
+      config.fields = Array.isArray(config.fields) ? config.fields : []
+      config.order = normalizeOrders(config.order)
+      config.limit = Number(config.limit || 100)
+    }
+    if (form.dataset_type === 'table_aggregate') {
+      config.limit = Number(config.limit || 100)
+      if (config.aggregate === 'count') config.metric = ''
+    }
+    return config
+  }
 
   const submit = async () => {
     await formRef.value?.validate()
     const payload = buildPayload()
-    form.id ? await api.update(payload) : await api.save(payload)
+    if (form.id) {
+      await api.update(payload)
+    } else {
+      await api.save(payload)
+    }
     ElMessage.success('保存成功')
     dialogVisible.value = false
     loadData()
@@ -186,14 +516,51 @@
     loadData()
   }
 
-  const datasourceName = (id: number) => datasourceOptions.value.find((item) => item.id === id)?.name || id
+  const addCondition = () => {
+    form.config.conditions.push({ field: '', op: '=', value: '' })
+  }
 
-  function parseConfig() {
+  const removeCondition = (index: number) => {
+    form.config.conditions.splice(index, 1)
+  }
+
+  const addOrder = () => {
+    form.config.order.push({ field: '', direction: 'asc' })
+  }
+
+  const removeOrder = (index: number) => {
+    form.config.order.splice(index, 1)
+  }
+
+  const datasourceName = (id: number) =>
+    datasourceOptions.value.find((item) => item.id === id)?.name || id
+  const datasetTypeLabel = (value: string) =>
+    [...mysqlDatasetTypes, ...httpDatasetTypes].find((item) => item.value === value)?.label || value
+
+  function normalizeConditions(conditions: any[]) {
+    if (!Array.isArray(conditions)) return []
+    return conditions.filter((item) => item?.field && item?.op && item?.value !== '')
+  }
+
+  function normalizeOrders(orders: any[]) {
+    if (!Array.isArray(orders)) return []
+    return orders
+      .filter((item) => item?.field)
+      .map((item) => ({
+        field: item.field,
+        direction: item.direction === 'desc' ? 'desc' : 'asc'
+      }))
+  }
+
+  function parseJson(text: string, strict = true) {
     try {
-      return JSON.parse(configText.value || '{}')
+      return JSON.parse(text || '{}')
     } catch {
-      ElMessage.error('配置 JSON 格式不正确')
-      throw new Error('配置 JSON 格式不正确')
+      if (strict) {
+        ElMessage.error('请求参数 JSON 格式不正确')
+        throw new Error('请求参数 JSON 格式不正确')
+      }
+      return {}
     }
   }
 
@@ -202,3 +569,16 @@
     loadData()
   })
 </script>
+
+<style scoped lang="scss">
+  .config-list {
+    width: 100%;
+  }
+
+  .config-row {
+    display: grid;
+    grid-template-columns: minmax(160px, 1fr) 130px minmax(220px, 2fr) 64px;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+</style>

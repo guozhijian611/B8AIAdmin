@@ -25,6 +25,37 @@ class DataSourceExecutor
         return $this->execute($template, true);
     }
 
+    public function schema(Datasource $datasource, string $table = ''): array
+    {
+        if ((string) $datasource->type !== 'mysql') {
+            throw new InvalidArgumentException('只有 MySQL 数据源支持读取表结构');
+        }
+
+        $pdo = $this->pdo($datasource->config);
+        $tables = array_values(array_map('strval', $pdo->query('SHOW TABLES')->fetchAll(PDO::FETCH_COLUMN) ?: []));
+        $result = [
+            'tables' => array_map(static fn (string $name) => ['name' => $name], $tables),
+            'columns' => [],
+        ];
+
+        $table = trim($table);
+        if ($table === '') {
+            return $result;
+        }
+        if (!preg_match('/^[A-Za-z0-9_]+$/', $table) || !in_array($table, $tables, true)) {
+            throw new InvalidArgumentException('数据表不存在或不允许访问');
+        }
+
+        $rows = $pdo->query("SHOW COLUMNS FROM `{$table}`")->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $result['columns'] = array_map(fn (array $row) => [
+            'name' => (string) $row['Field'],
+            'type' => (string) $row['Type'],
+            'kind' => $this->columnKind((string) $row['Type']),
+        ], $rows);
+
+        return $result;
+    }
+
     public function execute(QueryTemplate $template, bool $forceRefresh = false): array
     {
         $datasource = Datasource::where('id', (int) $template->datasource_id)
@@ -262,6 +293,19 @@ class DataSourceExecutor
             'template' => $template->config,
             'type' => $template->dataset_type,
         ], JSON_UNESCAPED_UNICODE));
+    }
+
+    private function columnKind(string $type): string
+    {
+        $type = strtolower($type);
+        if (preg_match('/int|decimal|double|float|real|numeric|bit|bool/', $type)) {
+            return 'number';
+        }
+        if (preg_match('/date|time|year/', $type)) {
+            return 'date';
+        }
+
+        return 'string';
     }
 
     private function safeError(string $message): string

@@ -9,7 +9,7 @@ class QueryTemplateValidate extends BaseValidate
     protected $rule = [
         'datasource_id' => 'require|integer',
         'name' => 'require|max:60',
-        'dataset_type' => 'require|in:table_raw,table_count,http_passthrough',
+        'dataset_type' => 'require|in:table_raw,table_count,table_aggregate,http_passthrough',
         'status' => 'require|in:1,2',
     ];
 

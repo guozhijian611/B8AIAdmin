@@ -12,7 +12,7 @@
 | --- | --- | --- |
 | 大屏管理 | `server/plugin/saiboard/app/admin/controller/ScreenController.php` | 维护大屏列表、设计尺寸、背景、对外开关与访问令牌。 |
 | 数据源管理 | `server/plugin/saiboard/app/admin/controller/DatasourceController.php` | 维护 MySQL/HTTP 数据源连接配置，支持连接测试。 |
-| 查询模板 | `server/plugin/saiboard/app/admin/controller/QueryTemplateController.php` | 维护预置取数模板（原始行、计数、HTTP 透传），不暴露裸 SQL。 |
+| 查询模板 | `server/plugin/saiboard/app/admin/controller/QueryTemplateController.php` | 维护预置取数模板（原始行、计数、聚合、HTTP 透传），不暴露裸 SQL。 |
 | 拖拽编辑器 | `saiadmin-artd/src/views/plugin/saiboard/editor/` | Element Plus 外壳 + 薄拖拽层，组件拖拽布局、绑定查询模板，画布直接渲染真实图表组件。 |
 | 对外运行时 | `saiadmin-artd/src/views/plugin/saiboard/runtime/` | 前端静态公开路由 `/screen/:code`，复用**同一套** `art-*` 图表组件，全屏等比缩放渲染。 |
 | 对外取数 | `server/plugin/saiboard/app/api/controller/BoardController.php` | 按组件绑定的查询模板执行数据源，返回脱敏结果。 |
@@ -164,9 +164,9 @@ saiadmin-artd/src/views/plugin/saiboard/
 | `table_raw` | P0 | 表原始：选表 + 字段 + 条件 + 排序 + limit。 |
 | `table_count` | P0 | 单值计数。 |
 | `http_passthrough` | P0 | HTTP 透传：配置路径 + 参数。 |
-| `table_aggregate` | P1 | 表聚合：维度（x 轴）+ 指标（y 轴）+ 聚合（sum/count/avg）+ 时间范围 + 分组。 |
+| `table_aggregate` | P0 | 表聚合：维度（x 轴）+ 指标（y 轴）+ 聚合（count/sum/avg/min/max）+ 条件 + 排序 + limit。 |
 
-> `table_aggregate` 本质是个 mini 取数引擎，刻意推到 P1。P0 用 `table_raw`/`table_count` 已能跑通「数据源 → 模板 → 图表」全链路。
+> `table_aggregate` 仍保持预置模板模式，不开放裸 SQL。维度和指标字段都必须来自目标数据源真实表字段，日期维度支持原始值、按日、按月、按年。
 
 ## layout JSON 模型（自定义，极简）
 
@@ -198,7 +198,7 @@ saiadmin-artd/src/views/plugin/saiboard/
 | 控制器 | 方法 | 权限 slug |
 | --- | --- | --- |
 | `ScreenController` | index / read / save / update / destroy / changeStatus / saveLayout / publish / copy | `saiboard:screen:*` |
-| `DatasourceController` | 标准 CRUD + `test`（测连接 / 请求） | `saiboard:datasource:*` |
+| `DatasourceController` | 标准 CRUD + `test`（测连接 / 请求）+ `options` / `schema`（模板配置读取） | `saiboard:datasource:*`，`options` / `schema` 复用 `saiboard:datasource:index` |
 | `QueryTemplateController` | 标准 CRUD + `preview`（执行预览） | `saiboard:query_template:*` |
 
 每个方法挂 `#[Permission('...', 'saiboard:<module>:<action>')]` 注解。写接口调用 `$this->validate('<scene>', $data)`。
@@ -226,6 +226,7 @@ saiadmin-artd/src/views/plugin/saiboard/
 - 输入：`dataset_type` + `config`（表名、字段、条件、排序、limit）。
 - 输出：**参数化** SELECT。
 - 表名、字段名走**白名单校验**：只能是指定 datasource 库里真实存在的表 / 列，运行时通过 `SHOW TABLES` / `SHOW COLUMNS` 复核。
+- `table_aggregate` 输出统一的 `{label, value}` 行，便于柱状图、折线图、环形图直接消费。
 - 强烈建议生产仍给数据源配**只读 MySQL 账号**，作为第二道防线。
 
 ## 安全设计
@@ -271,6 +272,14 @@ getScreen / data 接口入口：
 ### 数据源管理页 `/plugin/saiboard/datasource`
 
 - 标准 CRUD（Element Plus）+ 测试连接按钮 + 查询模板子管理。
+
+### 查询模板页 `/plugin/saiboard/query-template`
+
+- 支持按数据源读取 MySQL 表和字段，表单化配置 `table_raw` / `table_count` / `table_aggregate`。
+- `table_raw` 可选返回字段、条件、排序和 limit。
+- `table_count` 可选条件，统一返回 `{rows, total}`，其中 `total` 是计数值。
+- `table_aggregate` 可选维度字段、日期粒度、聚合方式、指标字段、条件、排序和 limit，统一返回 `{rows, total}`，每行结构为 `{label, value}`。
+- HTTP 数据源使用 `http_passthrough`，配置路径和请求参数 JSON。
 
 ## 数据源配置示例
 
@@ -337,14 +346,14 @@ php webman b8:migrate
 | 模块 | 已落地内容 |
 | --- | --- |
 | 数据库 | 3 张表（含 `draft_layout`/`layout` 分离）+ Phinx 迁移（含菜单权限）。 |
-| 后端 | `SqlBuilder`（`table_raw` / `table_count`）+ `DataSourceExecutor`（mysql / http + SSRF 防护 + Cache 缓存）。 |
+| 后端 | `SqlBuilder`（`table_raw` / `table_count` / `table_aggregate`）+ `DataSourceExecutor`（mysql / http + SSRF 防护 + Cache 缓存）。 |
 | 后端 | `ScreenController` 标准 CRUD + `saveLayout` / `publish`；`BoardController`（`getScreen` / `data`，IDOR 绑定校验）。 |
 | 前端 | `DraggableItem.vue`（封装 `vue3-draggable-resizable`）+ `widgets/` 注册表，复用 3~4 个 `art-*` 图表（柱/折线/环形 + 单值翻牌 / 表格）。 |
-| 前端 | 拖拽编辑器 + 对外运行时页（静态 `/screen/:code`、等比缩放、is_public / token 鉴权）。 |
+| 前端 | 拖拽编辑器 + 查询模板表单化配置 + 对外运行时页（静态 `/screen/:code`、等比缩放、is_public / token 鉴权）。 |
 
 ### P1 能力增强
 
-- `SqlBuilder` 补 `table_aggregate`（维度/指标/聚合/时间范围/分组）。
+- 查询模板补更强的时间范围快捷条件、字段别名和计算字段。
 - 图表组件补全：地图、表格增强、翻牌、轮播；纯 CSS/SVG 装饰边框（不引第三方分支）。
 - 大屏主题与背景增强。
 

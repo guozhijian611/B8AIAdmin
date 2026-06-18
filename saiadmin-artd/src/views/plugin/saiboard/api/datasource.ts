@@ -24,5 +24,8 @@ export default {
   },
   options() {
     return request.get<any[]>({ url: '/app/saiboard/admin/Datasource/options' })
+  },
+  schema(params: Record<string, any>) {
+    return request.get<any>({ url: '/app/saiboard/admin/Datasource/schema', params })
   }
 }

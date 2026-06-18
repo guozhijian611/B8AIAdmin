@@ -108,4 +108,22 @@ class DatasourceController extends AbstractCrudController
     {
         return $this->success($this->logic->enabledOptions());
     }
+
+    #[Apidoc\Title('数据源表结构')]
+    #[Apidoc\Url('/app/saiboard/admin/Datasource/schema')]
+    #[Apidoc\Method('GET')]
+    #[Apidoc\Query('id', type: 'int', require: true, desc: '数据源ID')]
+    #[Apidoc\Query('table', type: 'string', require: false, desc: '数据表名')]
+    #[Permission('数据源表结构', 'saiboard:datasource:index')]
+    public function schema(Request $request): Response
+    {
+        $datasource = Datasource::where('id', (int) $request->input('id', 0))
+            ->where('status', 1)
+            ->findOrEmpty();
+        if ($datasource->isEmpty()) {
+            return $this->fail('数据源不存在或已停用');
+        }
+
+        return $this->success($this->executor->schema($datasource, (string) $request->input('table', '')));
+    }
 }
