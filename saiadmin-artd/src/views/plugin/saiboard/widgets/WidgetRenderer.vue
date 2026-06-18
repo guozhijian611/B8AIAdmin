@@ -26,7 +26,12 @@
         <span class="metric-value">{{ metricValue }}</span>
         <span class="metric-unit">{{ component.option?.unit || '' }}</span>
       </div>
-      <ElTable v-else-if="component.type === 'data-table'" :data="tableRows" size="small" height="100%">
+      <ElTable
+        v-else-if="component.type === 'data-table'"
+        :data="tableRows"
+        size="small"
+        height="100%"
+      >
         <ElTableColumn
           v-for="column in tableColumns"
           :key="column"
@@ -62,26 +67,38 @@
   )
 
   const tableRows = computed(() => props.rows || [])
+  const mapping = computed(() => props.component.dataset?.mapping || {})
+  const hasBoundDataset = computed(() => Number(props.component.dataset?.queryTemplateId || 0) > 0)
   const tableColumns = computed(() => {
     const first = tableRows.value[0] || {}
-    return Object.keys(first).slice(0, 8)
+    const mapped = Array.isArray(mapping.value.tableFields) ? mapping.value.tableFields : []
+    const available = Object.keys(first)
+    if (mapped.length) {
+      return mapped.filter((field) => available.includes(field)).slice(0, 8)
+    }
+    return available.slice(0, 8)
   })
 
-  const axisKey = computed(() => findKey(['label', 'name', 'date', 'time', 'category', 'x']))
-  const valueKey = computed(() => findNumberKey(['value', 'count', 'total', 'amount', 'y']))
+  const axisKey = computed(() =>
+    findKey(mapping.value.labelField, ['label', 'name', 'date', 'time', 'category', 'x'])
+  )
+  const valueKey = computed(() =>
+    findNumberKey(mapping.value.valueField, ['value', 'count', 'total', 'amount', 'y'])
+  )
 
   const axisData = computed(() => {
-    if (!tableRows.value.length) return ['A', 'B', 'C', 'D', 'E']
+    if (!tableRows.value.length) return hasBoundDataset.value ? [] : ['A', 'B', 'C', 'D', 'E']
     return tableRows.value.map((row, index) => String(row[axisKey.value] ?? `#${index + 1}`))
   })
 
   const seriesData = computed(() => {
-    if (!tableRows.value.length) return [12, 28, 19, 35, 24]
+    if (!tableRows.value.length) return hasBoundDataset.value ? [] : [12, 28, 19, 35, 24]
     return tableRows.value.map((row) => Number(row[valueKey.value] ?? 0))
   })
 
   const ringData = computed(() => {
     if (!tableRows.value.length) {
+      if (hasBoundDataset.value) return []
       return [
         { name: 'A', value: 35 },
         { name: 'B', value: 28 },
@@ -95,22 +112,28 @@
   })
 
   const metricValue = computed(() => {
-    if (!tableRows.value.length) return '0'
+    if (!tableRows.value.length) return hasBoundDataset.value ? '-' : '0'
     const raw = tableRows.value[0][valueKey.value]
     const value = Number(raw ?? 0)
     return Number.isFinite(value) ? value.toLocaleString() : String(raw ?? '-')
   })
 
-  function findKey(preferred: string[]) {
+  function findKey(mapped: string | undefined, preferred: string[]) {
     const first = tableRows.value[0] || {}
+    if (mapped && mapped in first) return mapped
     for (const key of preferred) {
       if (key in first) return key
     }
-    return Object.keys(first).find((key) => typeof first[key] === 'string') || Object.keys(first)[0] || 'label'
+    return (
+      Object.keys(first).find((key) => typeof first[key] === 'string') ||
+      Object.keys(first)[0] ||
+      'label'
+    )
   }
 
-  function findNumberKey(preferred: string[]) {
+  function findNumberKey(mapped: string | undefined, preferred: string[]) {
     const first = tableRows.value[0] || {}
+    if (mapped && mapped in first) return mapped
     for (const key of preferred) {
       if (key in first) return key
     }

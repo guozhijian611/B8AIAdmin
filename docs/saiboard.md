@@ -179,7 +179,15 @@ saiadmin-artd/src/views/plugin/saiboard/
       "type": "art-bar-chart",
       "title": "本月订单",
       "rect": { "x": 40, "y": 40, "w": 600, "h": 360, "z": 1 },
-      "dataset": { "queryTemplateId": 5, "refresh": 30 },
+      "dataset": {
+        "queryTemplateId": 5,
+        "refresh": 30,
+        "mapping": {
+          "labelField": "label",
+          "valueField": "value",
+          "tableFields": ["label", "value"]
+        }
+      },
       "option": {}
     }
   ]
@@ -188,6 +196,7 @@ saiadmin-artd/src/views/plugin/saiboard/
 
 - `type` 直接对应 `widgets/` 注册表里的组件名，编辑器与运行时都靠它 `<component :is>` 渲染。
 - `id`（如 `w_1`）是组件在大屏内的稳定标识，**取数接口以 `code + id` 为键**，不接受前端传任意 `queryTemplateId`（见安全设计）。
+- `dataset.mapping` 是组件级字段映射：图表类用 `labelField` / `valueField`，表格用 `tableFields` 控制列顺序；未配置时运行时按 `label/value/total` 等常用字段自动兜底。
 - 保存时 `draft_layout` 整体入库（拖拽是原子操作）；发布时拷贝到 `layout`。
 - 运行时下发 `layout` 时保留 `queryTemplateId`，但**剥离所有数据源连接信息**，前端拿不到密钥。
 
@@ -258,10 +267,10 @@ getScreen / data 接口入口：
 
 ### 拖拽编辑器 `/plugin/saiboard/editor/:id`（主应用内，Element Plus）
 
-- 三栏布局：左侧组件面板（拖出组件）、中间画布（`DraggableItem` 包裹真实 `art-*` 组件）、右侧属性面板（标题、样式、绑定查询模板、`refresh`）。
+- 三栏布局：左侧组件面板（拖出组件）、中间画布（`DraggableItem` 包裹真实 `art-*` 组件）、右侧属性面板（标题、样式、绑定查询模板、字段映射、`refresh`）。
 - `DraggableItem.vue` 封装 `vue3-draggable-resizable`，负责 x/y/w/h/z 的拖拽、缩放与对齐吸附，**不感知图表内容**；组件本身就是运行时同款，天然所见即所得。
 - 保存写 `draft_layout`；点「发布」才拷贝到 `layout` 上线。
-- 编辑器内不取真实数据可用占位/示例数据预览，避免编辑态频繁回源。
+- 编辑器绑定查询模板后通过 `QueryTemplate/preview` 取真实数据预览，并从首行数据生成字段映射下拉；未绑定模板时才使用示例数据占位。
 
 ### 对外运行时页 `/screen/:code`（静态公开路由，复用 widgets/）
 
@@ -349,7 +358,7 @@ php webman b8:migrate
 | 后端 | `SqlBuilder`（`table_raw` / `table_count` / `table_aggregate`）+ `DataSourceExecutor`（mysql / http + SSRF 防护 + Cache 缓存）。 |
 | 后端 | `ScreenController` 标准 CRUD + `saveLayout` / `publish`；`BoardController`（`getScreen` / `data`，IDOR 绑定校验）。 |
 | 前端 | `DraggableItem.vue`（封装 `vue3-draggable-resizable`）+ `widgets/` 注册表，复用 3~4 个 `art-*` 图表（柱/折线/环形 + 单值翻牌 / 表格）。 |
-| 前端 | 拖拽编辑器 + 查询模板表单化配置 + 对外运行时页（静态 `/screen/:code`、等比缩放、is_public / token 鉴权）。 |
+| 前端 | 拖拽编辑器 + 编辑态真实数据预览 / 字段映射 + 查询模板表单化配置 + 对外运行时页（静态 `/screen/:code`、等比缩放、is_public / token 鉴权）。 |
 
 ### P1 能力增强
 

@@ -9,6 +9,11 @@ export interface BoardRect {
 export interface BoardDataset {
   queryTemplateId?: number
   refresh?: number
+  mapping?: {
+    labelField?: string
+    valueField?: string
+    tableFields?: string[]
+  }
 }
 
 export interface BoardComponent {

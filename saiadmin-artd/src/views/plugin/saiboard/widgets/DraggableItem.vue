@@ -17,7 +17,7 @@
     @dragging="handleDragging"
     @resizing="handleResizing"
   >
-    <WidgetRenderer :component="component" :rows="rows" />
+    <WidgetRenderer :component="component" :rows="rows" :error="error" />
   </Vue3DraggableResizable>
 </template>
 
@@ -31,10 +31,12 @@
     defineProps<{
       component: BoardComponent
       rows?: Record<string, any>[]
+      error?: string
       selected?: boolean
     }>(),
     {
       rows: () => [],
+      error: '',
       selected: false
     }
   )
@@ -47,7 +49,11 @@
   function handleDragging(x: number, y: number) {
     emit('update', {
       ...props.component,
-      rect: { ...props.component.rect, x: Math.max(0, Math.round(x)), y: Math.max(0, Math.round(y)) }
+      rect: {
+        ...props.component.rect,
+        x: Math.max(0, Math.round(x)),
+        y: Math.max(0, Math.round(y))
+      }
     })
   }
 

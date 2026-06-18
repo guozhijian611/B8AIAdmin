@@ -49,7 +49,8 @@
             v-for="component in layout.components"
             :key="component.id"
             :component="component"
-            :rows="sampleRows"
+            :rows="componentRows(component)"
+            :error="componentError(component)"
             :selected="selectedId === component.id"
             @select="selectedId = $event"
             @update="updateComponent"
@@ -75,28 +76,117 @@
               </ElSelect>
             </ElFormItem>
             <ElFormItem label="查询模板">
-              <ElSelect v-model="selectedComponent.dataset.queryTemplateId" clearable filterable>
-                <ElOption
-                  v-for="item in templateOptions"
-                  :key="item.id"
-                  :label="item.name"
-                  :value="item.id"
-                />
-              </ElSelect>
+              <div class="template-bind-row">
+                <ElSelect
+                  v-model="selectedComponent.dataset.queryTemplateId"
+                  clearable
+                  filterable
+                  @change="onTemplateChange"
+                >
+                  <ElOption
+                    v-for="item in templateOptions"
+                    :key="item.id"
+                    :label="item.name"
+                    :value="item.id"
+                  />
+                </ElSelect>
+                <ElButton
+                  :disabled="!selectedComponent.dataset.queryTemplateId"
+                  :loading="selectedPreviewLoading"
+                  @click="previewSelectedData"
+                >
+                  预览
+                </ElButton>
+              </div>
             </ElFormItem>
             <ElFormItem label="刷新秒">
               <ElInputNumber v-model="selectedComponent.dataset.refresh" :min="5" :max="3600" />
             </ElFormItem>
+            <ElFormItem v-if="supportsFieldMapping" label="类目字段">
+              <ElSelect
+                v-model="selectedComponent.dataset.mapping!.labelField"
+                clearable
+                filterable
+                placeholder="自动识别"
+                :disabled="!fieldOptions.length"
+              >
+                <ElOption
+                  v-for="field in fieldOptions"
+                  :key="field"
+                  :label="field"
+                  :value="field"
+                />
+              </ElSelect>
+            </ElFormItem>
+            <ElFormItem v-if="supportsFieldMapping" label="数值字段">
+              <ElSelect
+                v-model="selectedComponent.dataset.mapping!.valueField"
+                clearable
+                filterable
+                placeholder="自动识别"
+                :disabled="!fieldOptions.length"
+              >
+                <ElOption
+                  v-for="field in numericFieldOptions"
+                  :key="field"
+                  :label="field"
+                  :value="field"
+                />
+              </ElSelect>
+            </ElFormItem>
+            <ElFormItem v-if="selectedComponent.type === 'data-table'" label="表格字段">
+              <ElSelect
+                v-model="selectedComponent.dataset.mapping!.tableFields"
+                multiple
+                collapse-tags
+                collapse-tags-tooltip
+                filterable
+                placeholder="默认前 8 列"
+                :disabled="!fieldOptions.length"
+              >
+                <ElOption
+                  v-for="field in fieldOptions"
+                  :key="field"
+                  :label="field"
+                  :value="field"
+                />
+              </ElSelect>
+            </ElFormItem>
+            <ElFormItem label="数据预览">
+              <ElText v-if="selectedPreviewError" type="danger" truncated>
+                {{ selectedPreviewError }}
+              </ElText>
+              <ElText v-else-if="selectedComponent.dataset.queryTemplateId" type="success">
+                已加载 {{ selectedPreviewRows.length }} 行
+              </ElText>
+              <ElText v-else type="info">未绑定查询模板，使用示例数据</ElText>
+            </ElFormItem>
             <ElFormItem label="位置">
               <ElSpace wrap>
-                <ElInputNumber v-model="selectedComponent.rect.x" :min="0" :max="layout.canvas.width" />
-                <ElInputNumber v-model="selectedComponent.rect.y" :min="0" :max="layout.canvas.height" />
+                <ElInputNumber
+                  v-model="selectedComponent.rect.x"
+                  :min="0"
+                  :max="layout.canvas.width"
+                />
+                <ElInputNumber
+                  v-model="selectedComponent.rect.y"
+                  :min="0"
+                  :max="layout.canvas.height"
+                />
               </ElSpace>
             </ElFormItem>
             <ElFormItem label="尺寸">
               <ElSpace wrap>
-                <ElInputNumber v-model="selectedComponent.rect.w" :min="120" :max="layout.canvas.width" />
-                <ElInputNumber v-model="selectedComponent.rect.h" :min="80" :max="layout.canvas.height" />
+                <ElInputNumber
+                  v-model="selectedComponent.rect.w"
+                  :min="120"
+                  :max="layout.canvas.width"
+                />
+                <ElInputNumber
+                  v-model="selectedComponent.rect.h"
+                  :min="80"
+                  :max="layout.canvas.height"
+                />
               </ElSpace>
             </ElFormItem>
             <ElFormItem label="层级">
@@ -140,10 +230,17 @@
   import { createDefaultComponent, widgetRegistry } from '../widgets/registry'
   import type { BoardComponent, BoardLayout } from '../widgets/types'
 
+  interface PreviewState {
+    rows: Record<string, any>[]
+    error: string
+    loading: boolean
+  }
+
   const route = useRoute()
   const zoom = ref(0.75)
   const selectedId = ref('')
   const templateOptions = ref<any[]>([])
+  const previewMap = reactive<Record<string, PreviewState>>({})
   const screen = reactive<any>({
     id: 0,
     name: '',
@@ -162,7 +259,29 @@
     { label: '周五', value: 260 }
   ]
 
-  const selectedComponent = computed(() => layout.components.find((item) => item.id === selectedId.value))
+  const selectedComponent = computed(() =>
+    layout.components.find((item) => item.id === selectedId.value)
+  )
+  const selectedPreviewState = computed(() =>
+    selectedComponent.value ? previewMap[selectedComponent.value.id] : undefined
+  )
+  const selectedPreviewRows = computed(() => selectedPreviewState.value?.rows || [])
+  const selectedPreviewError = computed(() => selectedPreviewState.value?.error || '')
+  const selectedPreviewLoading = computed(() => Boolean(selectedPreviewState.value?.loading))
+  const fieldOptions = computed(() => Object.keys(selectedPreviewRows.value[0] || {}))
+  const numericFieldOptions = computed(() =>
+    fieldOptions.value.filter((field) =>
+      selectedPreviewRows.value.some((row) => Number.isFinite(Number(row[field])))
+    )
+  )
+  const supportsFieldMapping = computed(() =>
+    Boolean(
+      selectedComponent.value &&
+        ['art-bar-chart', 'art-line-chart', 'art-ring-chart', 'stat-number', 'data-table'].includes(
+          selectedComponent.value.type
+        )
+    )
+  )
 
   const loadData = async () => {
     const id = Number(route.params.id)
@@ -171,6 +290,7 @@
     const draft = normalizeLayout(data.draft_layout || data.layout || {})
     Object.assign(layout.canvas, draft.canvas)
     layout.components.splice(0, layout.components.length, ...draft.components)
+    await refreshAllComponentData()
   }
 
   const loadTemplates = async () => {
@@ -194,21 +314,103 @@
             h: Number(component.rect?.h || 180),
             z: Number(component.rect?.z || 1)
           },
-          dataset: component.dataset || { refresh: 30 },
+          dataset: normalizeDataset(component.dataset),
           option: component.option || {}
         }))
       : []
   })
 
+  const normalizeDataset = (dataset: any = {}) => ({
+    queryTemplateId:
+      Number(dataset?.queryTemplateId || dataset?.query_template_id || 0) || undefined,
+    refresh: Number(dataset?.refresh || 30),
+    mapping: {
+      labelField: dataset?.mapping?.labelField || dataset?.fieldMap?.label || '',
+      valueField: dataset?.mapping?.valueField || dataset?.fieldMap?.value || '',
+      tableFields: Array.isArray(dataset?.mapping?.tableFields) ? dataset.mapping.tableFields : []
+    }
+  })
+
   const addWidget = (type: string) => {
     const component = createDefaultComponent(type, layout.components.length) as BoardComponent
+    ensureDataset(component)
     layout.components.push(component)
     selectedId.value = component.id
   }
 
   const updateComponent = (component: BoardComponent) => {
+    ensureDataset(component)
     const index = layout.components.findIndex((item) => item.id === component.id)
     if (index >= 0) layout.components.splice(index, 1, component)
+  }
+
+  const ensureDataset = (component: BoardComponent) => {
+    component.dataset = normalizeDataset(component.dataset)
+  }
+
+  const componentRows = (component: BoardComponent) => {
+    if (!component.dataset?.queryTemplateId) return sampleRows
+    return previewMap[component.id]?.rows || []
+  }
+
+  const componentError = (component: BoardComponent) => previewMap[component.id]?.error || ''
+
+  const refreshComponentData = async (component: BoardComponent) => {
+    ensureDataset(component)
+    const queryTemplateId = Number(component.dataset.queryTemplateId || 0)
+    if (!queryTemplateId) {
+      delete previewMap[component.id]
+      return
+    }
+
+    previewMap[component.id] = {
+      rows: previewMap[component.id]?.rows || [],
+      error: '',
+      loading: true
+    }
+    try {
+      const result = await templateApi.preview({ id: queryTemplateId })
+      previewMap[component.id] = {
+        rows: result.rows || [],
+        error: '',
+        loading: false
+      }
+      syncMappingWithRows(component, result.rows || [])
+    } catch (error: any) {
+      previewMap[component.id] = {
+        rows: previewMap[component.id]?.rows || [],
+        error: error?.message || '预览失败',
+        loading: false
+      }
+    }
+  }
+
+  const refreshAllComponentData = async () => {
+    await Promise.all(layout.components.map((component) => refreshComponentData(component)))
+  }
+
+  const onTemplateChange = async () => {
+    if (!selectedComponent.value) return
+    selectedComponent.value.dataset.mapping = { labelField: '', valueField: '', tableFields: [] }
+    await refreshComponentData(selectedComponent.value)
+  }
+
+  const previewSelectedData = async () => {
+    if (!selectedComponent.value) return
+    await refreshComponentData(selectedComponent.value)
+  }
+
+  const syncMappingWithRows = (component: BoardComponent, rows: Record<string, any>[]) => {
+    ensureDataset(component)
+    const fields = Object.keys(rows[0] || {})
+    const mapping = component.dataset.mapping!
+    if (mapping.labelField && !fields.includes(mapping.labelField)) mapping.labelField = ''
+    if (mapping.valueField && !fields.includes(mapping.valueField)) mapping.valueField = ''
+    if (Array.isArray(mapping.tableFields)) {
+      mapping.tableFields = mapping.tableFields.filter((field) => fields.includes(field))
+    } else {
+      mapping.tableFields = []
+    }
   }
 
   const bringToFront = () => {
@@ -253,6 +455,10 @@
 
   onMounted(async () => {
     await Promise.all([loadData(), loadTemplates()])
+  })
+
+  watch(selectedComponent, (component) => {
+    if (component) ensureDataset(component)
   })
 </script>
 
@@ -303,6 +509,13 @@
     font-weight: 600;
   }
 
+  .template-bind-row {
+    display: grid;
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+
   .widget-button {
     display: flex;
     align-items: center;
@@ -324,8 +537,7 @@
     overflow: auto;
     background:
       linear-gradient(45deg, rgb(255 255 255 / 4%) 25%, transparent 25%),
-      linear-gradient(-45deg, rgb(255 255 255 / 4%) 25%, transparent 25%),
-      #111827;
+      linear-gradient(-45deg, rgb(255 255 255 / 4%) 25%, transparent 25%), #111827;
     background-position:
       0 0,
       0 12px;
