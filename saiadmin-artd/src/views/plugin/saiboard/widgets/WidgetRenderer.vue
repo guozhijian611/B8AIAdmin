@@ -98,9 +98,10 @@
   const axisKey = computed(() =>
     findKey(mapping.value.labelField, ['label', 'name', 'date', 'time', 'category', 'x'])
   )
-  const valueKey = computed(() =>
-    findNumberKey(mapping.value.valueField, ['value', 'count', 'total', 'amount', 'y'])
+  const valueKeys = computed(() =>
+    findNumberKeys(mapping.value.valueField, ['value', 'count', 'total', 'amount', 'y'])
   )
+  const valueKey = computed(() => valueKeys.value[0] || 'value')
 
   const axisData = computed(() => {
     if (!tableRows.value.length) return hasBoundDataset.value ? [] : ['A', 'B', 'C', 'D', 'E']
@@ -109,7 +110,14 @@
 
   const seriesData = computed(() => {
     if (!tableRows.value.length) return hasBoundDataset.value ? [] : [12, 28, 19, 35, 24]
-    return tableRows.value.map((row) => Number(row[valueKey.value] ?? 0))
+    if (valueKeys.value.length <= 1) {
+      return tableRows.value.map((row) => Number(row[valueKey.value] ?? 0))
+    }
+
+    return valueKeys.value.map((key) => ({
+      name: key,
+      data: tableRows.value.map((row) => Number(row[key] ?? 0))
+    }))
   })
 
   const ringData = computed(() => {
@@ -168,17 +176,21 @@
     )
   }
 
-  function findNumberKey(mapped: string | undefined, preferred: string[]) {
+  function findNumberKeys(mapped: string | undefined, preferred: string[]) {
     const first = tableRows.value[0] || {}
-    if (mapped && mapped in first) return mapped
-    for (const key of preferred) {
-      if (key in first) return key
-    }
-    return (
-      Object.keys(first).find((key) => Number.isFinite(Number(first[key]))) ||
-      Object.keys(first)[1] ||
-      'value'
+    if (mapped && mapped in first) return [mapped]
+
+    const numericKeys = Object.keys(first).filter(
+      (key) =>
+        key !== axisKey.value && tableRows.value.some((row) => Number.isFinite(Number(row[key])))
     )
+    if (numericKeys.length > 1) return numericKeys
+
+    for (const key of preferred) {
+      if (key in first) return [key]
+    }
+
+    return numericKeys.length ? [numericKeys[0]] : [Object.keys(first)[1] || 'value']
   }
 
   onMounted(() => {

@@ -197,34 +197,54 @@
                 <ElOption label="按年" value="year" />
               </ElSelect>
             </ElFormItem>
-            <ElFormItem label="聚合方式">
-              <ElSelect
-                v-model="form.config.aggregate"
-                style="width: 100%"
-                @change="onAggregateChange"
-              >
-                <ElOption label="计数 count" value="count" />
-                <ElOption label="求和 sum" value="sum" />
-                <ElOption label="平均 avg" value="avg" />
-                <ElOption label="最小 min" value="min" />
-                <ElOption label="最大 max" value="max" />
-              </ElSelect>
-            </ElFormItem>
-            <ElFormItem v-if="form.config.aggregate !== 'count'" label="指标字段">
-              <ElSelect v-model="form.config.metric" filterable style="width: 100%">
-                <ElOption
-                  v-for="item in numericColumnOptions"
-                  :key="item.name"
-                  :label="`${item.name} (${item.type})`"
-                  :value="item.name"
-                />
-              </ElSelect>
+            <ElFormItem label="聚合指标">
+              <div class="config-list">
+                <div v-for="(metric, index) in form.config.metrics" :key="index" class="metric-row">
+                  <ElInput v-model="metric.alias" placeholder="输出名，例如 订单金额" />
+                  <ElSelect
+                    v-model="metric.aggregate"
+                    placeholder="聚合方式"
+                    @change="onMetricAggregateChange(metric)"
+                  >
+                    <ElOption
+                      v-for="item in aggregateOptions"
+                      :key="item.value"
+                      :label="item.label"
+                      :value="item.value"
+                    />
+                  </ElSelect>
+                  <ElSelect
+                    v-if="metric.aggregate !== 'count'"
+                    v-model="metric.field"
+                    filterable
+                    placeholder="数值字段"
+                  >
+                    <ElOption
+                      v-for="item in numericColumnOptions"
+                      :key="item.name"
+                      :label="`${item.name} (${item.type})`"
+                      :value="item.name"
+                    />
+                  </ElSelect>
+                  <ElInput v-else model-value="COUNT(*)" disabled />
+                  <ElButton text type="danger" @click="removeAggregateMetric(index)">删除</ElButton>
+                </div>
+                <ElButton @click="addAggregateMetric">
+                  <template #icon><ArtSvgIcon icon="ri:add-line" /></template>
+                  添加指标
+                </ElButton>
+              </div>
             </ElFormItem>
             <ElFormItem label="排序">
               <ElSpace wrap>
                 <ElSelect v-model="form.config.order_by" style="width: 160px">
                   <ElOption label="按维度" value="label" />
-                  <ElOption label="按数值" value="value" />
+                  <ElOption
+                    v-for="item in aggregateOrderOptions"
+                    :key="item.value"
+                    :label="`按 ${item.label}`"
+                    :value="item.value"
+                  />
                 </ElSelect>
                 <ElSelect v-model="form.config.order_type" style="width: 140px">
                   <ElOption label="升序" value="asc" />
@@ -377,6 +397,12 @@
     kind: 'string' | 'number' | 'date'
   }
 
+  interface AggregateMetric {
+    alias: string
+    aggregate: string
+    field: string
+  }
+
   const rows = ref<any[]>([])
   const datasourceOptions = ref<DatasourceOption[]>([])
   const tableOptions = ref<{ name: string }[]>([])
@@ -426,6 +452,13 @@
     { label: '上月', value: 'last_month' },
     { label: '本年', value: 'this_year' }
   ]
+  const aggregateOptions = [
+    { label: '计数 count', value: 'count' },
+    { label: '求和 sum', value: 'sum' },
+    { label: '平均 avg', value: 'avg' },
+    { label: '最小 min', value: 'min' },
+    { label: '最大 max', value: 'max' }
+  ]
   const mysqlDatasetTypes = [
     { label: '表原始行', value: 'table_raw' },
     { label: '表计数', value: 'table_count' },
@@ -454,6 +487,12 @@
     )
   )
   const configPreview = computed(() => JSON.stringify(buildConfig(false), null, 2))
+  const aggregateOrderOptions = computed(() =>
+    normalizeAggregateMetrics(form.config.metrics, false, form.config).map((item, index) => ({
+      label: aggregateMetricLabel(item, index),
+      value: aggregateMetricAlias(item, index)
+    }))
+  )
 
   const defaultConfig = (type: string): Record<string, any> => {
     if (type === 'table_count') return { table: '', conditions: [] }
@@ -462,8 +501,7 @@
         table: '',
         dimension: '',
         dimension_type: 'raw',
-        aggregate: 'count',
-        metric: '',
+        metrics: [{ alias: '数量', aggregate: 'count', field: '' }],
         conditions: [],
         order_by: 'label',
         order_type: 'asc',
@@ -490,6 +528,9 @@
       next.field_aliases = normalizeAliasRows(next.field_aliases)
       next.computed_fields = normalizeComputedRows(next.computed_fields)
       if (!Array.isArray(next.order)) next.order = []
+    }
+    if (type === 'table_aggregate') {
+      next.metrics = normalizeAggregateMetrics(next.metrics, false, next)
     }
     if (type === 'http_passthrough') {
       paramsText.value = JSON.stringify(next.params || {}, null, 2)
@@ -575,12 +616,12 @@
     form.config.computed_fields = []
     form.config.order = []
     form.config.dimension = ''
-    form.config.metric = ''
+    form.config.metrics = [{ alias: '数量', aggregate: 'count', field: '' }]
     await loadSchema(form.config.table)
   }
 
-  const onAggregateChange = () => {
-    if (form.config.aggregate === 'count') form.config.metric = ''
+  const onMetricAggregateChange = (metric: AggregateMetric) => {
+    if (metric.aggregate === 'count') metric.field = ''
   }
 
   const buildPayload = () => ({ ...form, config: buildConfig(true) })
@@ -602,7 +643,11 @@
     }
     if (form.dataset_type === 'table_aggregate') {
       config.limit = Number(config.limit || 100)
-      if (config.aggregate === 'count') config.metric = ''
+      config.metrics = normalizeAggregateMetrics(config.metrics, true, config)
+      config.order_by = normalizeAggregateOrderBy(config.order_by, config.metrics)
+      config.order_type = config.order_type === 'desc' ? 'desc' : 'asc'
+      delete config.aggregate
+      delete config.metric
     }
     return config
   }
@@ -684,6 +729,19 @@
     form.config.computed_fields.splice(index, 1)
   }
 
+  const addAggregateMetric = () => {
+    if (!Array.isArray(form.config.metrics)) form.config.metrics = []
+    form.config.metrics.push({ alias: '', aggregate: 'sum', field: '' })
+  }
+
+  const removeAggregateMetric = (index: number) => {
+    form.config.metrics.splice(index, 1)
+    if (!form.config.metrics.length) {
+      form.config.metrics.push({ alias: '数量', aggregate: 'count', field: '' })
+    }
+    form.config.order_by = normalizeAggregateOrderBy(form.config.order_by, form.config.metrics)
+  }
+
   const removeCondition = (index: number) => {
     form.config.conditions.splice(index, 1)
   }
@@ -755,6 +813,61 @@
       .filter((item) => (strict ? item.alias && item.expression : item.alias || item.expression))
   }
 
+  function normalizeAggregateMetrics(
+    rows: any = [],
+    strict = false,
+    source: Record<string, any> = {}
+  ): AggregateMetric[] {
+    let items = Array.isArray(rows) ? rows : []
+    if (!items.length && source.aggregate) {
+      items = [
+        {
+          alias: source.aggregate === 'count' ? '数量' : String(source.metric || ''),
+          aggregate: source.aggregate,
+          field: source.metric || ''
+        }
+      ]
+    }
+    if (!items.length) {
+      items = [{ alias: '数量', aggregate: 'count', field: '' }]
+    }
+
+    const metrics = items
+      .slice(0, 8)
+      .map((item, index) => {
+        const aggregate = normalizeAggregateType(item?.aggregate)
+        const field = aggregate === 'count' ? '' : String(item?.field || '').trim()
+        const alias = String(
+          item?.alias || aggregateMetricAlias({ aggregate, field, alias: '' }, index)
+        ).trim()
+        return { alias, aggregate, field }
+      })
+      .filter((item) =>
+        strict ? item.aggregate === 'count' || item.field : item.alias || item.field
+      )
+    return metrics.length ? metrics : [{ alias: '数量', aggregate: 'count', field: '' }]
+  }
+
+  function normalizeAggregateType(value: string) {
+    return ['count', 'sum', 'avg', 'min', 'max'].includes(value) ? value : 'count'
+  }
+
+  function aggregateMetricAlias(metric: Partial<AggregateMetric>, index: number) {
+    const alias = String(metric.alias || '').trim()
+    if (alias) return alias
+    if (metric.aggregate === 'count') return index === 0 ? '数量' : `数量${index + 1}`
+    return metric.field ? `${metric.field}_${metric.aggregate}` : `指标${index + 1}`
+  }
+
+  function aggregateMetricLabel(metric: AggregateMetric, index: number) {
+    return metric.alias || aggregateMetricAlias(metric, index)
+  }
+
+  function normalizeAggregateOrderBy(value: string, metrics: AggregateMetric[]) {
+    const aliases = new Set(metrics.map((item, index) => aggregateMetricAlias(item, index)))
+    return value && aliases.has(value) ? value : 'label'
+  }
+
   function parseJson(text: string, strict = true) {
     try {
       return JSON.parse(text || '{}')
@@ -786,7 +899,8 @@
   }
 
   .alias-row,
-  .computed-row {
+  .computed-row,
+  .metric-row {
     display: grid;
     gap: 8px;
     margin-bottom: 8px;
@@ -798,5 +912,9 @@
 
   .computed-row {
     grid-template-columns: minmax(180px, 1fr) minmax(280px, 2fr) 64px;
+  }
+
+  .metric-row {
+    grid-template-columns: minmax(160px, 1.2fr) 140px minmax(180px, 1.4fr) 64px;
   }
 </style>

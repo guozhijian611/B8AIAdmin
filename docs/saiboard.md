@@ -164,7 +164,7 @@ saiadmin-artd/src/views/plugin/saiboard/
 | `table_raw` | P0 | 表原始：选表 + 字段 + 条件 + 排序 + limit。 |
 | `table_count` | P0 | 单值计数。 |
 | `http_passthrough` | P0 | HTTP 透传：配置路径 + 参数。 |
-| `table_aggregate` | P0 | 表聚合：维度（x 轴）+ 指标（y 轴）+ 聚合（count/sum/avg/min/max）+ 条件 + 排序 + limit。 |
+| `table_aggregate` | P0 + P1 | 表聚合：维度（x 轴）+ 多指标（y 轴）+ 聚合（count/sum/avg/min/max）+ 条件 + 排序 + limit。 |
 
 > `table_aggregate` 仍保持预置模板模式，不开放裸 SQL。维度和指标字段都必须来自目标数据源真实表字段，日期维度支持原始值、按日、按月、按年。
 
@@ -235,7 +235,7 @@ saiadmin-artd/src/views/plugin/saiboard/
 - 输入：`dataset_type` + `config`（表名、字段、条件、排序、limit）。
 - 输出：**参数化** SELECT。
 - 表名、字段名走**白名单校验**：只能是指定 datasource 库里真实存在的表 / 列，运行时通过 `SHOW TABLES` / `SHOW COLUMNS` 复核。
-- `table_aggregate` 输出统一的 `{label, value}` 行，便于柱状图、折线图、环形图直接消费。
+- `table_aggregate` 输出统一的 `label + 指标列` 行；单指标兼容 `{label, value}`，多指标如 `{label, 订单数, 订单金额}` 可被柱状图、折线图自动识别为多系列。
 - 强烈建议生产仍给数据源配**只读 MySQL 账号**，作为第二道防线。
 
 ## 安全设计
@@ -288,7 +288,7 @@ getScreen / data 接口入口：
 - 支持按数据源读取 MySQL 表和字段，表单化配置 `table_raw` / `table_count` / `table_aggregate`。
 - `table_raw` 可选返回字段、字段别名、计算字段、条件、排序和 limit。
 - `table_count` 可选条件，统一返回 `{rows, total}`，其中 `total` 是计数值。
-- `table_aggregate` 可选维度字段、日期粒度、聚合方式、指标字段、条件、排序和 limit，统一返回 `{rows, total}`，每行结构为 `{label, value}`。
+- `table_aggregate` 可选维度字段、日期粒度、多个聚合指标、条件、排序和 limit，统一返回 `{rows, total}`；每行结构为 `label + 指标列`，指标最多 8 项，非 `count` 指标必须选择数值字段。
 - 条件支持 `= / != / > / >= / < / <= / like / in / between / time_range`。`time_range` 只允许日期 / 时间字段，`value` 可用 `today`、`yesterday`、`last_7_days`、`last_30_days`、`this_week`、`this_month`、`last_month`、`this_year`。
 - `table_raw.field_aliases` 用真实字段名映射输出字段名；`computed_fields` 仅支持数值字段、数字、括号和 `+ - * /` 四则运算，不开放裸 SQL、函数、子查询或条件表达式。
 - HTTP 数据源使用 `http_passthrough`，配置路径和请求参数 JSON。
@@ -321,6 +321,23 @@ getScreen / data 接口入口：
     }
   ],
   "limit": 100
+}
+```
+
+多指标聚合示例：
+
+```json
+{
+  "table": "saipay_order",
+  "dimension": "pay_method",
+  "dimension_type": "raw",
+  "metrics": [
+    { "alias": "订单数", "aggregate": "count" },
+    { "alias": "订单金额", "aggregate": "sum", "field": "order_price" }
+  ],
+  "order_by": "订单金额",
+  "order_type": "desc",
+  "limit": 20
 }
 ```
 
@@ -392,13 +409,14 @@ php webman b8:migrate
 | 后端 | `SqlBuilder`（`table_raw` / `table_count` / `table_aggregate`）+ `DataSourceExecutor`（mysql / http + SSRF 防护 + Cache 缓存）。 |
 | 后端 | `ScreenController` 标准 CRUD + `saveLayout` / `publish`；`BoardController`（`getScreen` / `data`，IDOR 绑定校验）。 |
 | 后端 | `DatasourceController::test` 支持新增态 payload 测试校验，连接失败写入 `last_error` 并返回稳定错误消息。 |
+| 后端 | `table_aggregate` 支持 `metrics[]` 多指标聚合，指标 alias 白名单化、最多 8 项，排序只允许维度或已校验指标。 |
 | 前端 | `DraggableItem.vue`（封装 `vue3-draggable-resizable`）+ `widgets/` 注册表，复用 3~4 个 `art-*` 图表（柱/折线/环形 + 单值翻牌 / 表格）。 |
 | 前端 | 拖拽编辑器 + 编辑态真实数据预览 / 字段映射 + 查询模板表单化配置 + 对外运行时页（静态 `/screen/:code`、适配模式、is_public / token 鉴权）。 |
-| 前端 | 数据源新增/编辑态测试前先做表单校验；指标组件支持前缀 / 小数位 / 单位，表格支持最大行数 / 序号列 / 斑马纹，图表组件缩放后自动触发 resize。 |
+| 前端 | 数据源新增/编辑态测试前先做表单校验；查询模板支持多指标聚合配置；指标组件支持前缀 / 小数位 / 单位，表格支持最大行数 / 序号列 / 斑马纹，图表组件缩放后自动触发 resize。 |
 
 ### P1 能力增强（部分完成）
 
-- 查询模板继续补多指标聚合、表达式函数和参数化高级条件。
+- 查询模板继续补表达式函数和参数化高级条件。
 - 图表组件继续补全：地图、轮播、纯 CSS/SVG 装饰边框、更多图表样式；表格列宽 / 对齐 / 别名等细项可继续增强。
 - 大屏主题与背景增强。
 

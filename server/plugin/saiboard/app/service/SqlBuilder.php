@@ -64,30 +64,22 @@ class SqlBuilder
         $columns = $this->columns($pdo, $table);
         $columnTypes = $this->columnTypes($pdo, $table);
         $dimension = $this->assertColumn($columns, (string) ($config['dimension'] ?? ''), '维度字段');
-        $aggregate = strtolower(trim((string) ($config['aggregate'] ?? 'count')));
-        if (!in_array($aggregate, ['count', 'sum', 'avg', 'min', 'max'], true)) {
-            throw new InvalidArgumentException('聚合方式不支持');
-        }
-
-        $valueExpression = 'COUNT(*)';
-        if ($aggregate !== 'count') {
-            $metric = $this->assertColumn($columns, (string) ($config['metric'] ?? ''), '指标字段');
-            if (!$this->isNumericType($columnTypes[$metric] ?? '')) {
-                throw new InvalidArgumentException('指标字段必须是数值类型');
-            }
-            $valueExpression = strtoupper($aggregate) . "(`{$metric}`)";
-        }
+        $metrics = $this->normalizeAggregateMetrics($config, $columns, $columnTypes);
 
         [$whereSql, $bindings] = $this->buildWhere($columns, $config['conditions'] ?? [], $columnTypes);
         $labelExpression = $this->dimensionExpression($dimension, (string) ($config['dimension_type'] ?? 'raw'));
-        $orderBy = strtolower((string) ($config['order_by'] ?? 'label')) === 'value' ? 'value' : 'label';
+        $metricExpressions = array_map(
+            fn (array $metric) => $metric['expression'] . ' AS ' . $this->quoteAlias($metric['alias']),
+            $metrics
+        );
+        $orderBy = $this->aggregateOrderBy($config['order_by'] ?? 'label', $metrics);
         $direction = strtolower((string) ($config['order_type'] ?? 'asc')) === 'desc' ? 'DESC' : 'ASC';
         $limit = $this->normalizeLimit($config['limit'] ?? 100);
 
         $sql = sprintf(
-            'SELECT %s AS `label`, %s AS `value` FROM `%s`%s GROUP BY `label` ORDER BY `%s` %s LIMIT %d',
+            'SELECT %s AS `label`, %s FROM `%s`%s GROUP BY `label` ORDER BY %s %s LIMIT %d',
             $labelExpression,
-            $valueExpression,
+            implode(', ', $metricExpressions),
             $table,
             $whereSql,
             $orderBy,
@@ -96,6 +88,95 @@ class SqlBuilder
         );
 
         return [$sql, $bindings, 'raw'];
+    }
+
+    private function normalizeAggregateMetrics(array $config, array $columns, array $columnTypes): array
+    {
+        $items = $config['metrics'] ?? [];
+        if (!is_array($items) || $items === []) {
+            $items = [[
+                'aggregate' => $config['aggregate'] ?? 'count',
+                'field' => $config['metric'] ?? '',
+                'alias' => 'value',
+            ]];
+        }
+        if (count($items) > 8) {
+            throw new InvalidArgumentException('聚合指标最多支持 8 项');
+        }
+
+        $result = [];
+        $usedNames = ['label' => true];
+        foreach ($items as $index => $item) {
+            if (!is_array($item)) {
+                throw new InvalidArgumentException('聚合指标配置不正确');
+            }
+
+            $aggregate = $this->assertAggregate((string) ($item['aggregate'] ?? 'count'));
+            $field = '';
+            $expression = 'COUNT(*)';
+            if ($aggregate !== 'count') {
+                $field = $this->assertColumn($columns, (string) ($item['field'] ?? ''), '指标字段');
+                if (!$this->isNumericType($columnTypes[$field] ?? '')) {
+                    throw new InvalidArgumentException('指标字段必须是数值类型');
+                }
+                $expression = strtoupper($aggregate) . "(`{$field}`)";
+            }
+
+            $alias = trim((string) ($item['alias'] ?? ''));
+            if ($alias === '') {
+                $alias = $this->defaultMetricAlias($aggregate, $field, $index);
+            }
+            $alias = $this->assertOutputAlias($alias, '聚合指标别名');
+            $this->assertUniqueOutputName($usedNames, $alias);
+
+            $result[] = [
+                'aggregate' => $aggregate,
+                'field' => $field,
+                'alias' => $alias,
+                'expression' => $expression,
+            ];
+        }
+
+        if ($result === []) {
+            throw new InvalidArgumentException('聚合指标必须至少配置一项');
+        }
+
+        return $result;
+    }
+
+    private function assertAggregate(string $aggregate): string
+    {
+        $aggregate = strtolower(trim($aggregate));
+        if (!in_array($aggregate, ['count', 'sum', 'avg', 'min', 'max'], true)) {
+            throw new InvalidArgumentException('聚合方式不支持');
+        }
+
+        return $aggregate;
+    }
+
+    private function defaultMetricAlias(string $aggregate, string $field, int $index): string
+    {
+        if ($aggregate === 'count') {
+            return $index === 0 ? 'value' : 'count_' . ($index + 1);
+        }
+
+        return $field === '' ? 'value_' . ($index + 1) : $field . '_' . $aggregate;
+    }
+
+    private function aggregateOrderBy(mixed $orderBy, array $metrics): string
+    {
+        $orderBy = trim((string) $orderBy);
+        if ($orderBy === '' || strtolower($orderBy) === 'label') {
+            return '`label`';
+        }
+
+        foreach ($metrics as $metric) {
+            if ($orderBy === $metric['alias']) {
+                return $this->quoteAlias($orderBy);
+            }
+        }
+
+        return '`label`';
     }
 
     private function assertTable(PDO $pdo, string $table): string
