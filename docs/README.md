@@ -30,7 +30,7 @@
 - [B8CMS 独立站](b8cms.md) — CMS 插件、模板开发与多语言 SEO
 - [SAI AI 插件](saiai.md) — AI 多模态接入与后台测试台
 - [SaiPay 支付](saipay-payment.md) — 支付方式、订单流程与人工确认
-- [SAI Board 大屏](saiboard.md) — 大屏可视化设计与开发（待开发）
+- [SAI Board 大屏](saiboard.md) — 数据源、查询模板、大屏编辑器与公开运行时
 
 ### 📦 构建与发布
 

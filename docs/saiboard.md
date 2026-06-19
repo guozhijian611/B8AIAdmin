@@ -527,6 +527,47 @@ SAIBOARD_HTTP_ALLOWED_HOSTS=api.example.com,*.trusted.example
 - `*.trusted.example` 只允许子域名，例如 `order.trusted.example`，不包含根域 `trusted.example`。
 - 自定义 `Host` 请求头会被忽略，后端会使用 URL 中的目标域名；curl 可用时会通过 `CURLOPT_RESOLVE` 固定到已校验公网 IP，避免校验后再次解析到内网地址。
 
+### 生产运行配置
+
+SAI Board 的公开运行页会被投屏、嵌入或外部客户访问，生产环境至少要确认下面这些配置和账号边界：
+
+```env
+SAIBOARD_HTTP_ALLOWED_HOSTS=api.example.com,*.trusted.example
+SAIBOARD_RATE_LIMIT=true
+SAIBOARD_RATE_LIMIT_IP_WINDOW=60
+SAIBOARD_RATE_LIMIT_IP_LIMIT=240
+SAIBOARD_RATE_LIMIT_SCREEN_WINDOW=60
+SAIBOARD_RATE_LIMIT_SCREEN_LIMIT=3000
+SAIBOARD_RATE_LIMIT_OWNER_WINDOW=60
+SAIBOARD_RATE_LIMIT_OWNER_LIMIT=6000
+SAIBOARD_REDIS_LOCK=true
+SAIBOARD_LOCK_TTL=15
+SAIBOARD_RUNTIME_METRICS=true
+SAIBOARD_RUNTIME_METRICS_WINDOW=300
+```
+
+| 配置项 | 默认值 | 生产建议 |
+| --- | --- | --- |
+| `SAIBOARD_HTTP_ALLOWED_HOSTS` | 空 | 按第三方接口域名收紧；只需要 MySQL 数据源时可以保持空。 |
+| `SAIBOARD_RATE_LIMIT` | `true` | 保持开启；投屏大屏较多时优先调高 screen / owner 阈值，不建议直接关闭。 |
+| `SAIBOARD_RATE_LIMIT_IP_*` | `60 / 240` | 控制单 IP 访问频率，适合防止公开链接被刷。 |
+| `SAIBOARD_RATE_LIMIT_SCREEN_*` | `60 / 3000` | 控制单个大屏总请求量，适合展厅多终端访问。 |
+| `SAIBOARD_RATE_LIMIT_OWNER_*` | `60 / 6000` | 控制同一创建人名下大屏总请求量，避免单账号拖垮数据源。 |
+| `SAIBOARD_REDIS_LOCK` | `true` | 多副本必须配置 Redis；Redis 不可用时会降级文件锁，只适合单机。 |
+| `SAIBOARD_LOCK_TTL` | `15` | 应大于常规数据源响应时间；慢接口可适当调高。 |
+| `SAIBOARD_RUNTIME_METRICS` | `true` | 保持开启，后台运行统计用于观察缓存命中、限流、锁等待和回源异常。 |
+| `SAIBOARD_RUNTIME_METRICS_WINDOW` | `300` | 统计窗口秒数；排障时可调小，日常可保持默认。 |
+
+MySQL 数据源生产账号必须按业务库单独创建只读用户，只授予大屏查询所需表的 `SELECT` 权限，不使用框架主库账号或业务写账号。例如：
+
+```sql
+CREATE USER 'saiboard_readonly'@'%' IDENTIFIED BY 'strong-password';
+GRANT SELECT ON your_database.your_table TO 'saiboard_readonly'@'%';
+FLUSH PRIVILEGES;
+```
+
+如大屏需要读取多张表，逐表授权；不授予 `INSERT`、`UPDATE`、`DELETE`、`DROP`、`ALTER`、`CREATE` 等写入或结构变更权限。查询模板虽然已经通过字段白名单和参数化 SELECT 做了第一层防护，只读账号仍是生产事故隔离的第二道防线。
+
 ### 数据源测试返回
 
 后台「数据源管理」新增或编辑时可以直接点击测试。测试接口会使用当前表单里的未保存配置，不要求先保存。
@@ -622,6 +663,21 @@ php webman b8:migrate
 - `20260619080105_seed_saiboard_default_templates.php`：为模板市场幂等内置 1 个通用运营大屏模板和 2 个组件模板（核心指标三联卡、服务健康状态矩阵），模板内容不绑定任何查询模板或数据源；回滚仅删除本迁移创建且仍归属默认管理员的模板行。
 - 后台菜单「大屏管理 / 数据源管理 / 查询模板 / 模板市场 / 大屏编辑器」，权限 slug 见后端分层表。
 - 初始化只读账号使用说明（文档，不写入迁移）。
+
+## 上线验收清单
+
+上线前按下面顺序验收，避免只验证编辑器页面而遗漏公开运行时和权限边界：
+
+1. 在 `server/` 执行 `php webman b8:migrate:status`，确认 6 个 SAI Board 迁移均为 `up`；再执行 `php webman b8:migrate --dry-run`，确认无待执行迁移。
+2. 在 `server/` 执行 `php webman route:list | rg "saiboard|apidoc/openapi"`，确认后台、公开运行时和 APIDOC 路由存在。
+3. 配置生产 `.env`：按实际域名设置 `SAIBOARD_HTTP_ALLOWED_HOSTS`；多副本部署确认 `CACHE_MODE=redis`、`REDIS_HOST`、`REDIS_PASSWORD`、`REDIS_DB` 可用；保留 `SAIBOARD_RATE_LIMIT=true` 和 `SAIBOARD_REDIS_LOCK=true`。
+4. 为每个 MySQL 数据源创建只读账号，并用数据源管理页「测试」确认连接成功；失败时确认数据库名、账号密码、网络和授权范围。
+5. 新建或选择一个查询模板，先在查询模板页预览，再在大屏编辑器绑定组件预览，确认返回结构符合组件字段映射。
+6. 通过「从数据表生成大屏」生成草稿，进入编辑器检查指标卡、趋势、排行、分布、状态矩阵和明细表；保存草稿后使用「预览草稿」查看 `/screen/:code?admin_preview=1&draft=1`。
+7. 发布大屏后打开发布预览，确认运行页适配模式符合预期：`contain` 完整显示、`cover` 允许裁切、`stretch` 拉伸铺满。
+8. 若对外私有访问，创建子令牌并只保存创建 / 重置时返回的明文；用 `/screen/:code?token=...` 或 `X-Saiboard-Token` 验证可访问，再停用令牌验证访问被拒绝。
+9. 使用普通角色账号验证菜单、按钮权限和数据权限：只能看到自己数据范围内的大屏、数据源和查询模板，不能读取或绑定其他归属的查询模板。
+10. 打开大屏列表的运行统计，确认缓存命中、回源、限流、Redis 锁或文件锁指标有记录；压测或投屏前确认没有持续 `source_fail` 或频繁锁等待。
 
 ## 开发计划
 
