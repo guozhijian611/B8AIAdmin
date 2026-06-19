@@ -172,9 +172,6 @@
             <ElRadioButton :label="2">鉴权</ElRadioButton>
           </ElRadioGroup>
         </ElFormItem>
-        <ElFormItem v-if="form.is_public === 2" label="旧单令牌">
-          <ElInput v-model="form.access_token" show-password placeholder="建议使用访问令牌管理" />
-        </ElFormItem>
       </ElForm>
       <template #footer>
         <ElButton @click="dialogVisible = false">取消</ElButton>
@@ -600,7 +597,6 @@
     fitMode: 'contain',
     bg_config: {} as Record<string, any>,
     is_public: 1,
-    access_token: '',
     status: 2
   })
 
@@ -849,7 +845,6 @@
       fitMode: 'contain',
       bg_config: defaultBg,
       is_public: 1,
-      access_token: '',
       status: 2
     })
     if (row) {
@@ -968,6 +963,7 @@
       })
     }
     delete payload.status
+    delete payload.access_token
     if (!form.id) {
       payload.draft_layout = {
         canvas: { width: form.width, height: form.height },

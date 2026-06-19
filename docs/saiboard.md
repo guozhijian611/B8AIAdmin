@@ -138,7 +138,7 @@ saiadmin-artd/src/views/plugin/saiboard/
 | `width` / `height` | int | 画布设计尺寸，如 1920×1080。 |
 | `bg_config` | json | 背景、主题与运行时适配：`color`、`theme`、`fit_mode`、`image`、`image_fit` 等。 |
 | `is_public` | tinyint unsigned | 1对外公开 2需鉴权。 |
-| `access_token` | varchar(64) NULL | 旧单令牌入口；仅在未配置启用且未过期的子令牌时作为手动兼容兜底，空则要求后台登录态。 |
+| `access_token` | varchar(64) NULL | 旧单令牌历史入口；后台表单不再新增或编辑，仅在未配置启用且未过期的子令牌时作为历史兼容兜底，空则要求后台登录态。 |
 | `draft_layout` | json | **编辑中的**画布尺寸、背景配置与组件树，`saveLayout` 只写这里。 |
 | `layout` | json | **已发布的**组件树，运行时只读这里；`publish` 时由 `draft_layout` 拷贝而来。 |
 | `status` | tinyint unsigned | 1已发布 2草稿。 |
@@ -305,7 +305,7 @@ getScreen / data 接口入口：
       if 请求 token 命中启用且未过期的 screen_token: 放行，并节流刷新 last_used_time
       else if admin_preview=1 且后台 JWT 具备大屏读取权限和数据范围: 放行（后台预览）
       else if 存在启用且未过期的 screen_token:        拒绝访问
-      else if access_token 非空:                      校验旧单 token 字段（兼容未迁移的已发布链接）
+      else if access_token 非空:                      校验旧单 token 字段（仅兼容未迁移的历史已发布链接）
       else:                                           要求后台 JWT 登录态（复用 CheckLogin 逻辑）
 ```
 
@@ -313,7 +313,7 @@ getScreen / data 接口入口：
 
 后台管理端额外启用 SaiAdmin 数据权限：普通角色只能管理自己 `created_by` 范围内的大屏、数据源和查询模板；大屏保存 / 发布时会校验 layout 中绑定的查询模板归属，查询模板保存 / 预览时会校验数据源归属。若具备数据范围权限的用户复制他人可见大屏，副本会保留视觉布局但清空查询模板绑定，避免跨归属数据依赖。
 
-> 旧 `access_token` 字段继续作为无子令牌时的兼容兜底存在；新建客户级令牌应优先使用 `saiboard_screen_token` 子表，避免在数据库保存明文 token，并获得独立吊销能力。后台列表「发布预览」使用 `admin_preview=1` 和当前后台 JWT 放行，只查看已发布快照；编辑器「预览草稿」会额外携带 `draft=1`，仅后台有大屏读取权限且通过数据范围校验时可查看草稿快照。
+> 旧 `access_token` 字段仅作为无子令牌时的历史兼容兜底存在，后台表单不会再新增或编辑它；新建客户级令牌必须使用 `saiboard_screen_token` 子表，避免继续在数据库保存明文 token，并获得独立吊销能力。后台列表「发布预览」使用 `admin_preview=1` 和当前后台 JWT 放行，只查看已发布快照；编辑器「预览草稿」会额外携带 `draft=1`，仅后台有大屏读取权限且通过数据范围校验时可查看草稿快照。
 
 ## 前端关键点
 

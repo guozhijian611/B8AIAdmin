@@ -784,7 +784,14 @@ class ScreenLogic extends BaseLogic
 
     private function normalizePayload(array $data, int $ignoreId = 0): array
     {
-        unset($data['created_by'], $data['updated_by'], $data['create_time'], $data['update_time'], $data['delete_time']);
+        unset(
+            $data['access_token'],
+            $data['created_by'],
+            $data['updated_by'],
+            $data['create_time'],
+            $data['update_time'],
+            $data['delete_time']
+        );
         if ($ignoreId > 0) {
             unset($data['layout'], $data['draft_layout'], $data['status']);
         }
