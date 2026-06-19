@@ -1,0 +1,172 @@
+{
+    "host": "",
+    "basePath": "",
+    "schemes": [
+        "http"
+    ],
+    "openapi": "3.0.1",
+    "info": {
+        "title": "B8AIadmin 接口文档",
+        "description": "基于 SaiAdmin/Webman 控制器注解生成，供接口调试与 uniapp 自动接口生成使用。",
+        "version": "1.0.7"
+    },
+    "tags": [
+        {
+            "name": "saiboard-api.SAI Board.BoardController",
+            "description": "大屏公开运行接口"
+        }
+    ],
+    "paths": {
+        "/app/saiboard/api/screen/{code}": {
+            "get": {
+                "tags": [
+                    "saiboard-api.SAI Board.BoardController"
+                ],
+                "summary": "获取大屏配置",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    },
+                    {
+                        "name": "token",
+                        "in": "query",
+                        "required": false,
+                        "type": "string",
+                        "description": "访问令牌"
+                    },
+                    {
+                        "name": "admin_preview",
+                        "in": "query",
+                        "required": false,
+                        "type": "integer",
+                        "description": "后台预览标记，需携带后台 JWT",
+                        "format": "int32"
+                    },
+                    {
+                        "name": "draft",
+                        "in": "query",
+                        "required": false,
+                        "type": "integer",
+                        "description": "草稿预览标记，仅后台预览可用",
+                        "format": "int32"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "screen": {
+                                            "type": "object",
+                                            "description": "脱敏大屏配置"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/api/data": {
+            "get/post": {
+                "tags": [
+                    "saiboard-api.SAI Board.BoardController"
+                ],
+                "summary": "获取组件数据",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    },
+                    {
+                        "name": "code",
+                        "in": "query",
+                        "required": true,
+                        "type": "string",
+                        "description": "大屏编码"
+                    },
+                    {
+                        "name": "cid",
+                        "in": "query",
+                        "required": true,
+                        "type": "string",
+                        "description": "组件ID"
+                    },
+                    {
+                        "name": "token",
+                        "in": "query",
+                        "required": false,
+                        "type": "string",
+                        "description": "访问令牌"
+                    },
+                    {
+                        "name": "admin_preview",
+                        "in": "query",
+                        "required": false,
+                        "type": "integer",
+                        "description": "后台预览标记，需携带后台 JWT",
+                        "format": "int32"
+                    },
+                    {
+                        "name": "draft",
+                        "in": "query",
+                        "required": false,
+                        "type": "integer",
+                        "description": "草稿预览标记，仅后台预览可用",
+                        "format": "int32"
+                    },
+                    {
+                        "name": "params",
+                        "in": "query",
+                        "required": false,
+                        "type": "object",
+                        "description": "运行时查询参数"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "rows": {
+                                            "type": "array",
+                                            "description": "数据行",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": []
+    }
+}

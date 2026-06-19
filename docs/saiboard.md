@@ -19,7 +19,7 @@
 | 对外取数 | `server/plugin/saiboard/app/api/controller/BoardController.php` | 按组件绑定的查询模板执行数据源，返回脱敏结果。 |
 | 快速生成 | `ScreenController::generateFromTable` | 选择已有 MySQL 数据源和数据表，自动创建查询模板与鉴权草稿大屏，生成后进入编辑器微调。 |
 
-接口文档已接入 APIDOC：后台管理接口使用 `/apidoc/openapi/saiboard-admin`，公开运行时接口使用 `/apidoc/openapi/saiboard-api`。这两个 key 独立于移动端自动生成配置，便于验收后台配置接口与公开大屏取数接口。
+接口文档已接入 APIDOC：后台管理接口使用 `/apidoc/openapi/saiboard-admin`，公开运行时接口使用 `/apidoc/openapi/saiboard-api`。这两个 key 独立于移动端自动生成配置，便于验收后台配置接口与公开大屏取数接口。静态导出文件同步维护在 `OpenAPI/saiboard-admin/openapi.yaml` 和 `OpenAPI/saiboard-api/openapi.yaml`，用于离线审计、导入 Apifox/Postman 或 CI 对比。
 
 后台编辑器与数据源管理都在 `saiadmin-artd/src/views/plugin/saiboard/`（Element Plus，主应用内），对外运行时也在该目录下的 `runtime/`，通过 `staticRoutes.ts` 暴露 `/screen/:code` 静态路由，后端插件位于 `server/plugin/saiboard`。
 

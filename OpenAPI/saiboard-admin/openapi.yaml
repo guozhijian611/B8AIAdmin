@@ -1,0 +1,2746 @@
+{
+    "host": "",
+    "basePath": "",
+    "schemes": [
+        "http"
+    ],
+    "openapi": "3.0.1",
+    "info": {
+        "title": "B8AIadmin 接口文档",
+        "description": "基于 SaiAdmin/Webman 控制器注解生成，供接口调试与 uniapp 自动接口生成使用。",
+        "version": "1.0.7"
+    },
+    "tags": [
+        {
+            "name": "saiboard-admin.SAI Board.ScreenController",
+            "description": "大屏管理"
+        },
+        {
+            "name": "saiboard-admin.SAI Board.DatasourceController",
+            "description": "数据源管理"
+        },
+        {
+            "name": "saiboard-admin.SAI Board.QueryTemplateController",
+            "description": "查询模板管理"
+        },
+        {
+            "name": "saiboard-admin.SAI Board.MarketItemController",
+            "description": "模板市场"
+        }
+    ],
+    "paths": {
+        "/app/saiboard/admin/Screen/index": {
+            "get": {
+                "tags": [
+                    "saiboard-admin.SAI Board.ScreenController"
+                ],
+                "summary": "大屏列表",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    },
+                    {
+                        "name": "name",
+                        "in": "query",
+                        "required": false,
+                        "type": "string",
+                        "description": "大屏名称"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "total": {
+                                            "type": "integer",
+                                            "description": "总记录数",
+                                            "format": "int32"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/Screen/read": {
+            "get": {
+                "tags": [
+                    "saiboard-admin.SAI Board.ScreenController"
+                ],
+                "summary": "大屏读取",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    },
+                    {
+                        "name": "id",
+                        "in": "query",
+                        "required": true,
+                        "type": "integer",
+                        "description": "大屏ID",
+                        "format": "int32"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {
+                                            "type": "integer",
+                                            "description": "大屏ID",
+                                            "format": "int32"
+                                        },
+                                        "name": {
+                                            "type": "string",
+                                            "description": "大屏名称"
+                                        },
+                                        "draft_layout": {
+                                            "type": "object",
+                                            "description": "草稿布局"
+                                        },
+                                        "layout": {
+                                            "type": "object",
+                                            "description": "已发布布局"
+                                        },
+                                        "bg_config": {
+                                            "type": "object",
+                                            "description": "背景和适配配置"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/Screen/save": {
+            "post": {
+                "tags": [
+                    "saiboard-admin.SAI Board.ScreenController"
+                ],
+                "summary": "大屏添加",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "description": "",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "description": "大屏名称"
+                                    },
+                                    "bg_config": {
+                                        "type": "object",
+                                        "description": "背景配置：color/theme/fit_mode/image/image_fit"
+                                    }
+                                },
+                                "required": [
+                                    "name"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": []
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/Screen/update": {
+            "put": {
+                "tags": [
+                    "saiboard-admin.SAI Board.ScreenController"
+                ],
+                "summary": "大屏修改",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "description": "",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {
+                                        "type": "integer",
+                                        "description": "大屏ID",
+                                        "format": "int32"
+                                    },
+                                    "bg_config": {
+                                        "type": "object",
+                                        "description": "背景配置：color/theme/fit_mode/image/image_fit"
+                                    }
+                                },
+                                "required": [
+                                    "id"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": []
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/Screen/destroy": {
+            "delete": {
+                "tags": [
+                    "saiboard-admin.SAI Board.ScreenController"
+                ],
+                "summary": "大屏删除",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "description": "",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "ids": {
+                                        "type": "array",
+                                        "description": "大屏ID列表",
+                                        "items": {
+                                            "type": "string"
+                                        }
+                                    }
+                                },
+                                "required": [
+                                    "ids"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": []
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/Screen/changeStatus": {
+            "post": {
+                "tags": [
+                    "saiboard-admin.SAI Board.ScreenController"
+                ],
+                "summary": "大屏状态",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "description": "",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {
+                                        "type": "integer",
+                                        "description": "大屏ID",
+                                        "format": "int32"
+                                    },
+                                    "status": {
+                                        "type": "integer",
+                                        "description": "状态，仅允许改为草稿2；发布请使用 publish",
+                                        "format": "int32"
+                                    }
+                                },
+                                "required": [
+                                    "id",
+                                    "status"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": []
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/Screen/saveLayout": {
+            "post": {
+                "tags": [
+                    "saiboard-admin.SAI Board.ScreenController"
+                ],
+                "summary": "保存大屏布局",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "description": "",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {
+                                        "type": "integer",
+                                        "description": "大屏ID",
+                                        "format": "int32"
+                                    },
+                                    "layout": {
+                                        "type": "object",
+                                        "description": "布局JSON"
+                                    }
+                                },
+                                "required": [
+                                    "id",
+                                    "layout"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": []
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/Screen/publish": {
+            "post": {
+                "tags": [
+                    "saiboard-admin.SAI Board.ScreenController"
+                ],
+                "summary": "发布大屏",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "description": "",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {
+                                        "type": "integer",
+                                        "description": "大屏ID",
+                                        "format": "int32"
+                                    }
+                                },
+                                "required": [
+                                    "id"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": []
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/Screen/copy": {
+            "post": {
+                "tags": [
+                    "saiboard-admin.SAI Board.ScreenController"
+                ],
+                "summary": "复制大屏",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "description": "",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {
+                                        "type": "integer",
+                                        "description": "大屏ID",
+                                        "format": "int32"
+                                    }
+                                },
+                                "required": [
+                                    "id"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {
+                                            "type": "integer",
+                                            "description": "复制后的新大屏ID",
+                                            "format": "int32"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/Screen/generateFromTable": {
+            "post": {
+                "tags": [
+                    "saiboard-admin.SAI Board.ScreenController"
+                ],
+                "summary": "从数据表生成大屏",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "description": "",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "datasource_id": {
+                                        "type": "integer",
+                                        "description": "MySQL 数据源ID",
+                                        "format": "int32"
+                                    },
+                                    "table": {
+                                        "type": "string",
+                                        "description": "数据表名"
+                                    },
+                                    "name": {
+                                        "type": "string",
+                                        "description": "大屏名称"
+                                    },
+                                    "width": {
+                                        "type": "integer",
+                                        "description": "设计宽度",
+                                        "format": "int32"
+                                    },
+                                    "height": {
+                                        "type": "integer",
+                                        "description": "设计高度",
+                                        "format": "int32"
+                                    },
+                                    "chart_types": {
+                                        "type": "array",
+                                        "description": "生成模块：count/trend/rank/distribution/status/raw",
+                                        "items": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "date_field": {
+                                        "type": "string",
+                                        "description": "趋势时间字段"
+                                    },
+                                    "metric_field": {
+                                        "type": "string",
+                                        "description": "聚合指标字段，留空为计数"
+                                    },
+                                    "label_field": {
+                                        "type": "string",
+                                        "description": "排行维度字段，也作为状态矩阵名称字段"
+                                    },
+                                    "category_field": {
+                                        "type": "string",
+                                        "description": "分布维度字段"
+                                    },
+                                    "status_field": {
+                                        "type": "string",
+                                        "description": "状态矩阵状态字段，需与名称字段不同"
+                                    },
+                                    "order_field": {
+                                        "type": "string",
+                                        "description": "明细排序字段"
+                                    },
+                                    "raw_fields": {
+                                        "type": "array",
+                                        "description": "明细表字段，最多8个",
+                                        "items": {
+                                            "type": "string"
+                                        }
+                                    }
+                                },
+                                "required": [
+                                    "datasource_id",
+                                    "table"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {
+                                            "type": "integer",
+                                            "description": "生成的大屏ID",
+                                            "format": "int32"
+                                        },
+                                        "name": {
+                                            "type": "string",
+                                            "description": "生成的大屏名称"
+                                        },
+                                        "table": {
+                                            "type": "string",
+                                            "description": "来源数据表"
+                                        },
+                                        "chart_types": {
+                                            "type": "array",
+                                            "description": "实际生成的模块类型",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        },
+                                        "template_ids": {
+                                            "type": "array",
+                                            "description": "自动生成的查询模板ID列表",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        },
+                                        "component_count": {
+                                            "type": "integer",
+                                            "description": "自动生成的组件数量",
+                                            "format": "int32"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/Screen/versions": {
+            "get": {
+                "tags": [
+                    "saiboard-admin.SAI Board.ScreenController"
+                ],
+                "summary": "大屏版本列表",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    },
+                    {
+                        "name": "id",
+                        "in": "query",
+                        "required": true,
+                        "type": "integer",
+                        "description": "大屏ID",
+                        "format": "int32"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": []
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/Screen/restoreVersion": {
+            "post": {
+                "tags": [
+                    "saiboard-admin.SAI Board.ScreenController"
+                ],
+                "summary": "恢复大屏版本",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "description": "",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {
+                                        "type": "integer",
+                                        "description": "大屏ID",
+                                        "format": "int32"
+                                    },
+                                    "version_id": {
+                                        "type": "integer",
+                                        "description": "版本ID",
+                                        "format": "int32"
+                                    }
+                                },
+                                "required": [
+                                    "id",
+                                    "version_id"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": []
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/Screen/deleteVersion": {
+            "delete": {
+                "tags": [
+                    "saiboard-admin.SAI Board.ScreenController"
+                ],
+                "summary": "删除大屏版本",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "description": "",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {
+                                        "type": "integer",
+                                        "description": "大屏ID",
+                                        "format": "int32"
+                                    },
+                                    "version_id": {
+                                        "type": "integer",
+                                        "description": "版本ID",
+                                        "format": "int32"
+                                    }
+                                },
+                                "required": [
+                                    "id",
+                                    "version_id"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": []
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/Screen/tokens": {
+            "get": {
+                "tags": [
+                    "saiboard-admin.SAI Board.ScreenController"
+                ],
+                "summary": "大屏访问令牌列表",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    },
+                    {
+                        "name": "id",
+                        "in": "query",
+                        "required": true,
+                        "type": "integer",
+                        "description": "大屏ID",
+                        "format": "int32"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": []
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/Screen/createToken": {
+            "post": {
+                "tags": [
+                    "saiboard-admin.SAI Board.ScreenController"
+                ],
+                "summary": "创建大屏访问令牌",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "description": "",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {
+                                        "type": "integer",
+                                        "description": "大屏ID",
+                                        "format": "int32"
+                                    },
+                                    "name": {
+                                        "type": "string",
+                                        "description": "令牌名称"
+                                    },
+                                    "expire_time": {
+                                        "type": "string",
+                                        "description": "过期时间"
+                                    }
+                                },
+                                "required": [
+                                    "id",
+                                    "name"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "token": {
+                                            "type": "string",
+                                            "description": "明文令牌，仅本次返回"
+                                        },
+                                        "row": {
+                                            "type": "object",
+                                            "description": "令牌记录，不包含 token_hash"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/Screen/resetToken": {
+            "post": {
+                "tags": [
+                    "saiboard-admin.SAI Board.ScreenController"
+                ],
+                "summary": "重置大屏访问令牌",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "description": "",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {
+                                        "type": "integer",
+                                        "description": "大屏ID",
+                                        "format": "int32"
+                                    },
+                                    "token_id": {
+                                        "type": "integer",
+                                        "description": "令牌ID",
+                                        "format": "int32"
+                                    }
+                                },
+                                "required": [
+                                    "id",
+                                    "token_id"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "token": {
+                                            "type": "string",
+                                            "description": "重置后的明文令牌，仅本次返回"
+                                        },
+                                        "row": {
+                                            "type": "object",
+                                            "description": "令牌记录，不包含 token_hash"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/Screen/changeTokenStatus": {
+            "post": {
+                "tags": [
+                    "saiboard-admin.SAI Board.ScreenController"
+                ],
+                "summary": "大屏访问令牌状态",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "description": "",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {
+                                        "type": "integer",
+                                        "description": "大屏ID",
+                                        "format": "int32"
+                                    },
+                                    "token_id": {
+                                        "type": "integer",
+                                        "description": "令牌ID",
+                                        "format": "int32"
+                                    },
+                                    "status": {
+                                        "type": "integer",
+                                        "description": "状态 1启用 2停用",
+                                        "format": "int32"
+                                    }
+                                },
+                                "required": [
+                                    "id",
+                                    "token_id",
+                                    "status"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": []
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/Screen/deleteToken": {
+            "delete": {
+                "tags": [
+                    "saiboard-admin.SAI Board.ScreenController"
+                ],
+                "summary": "删除大屏访问令牌",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "description": "",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {
+                                        "type": "integer",
+                                        "description": "大屏ID",
+                                        "format": "int32"
+                                    },
+                                    "token_id": {
+                                        "type": "integer",
+                                        "description": "令牌ID",
+                                        "format": "int32"
+                                    }
+                                },
+                                "required": [
+                                    "id",
+                                    "token_id"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": []
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/Screen/runtimeMetrics": {
+            "get": {
+                "tags": [
+                    "saiboard-admin.SAI Board.ScreenController"
+                ],
+                "summary": "大屏运行统计",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    },
+                    {
+                        "name": "id",
+                        "in": "query",
+                        "required": false,
+                        "type": "integer",
+                        "description": "大屏ID，不传返回全局运行统计",
+                        "format": "int32"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "window": {
+                                            "type": "integer",
+                                            "description": "统计窗口秒数",
+                                            "format": "int32"
+                                        },
+                                        "totals": {
+                                            "type": "object",
+                                            "description": "全局运行统计"
+                                        },
+                                        "screen": {
+                                            "type": "object",
+                                            "description": "指定大屏运行统计"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/Datasource/index": {
+            "get": {
+                "tags": [
+                    "saiboard-admin.SAI Board.DatasourceController"
+                ],
+                "summary": "数据源列表",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "total": {
+                                            "type": "integer",
+                                            "description": "总记录数",
+                                            "format": "int32"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/Datasource/read": {
+            "get": {
+                "tags": [
+                    "saiboard-admin.SAI Board.DatasourceController"
+                ],
+                "summary": "数据源读取",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    },
+                    {
+                        "name": "id",
+                        "in": "query",
+                        "required": true,
+                        "type": "integer",
+                        "description": "数据源ID",
+                        "format": "int32"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {
+                                            "type": "integer",
+                                            "description": "数据源ID",
+                                            "format": "int32"
+                                        },
+                                        "name": {
+                                            "type": "string",
+                                            "description": "数据源名称"
+                                        },
+                                        "type": {
+                                            "type": "string",
+                                            "description": "数据源类型：mysql/http"
+                                        },
+                                        "config": {
+                                            "type": "object",
+                                            "description": "数据源配置，敏感字段按读取策略脱敏"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/Datasource/save": {
+            "post": {
+                "tags": [
+                    "saiboard-admin.SAI Board.DatasourceController"
+                ],
+                "summary": "数据源添加",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "description": "",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "description": "数据源名称"
+                                    },
+                                    "type": {
+                                        "type": "string",
+                                        "description": "数据源类型：mysql/http"
+                                    },
+                                    "config": {
+                                        "type": "object",
+                                        "description": "连接配置"
+                                    }
+                                },
+                                "required": [
+                                    "name",
+                                    "type",
+                                    "config"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": []
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/Datasource/update": {
+            "put": {
+                "tags": [
+                    "saiboard-admin.SAI Board.DatasourceController"
+                ],
+                "summary": "数据源修改",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "description": "",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {
+                                        "type": "integer",
+                                        "description": "数据源ID",
+                                        "format": "int32"
+                                    },
+                                    "name": {
+                                        "type": "string",
+                                        "description": "数据源名称"
+                                    },
+                                    "type": {
+                                        "type": "string",
+                                        "description": "数据源类型：mysql/http"
+                                    },
+                                    "config": {
+                                        "type": "object",
+                                        "description": "连接配置"
+                                    }
+                                },
+                                "required": [
+                                    "id",
+                                    "name",
+                                    "type",
+                                    "config"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": []
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/Datasource/destroy": {
+            "delete": {
+                "tags": [
+                    "saiboard-admin.SAI Board.DatasourceController"
+                ],
+                "summary": "数据源删除",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "description": "",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "ids": {
+                                        "type": "array",
+                                        "description": "数据源ID列表",
+                                        "items": {
+                                            "type": "string"
+                                        }
+                                    }
+                                },
+                                "required": [
+                                    "ids"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": []
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/Datasource/changeStatus": {
+            "post": {
+                "tags": [
+                    "saiboard-admin.SAI Board.DatasourceController"
+                ],
+                "summary": "数据源状态",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "description": "",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {
+                                        "type": "integer",
+                                        "description": "数据源ID",
+                                        "format": "int32"
+                                    },
+                                    "status": {
+                                        "type": "integer",
+                                        "description": "状态 1启用 2停用",
+                                        "format": "int32"
+                                    }
+                                },
+                                "required": [
+                                    "id",
+                                    "status"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": []
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/Datasource/test": {
+            "post": {
+                "tags": [
+                    "saiboard-admin.SAI Board.DatasourceController"
+                ],
+                "summary": "测试数据源",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "description": "",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {
+                                        "type": "integer",
+                                        "description": "已保存数据源ID；为空或同时传 config 时按当前表单配置测试",
+                                        "format": "int32"
+                                    },
+                                    "name": {
+                                        "type": "string",
+                                        "description": "新增态测试数据源名称"
+                                    },
+                                    "type": {
+                                        "type": "string",
+                                        "description": "新增态测试数据源类型：mysql/http"
+                                    },
+                                    "status": {
+                                        "type": "integer",
+                                        "description": "新增态测试状态 1启用 2停用",
+                                        "format": "int32"
+                                    },
+                                    "config": {
+                                        "type": "object",
+                                        "description": "新增态测试连接配置"
+                                    },
+                                    "test_config": {
+                                        "type": "object",
+                                        "description": "HTTP 测试模板配置：path/method/params/body/response_path/total_path"
+                                    }
+                                },
+                                "required": []
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "rows": {
+                                            "type": "array",
+                                            "description": "测试返回数据行",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        },
+                                        "total": {
+                                            "type": "integer",
+                                            "description": "测试返回总数",
+                                            "format": "int32"
+                                        },
+                                        "diagnostics": {
+                                            "type": "object",
+                                            "description": "脱敏诊断信息"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/Datasource/options": {
+            "get": {
+                "tags": [
+                    "saiboard-admin.SAI Board.DatasourceController"
+                ],
+                "summary": "数据源选项",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": []
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/Datasource/schema": {
+            "get": {
+                "tags": [
+                    "saiboard-admin.SAI Board.DatasourceController"
+                ],
+                "summary": "数据源表结构",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    },
+                    {
+                        "name": "id",
+                        "in": "query",
+                        "required": true,
+                        "type": "integer",
+                        "description": "数据源ID",
+                        "format": "int32"
+                    },
+                    {
+                        "name": "table",
+                        "in": "query",
+                        "required": false,
+                        "type": "string",
+                        "description": "数据表名"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "tables": {
+                                            "type": "array",
+                                            "description": "数据表列表",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        },
+                                        "columns": {
+                                            "type": "array",
+                                            "description": "指定数据表字段列表",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/QueryTemplate/index": {
+            "get": {
+                "tags": [
+                    "saiboard-admin.SAI Board.QueryTemplateController"
+                ],
+                "summary": "查询模板列表",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "total": {
+                                            "type": "integer",
+                                            "description": "总记录数",
+                                            "format": "int32"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/QueryTemplate/read": {
+            "get": {
+                "tags": [
+                    "saiboard-admin.SAI Board.QueryTemplateController"
+                ],
+                "summary": "查询模板读取",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    },
+                    {
+                        "name": "id",
+                        "in": "query",
+                        "required": true,
+                        "type": "integer",
+                        "description": "查询模板ID",
+                        "format": "int32"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {
+                                            "type": "integer",
+                                            "description": "查询模板ID",
+                                            "format": "int32"
+                                        },
+                                        "name": {
+                                            "type": "string",
+                                            "description": "查询模板名称"
+                                        },
+                                        "datasource_id": {
+                                            "type": "integer",
+                                            "description": "数据源ID",
+                                            "format": "int32"
+                                        },
+                                        "dataset_type": {
+                                            "type": "string",
+                                            "description": "取值类型"
+                                        },
+                                        "config": {
+                                            "type": "object",
+                                            "description": "模板配置"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/QueryTemplate/save": {
+            "post": {
+                "tags": [
+                    "saiboard-admin.SAI Board.QueryTemplateController"
+                ],
+                "summary": "查询模板添加",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "description": "",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "datasource_id": {
+                                        "type": "integer",
+                                        "description": "数据源ID",
+                                        "format": "int32"
+                                    },
+                                    "name": {
+                                        "type": "string",
+                                        "description": "查询模板名称"
+                                    },
+                                    "dataset_type": {
+                                        "type": "string",
+                                        "description": "取值类型"
+                                    },
+                                    "config": {
+                                        "type": "object",
+                                        "description": "模板配置"
+                                    }
+                                },
+                                "required": [
+                                    "datasource_id",
+                                    "name",
+                                    "dataset_type",
+                                    "config"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": []
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/QueryTemplate/update": {
+            "put": {
+                "tags": [
+                    "saiboard-admin.SAI Board.QueryTemplateController"
+                ],
+                "summary": "查询模板修改",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "description": "",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {
+                                        "type": "integer",
+                                        "description": "查询模板ID",
+                                        "format": "int32"
+                                    },
+                                    "datasource_id": {
+                                        "type": "integer",
+                                        "description": "数据源ID",
+                                        "format": "int32"
+                                    },
+                                    "name": {
+                                        "type": "string",
+                                        "description": "查询模板名称"
+                                    },
+                                    "dataset_type": {
+                                        "type": "string",
+                                        "description": "取值类型"
+                                    },
+                                    "config": {
+                                        "type": "object",
+                                        "description": "模板配置"
+                                    }
+                                },
+                                "required": [
+                                    "id",
+                                    "datasource_id",
+                                    "name",
+                                    "dataset_type",
+                                    "config"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": []
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/QueryTemplate/destroy": {
+            "delete": {
+                "tags": [
+                    "saiboard-admin.SAI Board.QueryTemplateController"
+                ],
+                "summary": "查询模板删除",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "description": "",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "ids": {
+                                        "type": "array",
+                                        "description": "查询模板ID列表",
+                                        "items": {
+                                            "type": "string"
+                                        }
+                                    }
+                                },
+                                "required": [
+                                    "ids"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": []
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/QueryTemplate/changeStatus": {
+            "post": {
+                "tags": [
+                    "saiboard-admin.SAI Board.QueryTemplateController"
+                ],
+                "summary": "查询模板状态",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "description": "",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {
+                                        "type": "integer",
+                                        "description": "查询模板ID",
+                                        "format": "int32"
+                                    },
+                                    "status": {
+                                        "type": "integer",
+                                        "description": "状态 1启用 2停用",
+                                        "format": "int32"
+                                    }
+                                },
+                                "required": [
+                                    "id",
+                                    "status"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": []
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/QueryTemplate/preview": {
+            "post": {
+                "tags": [
+                    "saiboard-admin.SAI Board.QueryTemplateController"
+                ],
+                "summary": "预览查询模板",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "description": "",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {
+                                        "type": "integer",
+                                        "description": "已有查询模板ID；为空时按当前表单配置预览",
+                                        "format": "int32"
+                                    },
+                                    "datasource_id": {
+                                        "type": "integer",
+                                        "description": "新增态预览使用的数据源ID",
+                                        "format": "int32"
+                                    },
+                                    "dataset_type": {
+                                        "type": "string",
+                                        "description": "新增态预览使用的取值类型"
+                                    },
+                                    "config": {
+                                        "type": "object",
+                                        "description": "新增态预览使用的模板配置"
+                                    },
+                                    "params": {
+                                        "type": "object",
+                                        "description": "预览查询参数"
+                                    }
+                                },
+                                "required": []
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "rows": {
+                                            "type": "array",
+                                            "description": "预览数据行",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        },
+                                        "total": {
+                                            "type": "integer",
+                                            "description": "预览总数",
+                                            "format": "int32"
+                                        },
+                                        "diagnostics": {
+                                            "type": "object",
+                                            "description": "脱敏诊断信息"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/QueryTemplate/options": {
+            "get": {
+                "tags": [
+                    "saiboard-admin.SAI Board.QueryTemplateController"
+                ],
+                "summary": "查询模板选项",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    },
+                    {
+                        "name": "datasource_id",
+                        "in": "query",
+                        "required": false,
+                        "type": "integer",
+                        "description": "数据源ID",
+                        "format": "int32"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": []
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/MarketItem/index": {
+            "get": {
+                "tags": [
+                    "saiboard-admin.SAI Board.MarketItemController"
+                ],
+                "summary": "模板市场列表",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    },
+                    {
+                        "name": "type",
+                        "in": "query",
+                        "required": false,
+                        "type": "string",
+                        "description": "模板类型：screen/component"
+                    },
+                    {
+                        "name": "name",
+                        "in": "query",
+                        "required": false,
+                        "type": "string",
+                        "description": "模板名称"
+                    },
+                    {
+                        "name": "category",
+                        "in": "query",
+                        "required": false,
+                        "type": "string",
+                        "description": "模板分类"
+                    },
+                    {
+                        "name": "is_public",
+                        "in": "query",
+                        "required": false,
+                        "type": "integer",
+                        "description": "是否公开：1公开 2私有",
+                        "format": "int32"
+                    },
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "required": false,
+                        "type": "integer",
+                        "description": "状态：1启用 2停用",
+                        "format": "int32"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "list": {
+                                            "type": "array",
+                                            "description": "模板摘要列表，不包含 content",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/MarketItem/read": {
+            "get": {
+                "tags": [
+                    "saiboard-admin.SAI Board.MarketItemController"
+                ],
+                "summary": "模板市场读取",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    },
+                    {
+                        "name": "id",
+                        "in": "query",
+                        "required": true,
+                        "type": "integer",
+                        "description": "模板ID",
+                        "format": "int32"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "content": {
+                                            "type": "object",
+                                            "description": "完整模板内容"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/MarketItem/save": {
+            "post": {
+                "tags": [
+                    "saiboard-admin.SAI Board.MarketItemController"
+                ],
+                "summary": "模板市场添加",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "description": "",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "type": {
+                                        "type": "string",
+                                        "description": "模板类型：screen/component"
+                                    },
+                                    "name": {
+                                        "type": "string",
+                                        "description": "模板名称"
+                                    },
+                                    "category": {
+                                        "type": "string",
+                                        "description": "模板分类"
+                                    },
+                                    "description": {
+                                        "type": "string",
+                                        "description": "模板说明"
+                                    },
+                                    "content": {
+                                        "type": "object",
+                                        "description": "模板内容，大屏模板为 layout，组件模板为 components"
+                                    },
+                                    "is_public": {
+                                        "type": "integer",
+                                        "description": "是否公开：1公开 2私有",
+                                        "format": "int32"
+                                    },
+                                    "status": {
+                                        "type": "integer",
+                                        "description": "状态：1启用 2停用",
+                                        "format": "int32"
+                                    }
+                                },
+                                "required": [
+                                    "type",
+                                    "name",
+                                    "content"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": []
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/MarketItem/update": {
+            "put": {
+                "tags": [
+                    "saiboard-admin.SAI Board.MarketItemController"
+                ],
+                "summary": "模板市场修改",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "description": "",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {
+                                        "type": "integer",
+                                        "description": "模板ID",
+                                        "format": "int32"
+                                    },
+                                    "type": {
+                                        "type": "string",
+                                        "description": "模板类型：screen/component"
+                                    },
+                                    "name": {
+                                        "type": "string",
+                                        "description": "模板名称"
+                                    },
+                                    "content": {
+                                        "type": "object",
+                                        "description": "模板内容"
+                                    },
+                                    "is_public": {
+                                        "type": "integer",
+                                        "description": "是否公开：1公开 2私有",
+                                        "format": "int32"
+                                    },
+                                    "status": {
+                                        "type": "integer",
+                                        "description": "状态：1启用 2停用",
+                                        "format": "int32"
+                                    }
+                                },
+                                "required": [
+                                    "id",
+                                    "type",
+                                    "name",
+                                    "content",
+                                    "is_public",
+                                    "status"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": []
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/MarketItem/destroy": {
+            "delete": {
+                "tags": [
+                    "saiboard-admin.SAI Board.MarketItemController"
+                ],
+                "summary": "模板市场删除",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "description": "",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "ids": {
+                                        "type": "array",
+                                        "description": "模板ID列表",
+                                        "items": {
+                                            "type": "string"
+                                        }
+                                    }
+                                },
+                                "required": [
+                                    "ids"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": []
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/MarketItem/changeStatus": {
+            "post": {
+                "tags": [
+                    "saiboard-admin.SAI Board.MarketItemController"
+                ],
+                "summary": "模板市场状态",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "description": "",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {
+                                        "type": "integer",
+                                        "description": "模板ID",
+                                        "format": "int32"
+                                    },
+                                    "status": {
+                                        "type": "integer",
+                                        "description": "状态：1启用 2停用",
+                                        "format": "int32"
+                                    }
+                                },
+                                "required": [
+                                    "id",
+                                    "status"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": []
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        },
+        "/app/saiboard/admin/MarketItem/options": {
+            "get": {
+                "tags": [
+                    "saiboard-admin.SAI Board.MarketItemController"
+                ],
+                "summary": "模板市场可用项",
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "type": "string",
+                        "description": "身份令牌Token"
+                    },
+                    {
+                        "name": "type",
+                        "in": "query",
+                        "required": false,
+                        "type": "string",
+                        "description": "模板类型：screen/component"
+                    },
+                    {
+                        "name": "name",
+                        "in": "query",
+                        "required": false,
+                        "type": "string",
+                        "description": "模板名称"
+                    },
+                    {
+                        "name": "category",
+                        "in": "query",
+                        "required": false,
+                        "type": "string",
+                        "description": "模板分类"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "请求成功",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "items": {
+                                            "type": "array",
+                                            "description": "启用状态的模板摘要列表，不包含 content",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "登录令牌无效"
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": []
+    }
+}

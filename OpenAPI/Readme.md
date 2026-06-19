@@ -7,5 +7,7 @@ OpenAPIDoc Dir
 - `saicode/`：SaiCode 代码生成插件接口。
 - `saipackage/`：SaiPackage 插件管理接口。
 - `saipay/`：SaiPay 支付插件接口。
+- `saiboard-admin/`：SAI Board 后台管理接口。
+- `saiboard-api/`：SAI Board 公开运行时接口。
 - `saisms/`：SaiSMS 短信插件接口。
 - `saiuser/`：SaiUser 会员插件接口。
