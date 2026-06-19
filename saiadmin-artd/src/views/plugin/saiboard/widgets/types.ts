@@ -44,6 +44,7 @@ export type WidgetType =
   | 'alarm-list'
   | 'geo-point-map'
   | 'decor-border'
+  | 'decor-flow-border'
   | 'decor-scanline'
   | 'decor-title'
   | 'decor-divider'

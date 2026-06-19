@@ -1017,6 +1017,50 @@
                 />
               </ElFormItem>
             </template>
+            <template v-if="selectedComponent.type === 'decor-flow-border'">
+              <ElFormItem label="样式">
+                <ElSelect v-model="selectedComponent.option!.variant">
+                  <ElOption label="环绕" value="orbit" />
+                  <ElOption label="横扫" value="scan" />
+                  <ElOption label="转角" value="corner" />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="主色">
+                <ElColorPicker v-model="selectedComponent.option!.accent" />
+              </ElFormItem>
+              <ElFormItem label="副色">
+                <ElColorPicker v-model="selectedComponent.option!.secondary" />
+              </ElFormItem>
+              <ElFormItem label="速度秒">
+                <ElInputNumber
+                  v-model="selectedComponent.option!.speed"
+                  :min="1"
+                  :max="12"
+                  :step="0.5"
+                  step-strictly
+                />
+              </ElFormItem>
+              <ElFormItem label="线宽">
+                <ElInputNumber
+                  v-model="selectedComponent.option!.thickness"
+                  :min="1"
+                  :max="8"
+                  :step="1"
+                  step-strictly
+                />
+              </ElFormItem>
+              <ElFormItem label="辉光">
+                <ElSwitch v-model="selectedComponent.option!.glow" />
+              </ElFormItem>
+              <ElFormItem label="透明度">
+                <ElSlider
+                  v-model="selectedComponent.option!.opacity"
+                  :min="0.1"
+                  :max="1"
+                  :step="0.05"
+                />
+              </ElFormItem>
+            </template>
             <template v-if="selectedComponent.type === 'decor-scanline'">
               <ElFormItem label="方向">
                 <ElSelect v-model="selectedComponent.option!.direction">

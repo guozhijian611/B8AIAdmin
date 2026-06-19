@@ -205,6 +205,21 @@ export const widgetRegistry: WidgetMeta[] = [
     defaultOption: { borderStyle: 'corner', accent: '#69b7ff', opacity: 0.85 }
   },
   {
+    type: 'decor-flow-border',
+    name: '流光边框',
+    icon: 'ri:focus-2-line',
+    defaultRect: { x: 1080, y: 960, w: 480, h: 220, z: 1 },
+    defaultOption: {
+      variant: 'orbit',
+      accent: '#23d8ff',
+      secondary: '#ffcf5a',
+      opacity: 0.86,
+      speed: 5,
+      thickness: 2,
+      glow: true
+    }
+  },
+  {
     type: 'decor-scanline',
     name: '扫描线',
     icon: 'ri:scan-line',
@@ -248,6 +263,7 @@ export const getWidgetMeta = (type: string) => widgetRegistry.find((item) => ite
 
 export const decorWidgetTypes = new Set<string>([
   'decor-border',
+  'decor-flow-border',
   'decor-scanline',
   'decor-title',
   'decor-divider'
@@ -255,16 +271,17 @@ export const decorWidgetTypes = new Set<string>([
 
 export const createDefaultComponent = (type: WidgetType | string, order: number) => {
   const meta = getWidgetMeta(type) || widgetRegistry[0]
+  const isDecor = decorWidgetTypes.has(meta.type)
   return {
     id: `w_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
     type: meta.type,
-    title: decorWidgetTypes.has(meta.type) ? '' : meta.name,
+    title: isDecor ? '' : meta.name,
     rect: {
       ...meta.defaultRect,
       x: meta.defaultRect.x + order * 20,
       y: meta.defaultRect.y + order * 20
     },
-    dataset: { queryTemplateId: undefined, refresh: 30 },
+    dataset: isDecor ? {} : { queryTemplateId: undefined, refresh: 30 },
     option: { ...(meta.defaultOption || {}) }
   }
 }

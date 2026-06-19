@@ -236,6 +236,15 @@
         :style="decorStyleVars"
       ></div>
       <div
+        v-else-if="component.type === 'decor-flow-border'"
+        class="decor-flow-border"
+        :class="[`is-${flowBorderVariant}`, { 'has-glow': flowBorderGlow }]"
+        :style="flowBorderStyleVars"
+      >
+        <span class="decor-flow-border__line"></span>
+        <span class="decor-flow-border__scan"></span>
+      </div>
+      <div
         v-else-if="component.type === 'decor-scanline'"
         class="decor-scanline"
         :class="`is-${scanlineDirection}`"
@@ -988,6 +997,20 @@
     '--decor-accent': String(props.component.option?.accent || 'var(--saiboard-accent, #69b7ff)'),
     '--decor-opacity': String(normalizeOpacity(props.component.option?.opacity))
   }))
+  const flowBorderVariant = computed(() => {
+    const value = String(props.component.option?.variant || 'orbit')
+    return ['orbit', 'scan', 'corner'].includes(value) ? value : 'orbit'
+  })
+  const flowBorderGlow = computed(() => props.component.option?.glow !== false)
+  const flowBorderStyleVars = computed(() => ({
+    '--flow-border-accent': String(
+      props.component.option?.accent || 'var(--saiboard-accent, #23d8ff)'
+    ),
+    '--flow-border-secondary': String(props.component.option?.secondary || '#ffcf5a'),
+    '--flow-border-opacity': String(normalizeOpacity(props.component.option?.opacity ?? 0.86)),
+    '--flow-border-duration': `${normalizeScanlineSpeed(props.component.option?.speed ?? 5)}s`,
+    '--flow-border-thickness': `${normalizeFlowBorderThickness(props.component.option?.thickness)}px`
+  }))
   const scanlineDirection = computed(() => {
     const value = String(props.component.option?.direction || 'horizontal')
     return value === 'vertical' ? 'vertical' : 'horizontal'
@@ -1064,6 +1087,12 @@
     const speed = Number(value ?? 4)
     if (!Number.isFinite(speed) || speed <= 0) return 4
     return Math.min(12, Math.max(1, speed))
+  }
+
+  function normalizeFlowBorderThickness(value: unknown) {
+    const thickness = Number(value ?? 2)
+    if (!Number.isFinite(thickness) || thickness <= 0) return 2
+    return Math.min(8, Math.max(1, Math.round(thickness)))
   }
 
   function normalizeDecorText(value: unknown, fallback: string) {
@@ -2042,6 +2071,133 @@
       0 0 28px color-mix(in srgb, var(--decor-accent) 18%, transparent);
   }
 
+  .decor-flow-border {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    opacity: var(--flow-border-opacity);
+    border-radius: 4px;
+  }
+
+  .decor-flow-border::before {
+    position: absolute;
+    inset: 0;
+    padding: var(--flow-border-thickness);
+    content: '';
+    background: color-mix(in srgb, var(--flow-border-accent) 32%, transparent);
+    border-radius: inherit;
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+  }
+
+  .decor-flow-border::after {
+    position: absolute;
+    inset: calc(var(--flow-border-thickness) + 10px);
+    pointer-events: none;
+    content: '';
+    border: 1px solid color-mix(in srgb, var(--flow-border-accent) 18%, transparent);
+    border-radius: 4px;
+  }
+
+  .decor-flow-border.has-glow {
+    box-shadow:
+      inset 0 0 24px color-mix(in srgb, var(--flow-border-accent) 12%, transparent),
+      0 0 26px color-mix(in srgb, var(--flow-border-accent) 18%, transparent);
+  }
+
+  .decor-flow-border__line {
+    position: absolute;
+    inset: 9px;
+    border: 1px solid color-mix(in srgb, var(--flow-border-secondary) 20%, transparent);
+    border-radius: 4px;
+  }
+
+  .decor-flow-border__scan {
+    position: absolute;
+    display: block;
+    pointer-events: none;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      var(--flow-border-accent),
+      var(--flow-border-secondary),
+      transparent
+    );
+    filter: drop-shadow(0 0 10px var(--flow-border-accent));
+  }
+
+  .decor-flow-border.is-orbit .decor-flow-border__scan {
+    top: 0;
+    left: 0;
+    width: 34%;
+    height: var(--flow-border-thickness);
+    animation: saiboard-flow-border-orbit var(--flow-border-duration) linear infinite;
+  }
+
+  .decor-flow-border.is-orbit::before {
+    background: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--flow-border-accent) 36%, transparent),
+      color-mix(in srgb, var(--flow-border-secondary) 24%, transparent),
+      color-mix(in srgb, var(--flow-border-accent) 36%, transparent)
+    );
+  }
+
+  .decor-flow-border.is-scan::before {
+    background: color-mix(in srgb, var(--flow-border-accent) 30%, transparent);
+  }
+
+  .decor-flow-border.is-scan .decor-flow-border__scan {
+    top: 0;
+    bottom: 0;
+    left: -40%;
+    width: 40%;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--flow-border-accent) 72%, transparent),
+      transparent
+    );
+    animation: saiboard-flow-border-scan var(--flow-border-duration) linear infinite;
+  }
+
+  .decor-flow-border.is-corner::before {
+    background:
+      linear-gradient(var(--flow-border-accent), var(--flow-border-accent)) left top / 58px
+        var(--flow-border-thickness) no-repeat,
+      linear-gradient(var(--flow-border-accent), var(--flow-border-accent)) left top /
+        var(--flow-border-thickness) 58px no-repeat,
+      linear-gradient(var(--flow-border-secondary), var(--flow-border-secondary)) right top / 58px
+        var(--flow-border-thickness) no-repeat,
+      linear-gradient(var(--flow-border-secondary), var(--flow-border-secondary)) right top /
+        var(--flow-border-thickness) 58px no-repeat,
+      linear-gradient(var(--flow-border-accent), var(--flow-border-accent)) left bottom / 58px
+        var(--flow-border-thickness) no-repeat,
+      linear-gradient(var(--flow-border-accent), var(--flow-border-accent)) left bottom /
+        var(--flow-border-thickness) 58px no-repeat,
+      linear-gradient(var(--flow-border-secondary), var(--flow-border-secondary)) right bottom /
+        58px var(--flow-border-thickness) no-repeat,
+      linear-gradient(var(--flow-border-secondary), var(--flow-border-secondary)) right bottom /
+        var(--flow-border-thickness) 58px no-repeat;
+    mask: none;
+    -webkit-mask: none;
+  }
+
+  .decor-flow-border.is-corner .decor-flow-border__scan {
+    right: 18px;
+    bottom: 0;
+    width: 28%;
+    height: var(--flow-border-thickness);
+    animation: saiboard-flow-border-corner var(--flow-border-duration) ease-in-out infinite;
+  }
+
   .decor-scanline {
     position: relative;
     width: 100%;
@@ -2327,6 +2483,85 @@
     to {
       opacity: 0;
       transform: scale(1.55);
+    }
+  }
+
+  @keyframes saiboard-flow-border-orbit {
+    0% {
+      top: 0;
+      left: -34%;
+      transform: rotate(0deg);
+    }
+
+    25% {
+      top: 0;
+      left: 100%;
+      transform: rotate(0deg);
+    }
+
+    26% {
+      top: 0;
+      left: 100%;
+      transform: rotate(90deg);
+      transform-origin: left top;
+    }
+
+    50% {
+      top: 100%;
+      left: 100%;
+      transform: rotate(90deg);
+      transform-origin: left top;
+    }
+
+    51% {
+      top: 100%;
+      left: 100%;
+      transform: rotate(180deg);
+      transform-origin: left top;
+    }
+
+    75% {
+      top: 100%;
+      left: -34%;
+      transform: rotate(180deg);
+      transform-origin: left top;
+    }
+
+    76% {
+      top: 100%;
+      left: -34%;
+      transform: rotate(270deg);
+      transform-origin: left top;
+    }
+
+    100% {
+      top: 0;
+      left: -34%;
+      transform: rotate(270deg);
+      transform-origin: left top;
+    }
+  }
+
+  @keyframes saiboard-flow-border-scan {
+    from {
+      left: -40%;
+    }
+
+    to {
+      left: 100%;
+    }
+  }
+
+  @keyframes saiboard-flow-border-corner {
+    0%,
+    100% {
+      opacity: 0.4;
+      transform: translateX(-20%);
+    }
+
+    50% {
+      opacity: 1;
+      transform: translateX(18%);
     }
   }
 
