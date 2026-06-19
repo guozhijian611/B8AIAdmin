@@ -201,8 +201,7 @@ class BoardController
             return $token !== '' && hash_equals($accessToken, $token);
         }
 
-        $current = getCurrentInfo();
-        return is_array($current) && ($current['plat'] ?? '') === 'saiadmin';
+        return $this->canAdminPreview($screen);
     }
 
     private function isAdminPreview(Request $request): bool

@@ -47,15 +47,21 @@ class BaseLogic extends AbstractLogic
         }
 
         $this->adminInfo = UserInfoCache::getUserInfo($info['id']);
-        $dataScope = self::ALL_SCOPE;
-        $roleId = 1;
+        $this->userIds = [];
+        $dataScope = null;
+        $roleId = 0;
 
-        foreach ($this->adminInfo['roleList'] as $role) {
-            if ($role['data_scope'] > $dataScope) {
-                $dataScope = $role['data_scope'];
-                $roleId = $role['id'];
+        foreach ((array) ($this->adminInfo['roleList'] ?? []) as $role) {
+            $scope = (int) ($role['data_scope'] ?? 0);
+            if ($scope <= 0) {
+                continue;
+            }
+            if ($dataScope === null || $scope > $dataScope) {
+                $dataScope = $scope;
+                $roleId = (int) ($role['id'] ?? 0);
             }
         }
+        $dataScope ??= self::SELF_SCOPE;
 
         switch ($dataScope) {
             case self::ALL_SCOPE:
@@ -80,7 +86,7 @@ class BaseLogic extends AbstractLogic
                 $this->userIds = array_merge($this->userIds, $userIds);
                 break;
             case self::SELF_SCOPE:
-                $this->userIds = array_merge($this->userIds, [$this->adminInfo['id']]);
+                $this->userIds = array_merge($this->userIds, [(int) ($this->adminInfo['id'] ?? $info['id'])]);
                 break;
             default:
                 break;

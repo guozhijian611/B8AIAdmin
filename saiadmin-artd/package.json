@@ -16,6 +16,7 @@
         "lint:stylelint": "stylelint  \"**/*.{css,scss,vue}\" --fix",
         "lint:lint-staged": "lint-staged",
         "verify:saiboard-fit": "tsx scripts/verify-saiboard-fit.ts",
+        "verify:saiboard-scope": "tsx scripts/verify-saiboard-scope.ts",
         "verify:saiboard-runtime": "tsx scripts/verify-saiboard-runtime.ts",
         "prepare": "husky",
         "commit": "git-cz",
