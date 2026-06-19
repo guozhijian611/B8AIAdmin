@@ -8,13 +8,14 @@
     :active="selected"
     :parent="true"
     :draggable="true"
-    :resizable="true"
-    :min-width="120"
-    :min-height="80"
+    :resizable="resizable"
+    :min-w="120"
+    :min-h="80"
     class-name="saiboard-draggable"
     class-name-active="saiboard-draggable-active"
     @mousedown.capture="handlePointerSelect"
     @activated="handleActivated"
+    @resize-start="handleResizeStart"
     @dragging="handleDragging"
     @resizing="handleResizing"
   >
@@ -28,22 +29,35 @@
   import WidgetRenderer from './WidgetRenderer.vue'
   import type { BoardComponent } from './types'
 
+  interface DragPayload {
+    x: number
+    y: number
+  }
+
+  interface ResizePayload extends DragPayload {
+    w: number
+    h: number
+  }
+
   const props = withDefaults(
     defineProps<{
       component: BoardComponent
       rows?: Record<string, any>[]
       error?: string
       selected?: boolean
+      resizable?: boolean
     }>(),
     {
       rows: () => [],
       error: '',
-      selected: false
+      selected: false,
+      resizable: true
     }
   )
 
   const emit = defineEmits<{
     (e: 'select', id: string, additive: boolean): void
+    (e: 'resize-start', id: string, rect: ResizePayload): void
     (e: 'update', component: BoardComponent): void
   }>()
 
@@ -62,28 +76,42 @@
     emit('select', props.component.id, false)
   }
 
-  function handleDragging(x: number, y: number) {
+  function handleResizeStart(rect: ResizePayload) {
+    emit('resize-start', props.component.id, normalizeResizePayload(rect))
+  }
+
+  function handleDragging(payload: DragPayload) {
     emit('update', {
       ...props.component,
       rect: {
         ...props.component.rect,
-        x: Math.max(0, Math.round(x)),
-        y: Math.max(0, Math.round(y))
+        x: Math.max(0, Math.round(Number(payload.x || 0))),
+        y: Math.max(0, Math.round(Number(payload.y || 0)))
       }
     })
   }
 
-  function handleResizing(x: number, y: number, w: number, h: number) {
+  function handleResizing(payload: ResizePayload) {
+    const rect = normalizeResizePayload(payload)
     emit('update', {
       ...props.component,
       rect: {
         ...props.component.rect,
-        x: Math.max(0, Math.round(x)),
-        y: Math.max(0, Math.round(y)),
-        w: Math.max(120, Math.round(w)),
-        h: Math.max(80, Math.round(h))
+        x: rect.x,
+        y: rect.y,
+        w: rect.w,
+        h: rect.h
       }
     })
+  }
+
+  function normalizeResizePayload(payload: ResizePayload): ResizePayload {
+    return {
+      x: Math.max(0, Math.round(Number(payload.x || 0))),
+      y: Math.max(0, Math.round(Number(payload.y || 0))),
+      w: Math.max(120, Math.round(Number(payload.w || 120))),
+      h: Math.max(80, Math.round(Number(payload.h || 80)))
+    }
   }
 </script>
 

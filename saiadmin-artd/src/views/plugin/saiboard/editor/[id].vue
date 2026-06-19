@@ -101,8 +101,30 @@
             :rows="componentRows(component)"
             :error="componentError(component)"
             :selected="selectedIds.includes(component.id)"
+            :resizable="selectedComponents.length <= 1"
             @select="selectComponent"
+            @resize-start="startComponentResize"
             @update="updateComponent"
+          />
+          <Vue3DraggableResizable
+            v-if="selectionBox"
+            :x="selectionBox.x"
+            :y="selectionBox.y"
+            :w="selectionBox.w"
+            :h="selectionBox.h"
+            :z="10000"
+            :active="true"
+            :parent="true"
+            :draggable="true"
+            :resizable="true"
+            :min-w="selectionResizeMin.w"
+            :min-h="selectionResizeMin.h"
+            class-name="saiboard-selection-box"
+            class-name-active="saiboard-selection-box-active"
+            @resize-start="startSelectionResize"
+            @dragging="dragSelectionBox"
+            @resizing="resizeSelectionBox"
+            @resize-end="finishSelectionResize"
           />
         </div>
       </main>
@@ -652,6 +674,7 @@
 
 <script setup lang="ts">
   import { ElMessage } from 'element-plus'
+  import Vue3DraggableResizable from 'vue3-draggable-resizable'
   import api from '../api/screen'
   import templateApi from '../api/query-template'
   import DraggableItem from '../widgets/DraggableItem.vue'
@@ -662,12 +685,41 @@
     boardThemeOptions,
     normalizeBgConfig
   } from '../widgets/theme'
-  import type { BoardComponent, BoardLayout, BoardTableColumn } from '../widgets/types'
+  import type { BoardComponent, BoardLayout, BoardRect, BoardTableColumn } from '../widgets/types'
 
   interface PreviewState {
     rows: Record<string, any>[]
     error: string
     loading: boolean
+  }
+
+  interface DragPayload {
+    x: number
+    y: number
+  }
+
+  interface ResizePayload extends DragPayload {
+    w: number
+    h: number
+  }
+
+  interface SelectionBounds {
+    left: number
+    top: number
+    right: number
+    bottom: number
+    width: number
+    height: number
+    centerX: number
+    centerY: number
+  }
+
+  interface SelectionResizeState {
+    bounds: SelectionBounds
+    components: Array<{
+      id: string
+      rect: BoardRect
+    }>
   }
 
   interface LayoutHistoryState {
@@ -696,6 +748,7 @@
   let canvasResizeObserver: ResizeObserver | undefined
   let suppressHistory = false
   let historyTimer = 0
+  let selectionResizeState: SelectionResizeState | undefined
   const historyLimit = 50
   const screen = reactive<any>({
     id: 0,
@@ -734,6 +787,8 @@
       { label: '居中', value: 'center' },
       { label: '右对齐', value: 'right' }
     ]
+  const minComponentWidth = 120
+  const minComponentHeight = 80
   const minRefreshSeconds = 10
   const maxRefreshSeconds = 3600
   const fieldMappingTypes = new Set([
@@ -757,6 +812,29 @@
   const selectedComponents = computed(() =>
     layout.components.filter((item) => selectedIds.value.includes(item.id))
   )
+  const selectionBox = computed(() => {
+    if (selectedComponents.value.length < 2) return undefined
+    const bounds = selectedBounds()
+    if (!bounds) return undefined
+
+    return {
+      x: bounds.left,
+      y: bounds.top,
+      w: Math.max(1, bounds.width),
+      h: Math.max(1, bounds.height)
+    }
+  })
+  const selectionResizeMin = computed(() => {
+    const bounds = selectedBounds()
+    if (!bounds) return { w: minComponentWidth, h: minComponentHeight }
+    const minScaleX = minSelectionScale('x')
+    const minScaleY = minSelectionScale('y')
+
+    return {
+      w: Math.max(minComponentWidth, Math.round(bounds.width * minScaleX)),
+      h: Math.max(minComponentHeight, Math.round(bounds.height * minScaleY))
+    }
+  })
   const selectedComponent = computed(() =>
     selectedIds.value.length <= 1
       ? layout.components.find((item) => item.id === selectedId.value)
@@ -902,6 +980,7 @@
   const clearSelection = () => {
     selectedId.value = ''
     selectedIds.value = []
+    selectionResizeState = undefined
   }
 
   const selectionIdsForComponent = (id: string) => {
@@ -962,6 +1041,87 @@
     }
 
     layout.components.splice(index, 1, component)
+  }
+
+  const startComponentResize = () => {
+    selectionResizeState = undefined
+  }
+
+  const startSelectionResize = () => {
+    const bounds = selectedBounds()
+    if (!bounds || selectedComponents.value.length < 2) return
+    flushLayoutHistory()
+    selectionResizeState = {
+      bounds,
+      components: selectedComponents.value.map((component) => ({
+        id: component.id,
+        rect: clonePlain(component.rect)
+      }))
+    }
+    suppressHistory = true
+  }
+
+  const finishSelectionResize = () => {
+    if (!selectionResizeState) return
+    selectionResizeState = undefined
+    suppressHistory = false
+    recordLayoutHistory()
+  }
+
+  const dragSelectionBox = (payload: DragPayload) => {
+    const bounds = selectedBounds()
+    if (!bounds) return
+    moveSelectedBy(Number(payload.x || 0) - bounds.left, Number(payload.y || 0) - bounds.top)
+  }
+
+  const resizeSelectionBox = (payload: ResizePayload) => {
+    if (!selectionResizeState) startSelectionResize()
+    if (!selectionResizeState) return
+    const bounds = normalizeSelectionResizeBounds(selectionResizeState, payload)
+    const scaleX = bounds.width / selectionResizeState.bounds.width
+    const scaleY = bounds.height / selectionResizeState.bounds.height
+
+    for (const item of selectionResizeState.components) {
+      const component = layout.components.find((target) => target.id === item.id)
+      if (!component) continue
+      component.rect.x = Math.round(
+        bounds.left + (item.rect.x - selectionResizeState.bounds.left) * scaleX
+      )
+      component.rect.y = Math.round(
+        bounds.top + (item.rect.y - selectionResizeState.bounds.top) * scaleY
+      )
+      component.rect.w = Math.max(minComponentWidth, Math.round(item.rect.w * scaleX))
+      component.rect.h = Math.max(minComponentHeight, Math.round(item.rect.h * scaleY))
+      clampComponentRect(component)
+    }
+  }
+
+  const normalizeSelectionResizeBounds = (
+    state: SelectionResizeState,
+    payload: ResizePayload
+  ): SelectionBounds => {
+    const canvasWidth = Math.max(1, Number(layout.canvas.width || 0))
+    const canvasHeight = Math.max(1, Number(layout.canvas.height || 0))
+    const rawLeft = Math.round(Number(payload.x || 0))
+    const rawTop = Math.round(Number(payload.y || 0))
+    const rawWidth = Math.round(Number(payload.w || state.bounds.width))
+    const rawHeight = Math.round(Number(payload.h || state.bounds.height))
+    const rawRight = rawLeft + rawWidth
+    const rawBottom = rawTop + rawHeight
+    const minWidth = Math.round(state.bounds.width * minSelectionScale('x', state.components))
+    const minHeight = Math.round(state.bounds.height * minSelectionScale('y', state.components))
+    const width = Math.min(canvasWidth, Math.max(minComponentWidth, minWidth, rawWidth))
+    const height = Math.min(canvasHeight, Math.max(minComponentHeight, minHeight, rawHeight))
+    const leftMoved = rawLeft !== state.bounds.left
+    const rightMoved = rawRight !== state.bounds.right
+    const topMoved = rawTop !== state.bounds.top
+    const bottomMoved = rawBottom !== state.bounds.bottom
+    const maxLeft = Math.max(0, canvasWidth - width)
+    const maxTop = Math.max(0, canvasHeight - height)
+    const left = clampNumber(leftMoved && !rightMoved ? rawRight - width : rawLeft, 0, maxLeft)
+    const top = clampNumber(topMoved && !bottomMoved ? rawBottom - height : rawTop, 0, maxTop)
+
+    return createSelectionBounds(left, top, left + width, top + height)
   }
 
   const ensureDataset = (component: BoardComponent) => {
@@ -1581,7 +1741,7 @@
     recordLayoutHistory()
   }
 
-  const selectedBounds = () => {
+  const selectedBounds = (): SelectionBounds | undefined => {
     const components = selectedComponents.value
     if (!components.length) return undefined
     const left = Math.min(...components.map((component) => component.rect.x))
@@ -1589,14 +1749,46 @@
     const right = Math.max(...components.map((component) => component.rect.x + component.rect.w))
     const bottom = Math.max(...components.map((component) => component.rect.y + component.rect.h))
 
+    return createSelectionBounds(left, top, right, bottom)
+  }
+
+  const createSelectionBounds = (
+    left: number,
+    top: number,
+    right: number,
+    bottom: number
+  ): SelectionBounds => {
+    const width = Math.max(1, Math.round(right - left))
+    const height = Math.max(1, Math.round(bottom - top))
+
     return {
-      left,
-      top,
-      right,
-      bottom,
-      centerX: left + (right - left) / 2,
-      centerY: top + (bottom - top) / 2
+      left: Math.round(left),
+      top: Math.round(top),
+      right: Math.round(left) + width,
+      bottom: Math.round(top) + height,
+      width,
+      height,
+      centerX: Math.round(left) + width / 2,
+      centerY: Math.round(top) + height / 2
     }
+  }
+
+  const minSelectionScale = (
+    axis: 'x' | 'y',
+    components: Array<{ rect: BoardRect }> = selectedComponents.value
+  ) => {
+    if (!components.length) return 1
+    const minSize = axis === 'x' ? minComponentWidth : minComponentHeight
+    const field = axis === 'x' ? 'w' : 'h'
+
+    return Math.max(
+      0,
+      ...components.map((component) => {
+        const size = Number(component.rect[field] || minSize)
+        if (size <= 0) return 1
+        return minSize / size
+      })
+    )
   }
 
   const clampComponentRect = (component: BoardComponent) => {
@@ -1921,5 +2113,16 @@
     overflow: hidden;
     transform-origin: left top;
     box-shadow: 0 20px 60px rgb(0 0 0 / 32%);
+  }
+
+  :global(.saiboard-selection-box) {
+    position: absolute;
+    background: rgb(78 161 255 / 6%);
+    border: 1px dashed var(--el-color-primary);
+  }
+
+  :global(.saiboard-selection-box-active) {
+    outline: none;
+    border: 1px dashed var(--el-color-primary);
   }
 </style>
