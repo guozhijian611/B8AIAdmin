@@ -38,13 +38,20 @@ php start.php reload
 
 ## APIDOC 扫描范围
 
-当前 `server/config/plugin/hg/apidoc/app.php` 默认只配置移动端相关 app key：
+当前 `server/config/plugin/hg/apidoc/app.php` 默认配置移动端相关 app key：
 
 | app key | 说明 | 控制器目录 |
 | --- | --- | --- |
 | `saiai-api` | AI 插件移动端接口 | `plugin\saiai\app\api\controller` |
 | `saiuser-api` | 会员插件移动端接口 | `plugin\saiuser\app\api\controller` |
 | `saipay-api` | 支付插件移动端接口 | `plugin\saipay\app\api\controller` |
+
+SAI Board 额外提供独立文档 key，不混入移动端自动生成：
+
+| app key | 说明 | 控制器目录 |
+| --- | --- | --- |
+| `saiboard-admin` | SAI Board 后台管理接口 | `plugin\saiboard\app\admin\controller` |
+| `saiboard-api` | SAI Board 公开运行时接口 | `plugin\saiboard\app\api\controller` |
 
 ## Swagger/OpenAPI 导出地址
 
