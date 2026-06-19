@@ -530,6 +530,7 @@ SAIBOARD_HTTP_ALLOWED_HOSTS=api.example.com,*.trusted.example
 
 - MySQL 测试执行 `SELECT 1 AS ok`，成功返回 `rows` / `total` 和脱敏诊断信息 `diagnostics.type=mysql`、`host`、`port`、`database`。
 - HTTP 测试只允许公网 `http/https`，拒绝 localhost、内网地址、保留地址和无法 DNS 解析的域名；配置出网白名单后，域名还必须命中白名单；成功返回 `rows` / `total` 和 `diagnostics.host`、`diagnostics.method`、`diagnostics.status`。
+- 新增 / 编辑弹窗内点击测试后，会在表单底部保留本次成功或失败结果；失败不会关闭弹窗，方便继续调整连接信息。
 - HTTP `headers`、`params` 必须是 JSON 对象，例如 `{ "Authorization": "Bearer xxx" }`，不能填数组。
 - HTTP 数据源表单里的「测试配置」只用于当前测试请求，不会保存到数据源；可临时填写 `path`、`method`、`params`、`body`、`response_path`、`total_path` 来模拟后续查询模板的真实请求。
 - 常见 MySQL 连接错误会转成可读提示：数据库不存在、用户名或密码不正确、主机或端口无法连接。

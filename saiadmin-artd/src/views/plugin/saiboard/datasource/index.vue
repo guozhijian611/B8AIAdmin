@@ -161,6 +161,14 @@
             <ElRadioButton :label="2">停用</ElRadioButton>
           </ElRadioGroup>
         </ElFormItem>
+        <ElAlert
+          v-if="testMessage"
+          class="datasource-test-alert"
+          :title="testMessage"
+          :type="testPassed ? 'success' : 'error'"
+          show-icon
+          :closable="false"
+        />
       </ElForm>
       <template #footer>
         <ElButton @click="dialogVisible = false">取消</ElButton>
@@ -190,6 +198,8 @@
   const rows = ref<any[]>([])
   const loading = ref(false)
   const testLoading = ref(false)
+  const testMessage = ref('')
+  const testPassed = ref(false)
   const dialogVisible = ref(false)
   const formRef = ref<FormInstance>()
   const search = reactive({ name: '', type: '' })
@@ -265,6 +275,7 @@
     })
     headersText.value = '{}'
     paramsText.value = '{}'
+    resetTestMessage()
     resetHttpTestConfig()
     if (row) {
       Object.assign(form, { ...row, config: { ...(row.config || {}) } })
@@ -308,6 +319,7 @@
     form.config = form.type === 'mysql' ? mysqlDefaults() : httpDefaults()
     headersText.value = '{}'
     paramsText.value = '{}'
+    resetTestMessage()
     resetHttpTestConfig()
     formRef.value?.clearValidate()
   }
@@ -328,13 +340,24 @@
   const test = async (row: any) => {
     const isFormTesting = row === form
     if (isFormTesting) {
+      resetTestMessage()
       await formRef.value?.validate()
       testLoading.value = true
     }
     try {
       const result = await api.test(isFormTesting ? buildTestPayload() : { id: row.id })
-      ElMessage.success(testSuccessMessage(result))
+      const message = testSuccessMessage(result)
+      if (isFormTesting) {
+        testPassed.value = true
+        testMessage.value = message
+      }
+      ElMessage.success(message)
       if (!isFormTesting) loadData()
+    } catch (error: any) {
+      if (isFormTesting) {
+        testPassed.value = false
+        testMessage.value = `测试失败：${error?.message || '连接失败'}`
+      }
     } finally {
       if (isFormTesting) testLoading.value = false
     }
@@ -387,6 +410,11 @@
     testBodyText.value = '{}'
   }
 
+  function resetTestMessage() {
+    testMessage.value = ''
+    testPassed.value = false
+  }
+
   function stringifyJsonObject(value: any) {
     const objectValue =
       value && typeof value === 'object' && (!Array.isArray(value) || value.length === 0)
@@ -397,3 +425,9 @@
 
   onMounted(loadData)
 </script>
+
+<style scoped lang="scss">
+  .datasource-test-alert {
+    margin: 4px 0 16px;
+  }
+</style>
