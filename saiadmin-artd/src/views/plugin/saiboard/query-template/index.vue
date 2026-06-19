@@ -510,6 +510,12 @@
         </template>
 
         <template v-else>
+          <ElFormItem label="请求方法">
+            <ElRadioGroup v-model="form.config.method">
+              <ElRadioButton label="GET">GET</ElRadioButton>
+              <ElRadioButton label="POST">POST JSON</ElRadioButton>
+            </ElRadioGroup>
+          </ElFormItem>
           <ElFormItem label="请求路径">
             <ElInput
               v-model="form.config.path"
@@ -522,6 +528,28 @@
               type="textarea"
               :rows="6"
               placeholder='例如 {"range":"7d"}'
+            />
+          </ElFormItem>
+          <ElFormItem v-if="form.config.method === 'POST'" label="JSON Body">
+            <ElInput
+              v-model="bodyText"
+              type="textarea"
+              :rows="6"
+              placeholder='例如 {"range":"7d","tenant":"b8"}'
+            />
+          </ElFormItem>
+          <ElFormItem label="响应路径">
+            <ElInput
+              v-model="form.config.response_path"
+              clearable
+              placeholder="例如 data.items，可留空自动识别 rows 或 data"
+            />
+          </ElFormItem>
+          <ElFormItem label="总数路径">
+            <ElInput
+              v-model="form.config.total_path"
+              clearable
+              placeholder="例如 data.total，可留空使用 total 或行数"
             />
           </ElFormItem>
         </template>
@@ -613,6 +641,7 @@
   const previewVisible = ref(false)
   const previewText = ref('')
   const paramsText = ref('{}')
+  const bodyText = ref('{}')
   const formRef = ref<FormInstance>()
   const search = reactive({ name: '', datasource_id: undefined as number | undefined })
   const form = reactive<any>({
@@ -695,7 +724,7 @@
     http_passthrough: {
       title: 'HTTP 透传',
       description:
-        '请求数据源 URL 加模板路径和参数，接口返回 rows/total 时直接使用，否则会把 data 或根对象转换为 rows。'
+        '支持 GET 或 POST JSON，请求数据源 URL 加模板路径和参数；可配置响应路径，最终统一转换为 rows/total。'
     }
   }
   const paramTypeDescription =
@@ -764,7 +793,9 @@
         limit: 100
       }
     }
-    if (type === 'http_passthrough') return { path: '', params: {} }
+    if (type === 'http_passthrough') {
+      return { path: '', method: 'GET', params: {}, body: {}, response_path: '', total_path: '' }
+    }
     return {
       table: '',
       params: [],
@@ -795,7 +826,11 @@
       next.metrics = normalizeAggregateMetrics(next.metrics, false, next)
     }
     if (type === 'http_passthrough') {
+      next.method = normalizeHttpMethod(next.method)
+      next.response_path = String(next.response_path || '').trim()
+      next.total_path = String(next.total_path || '').trim()
       paramsText.value = stringifyJsonObject(next.params)
+      bodyText.value = stringifyJsonObject(next.body)
     }
     return next
   }
@@ -845,6 +880,7 @@
       status: 1
     })
     paramsText.value = '{}'
+    bodyText.value = '{}'
     tableOptions.value = []
     columnOptions.value = []
     if (row) {
@@ -912,7 +948,12 @@
   const buildConfig = (strict = true) => {
     const config = JSON.parse(JSON.stringify(form.config || {}))
     if (form.dataset_type === 'http_passthrough') {
+      config.method = normalizeHttpMethod(config.method)
       config.params = parseJsonObject(paramsText.value, '请求参数', strict)
+      config.body =
+        config.method === 'POST' ? parseJsonObject(bodyText.value, 'JSON Body', strict) : {}
+      config.response_path = normalizeHttpPath(config.response_path, '响应路径', strict)
+      config.total_path = normalizeHttpPath(config.total_path, '总数路径', strict)
       return config
     }
 
@@ -970,12 +1011,18 @@
   }
 
   const preview = async (row: any) => {
-    const payload = row.id
-      ? { id: row.id, params: previewParams(row.config) }
-      : { ...buildPayload(), params: previewParams(form.config) }
+    const payload =
+      row === form ? buildDraftPreviewPayload() : { id: row.id, params: previewParams(row.config) }
     const result = await api.preview(payload)
     previewText.value = JSON.stringify(result, null, 2)
     previewVisible.value = true
+  }
+
+  const buildDraftPreviewPayload = () => {
+    const payload = buildPayload()
+    delete payload.id
+    payload.params = previewParams(payload.config)
+    return payload
   }
 
   const changeStatus = async (row: any, status: number) => {
@@ -1326,6 +1373,21 @@
     if (value === 'label') return value
     if (allowSeries && value === 'series') return value
     return value && aliases.has(value) ? value : 'label'
+  }
+
+  function normalizeHttpMethod(value: string) {
+    return String(value || '').toUpperCase() === 'POST' ? 'POST' : 'GET'
+  }
+
+  function normalizeHttpPath(value: any, label: string, strict = true) {
+    const path = String(value || '').trim()
+    if (path === '') return ''
+    if (/^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$/.test(path)) return path
+    if (strict) {
+      ElMessage.error(`${label}只能使用点号路径，例如 data.items`)
+      throw new Error(`${label}格式不正确`)
+    }
+    return ''
   }
 
   function parseJsonObject(text: string, label: string, strict = true) {

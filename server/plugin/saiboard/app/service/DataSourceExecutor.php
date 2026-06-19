@@ -402,30 +402,21 @@ LUA;
     private function executeHttp(array $datasourceConfig, array $template, bool $withDiagnostics = false): array
     {
         $templateConfig = is_array($template['config'] ?? null) ? $template['config'] : [];
-        $url = $this->buildHttpUrl($datasourceConfig, $templateConfig);
-        $this->assertPublicHttpUrl($url);
+        $request = $this->buildHttpRequest($datasourceConfig, $templateConfig);
+        $this->assertPublicHttpUrl($request['url']);
         $headers = $this->normalizeHeaders($datasourceConfig['headers'] ?? []);
-        [$payload, $diagnostics] = $this->requestJson($url, $headers);
+        [$payload, $diagnostics] = $this->requestJson(
+            $request['url'],
+            $headers,
+            $request['method'],
+            $request['body']
+        );
 
-        if (isset($payload['rows']) && is_array($payload['rows'])) {
-            $result = [
-                'rows' => $payload['rows'],
-                'total' => (int) ($payload['total'] ?? count($payload['rows'])),
-            ];
-            return $withDiagnostics ? $result + ['diagnostics' => $diagnostics] : $result;
-        }
-
-        $data = $payload['data'] ?? $payload;
-        if (is_array($data) && array_is_list($data)) {
-            $result = ['rows' => $data, 'total' => count($data)];
-            return $withDiagnostics ? $result + ['diagnostics' => $diagnostics] : $result;
-        }
-
-        $result = ['rows' => [$data], 'total' => 1];
+        $result = $this->normalizeHttpPayload($payload, $templateConfig);
         return $withDiagnostics ? $result + ['diagnostics' => $diagnostics] : $result;
     }
 
-    private function buildHttpUrl(array $datasourceConfig, array $templateConfig): string
+    private function buildHttpRequest(array $datasourceConfig, array $templateConfig): array
     {
         $baseUrl = trim((string) ($datasourceConfig['url'] ?? ''));
         if ($baseUrl === '') {
@@ -442,7 +433,29 @@ LUA;
             $url .= (str_contains($url, '?') ? '&' : '?') . http_build_query($params);
         }
 
-        return $url;
+        $method = $this->normalizeHttpMethod($templateConfig['method'] ?? $datasourceConfig['method'] ?? 'GET');
+        $body = $method === 'POST'
+            ? $this->normalizeObject($templateConfig['body'] ?? [], 'HTTP 查询模板 JSON Body')
+            : [];
+
+        return [
+            'url' => $url,
+            'method' => $method,
+            'body' => $body,
+        ];
+    }
+
+    private function normalizeHttpMethod(mixed $method): string
+    {
+        $method = strtoupper(trim((string) $method));
+        if ($method === '') {
+            return 'GET';
+        }
+        if (!in_array($method, ['GET', 'POST'], true)) {
+            throw new InvalidArgumentException('HTTP 查询模板请求方法只支持 GET 或 POST');
+        }
+
+        return $method;
     }
 
     private function assertPublicHttpUrl(string $url): void
@@ -498,25 +511,39 @@ LUA;
         return $result;
     }
 
-    private function requestJson(string $url, array $headers): array
+    private function requestJson(string $url, array $headers, string $method = 'GET', array $body = []): array
     {
         $host = (string) (parse_url($url, PHP_URL_HOST) ?: '');
         $diagnostics = [
             'type' => 'http',
             'host' => $host,
+            'method' => $method,
             'status' => 0,
             'message' => '请求成功',
         ];
+        $jsonBody = null;
+        if ($method === 'POST') {
+            $jsonBody = json_encode($body === [] ? (object) [] : $body, JSON_UNESCAPED_UNICODE);
+            if ($jsonBody === false) {
+                throw new InvalidArgumentException('HTTP 查询模板 JSON Body 编码失败');
+            }
+            $headers = $this->ensureHeader($headers, 'Content-Type', 'application/json');
+        }
 
         if (function_exists('curl_init')) {
             $curl = curl_init($url);
-            curl_setopt_array($curl, [
+            $options = [
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_FOLLOWLOCATION => false,
                 CURLOPT_CONNECTTIMEOUT => 5,
                 CURLOPT_TIMEOUT => 10,
+                CURLOPT_CUSTOMREQUEST => $method,
                 CURLOPT_HTTPHEADER => $headers,
-            ]);
+            ];
+            if ($jsonBody !== null) {
+                $options[CURLOPT_POSTFIELDS] = $jsonBody;
+            }
+            curl_setopt_array($curl, $options);
             $body = curl_exec($curl);
             $error = curl_error($curl);
             $status = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
@@ -533,13 +560,17 @@ LUA;
             }
         } else {
             $httpResponseHeader = [];
+            $contextOptions = [
+                'method' => $method,
+                'timeout' => 10,
+                'header' => implode("\r\n", $headers),
+                'ignore_errors' => true,
+            ];
+            if ($jsonBody !== null) {
+                $contextOptions['content'] = $jsonBody;
+            }
             $body = file_get_contents($url, false, stream_context_create([
-                'http' => [
-                    'method' => 'GET',
-                    'timeout' => 10,
-                    'header' => implode("\r\n", $headers),
-                    'ignore_errors' => true,
-                ],
+                'http' => $contextOptions,
             ]));
             $httpResponseHeader = $http_response_header ?? [];
             $status = $this->statusCodeFromHeaders($httpResponseHeader);
@@ -562,6 +593,89 @@ LUA;
         return [$payload, $diagnostics];
     }
 
+    private function normalizeHttpPayload(array $payload, array $templateConfig): array
+    {
+        $path = trim((string) ($templateConfig['response_path'] ?? ''));
+        $source = $path === '' ? $payload : $this->extractHttpPath($payload, $path, '响应数据路径');
+
+        if ($path === '' && isset($payload['rows']) && is_array($payload['rows'])) {
+            $rows = $this->normalizeHttpRows($payload['rows']);
+            return [
+                'rows' => $rows,
+                'total' => $this->httpTotal($payload, $payload, $templateConfig) ?? count($rows),
+            ];
+        }
+
+        if (is_array($source) && isset($source['rows']) && is_array($source['rows'])) {
+            $rows = $this->normalizeHttpRows($source['rows']);
+            return [
+                'rows' => $rows,
+                'total' => $this->httpTotal($payload, $source, $templateConfig) ?? count($rows),
+            ];
+        }
+
+        if ($path === '' && array_key_exists('data', $payload)) {
+            $source = $payload['data'];
+        }
+
+        $rows = $this->normalizeHttpRows($source);
+        return [
+            'rows' => $rows,
+            'total' => $this->httpTotal($payload, $source, $templateConfig) ?? count($rows),
+        ];
+    }
+
+    private function normalizeHttpRows(mixed $source): array
+    {
+        if (is_array($source) && array_is_list($source)) {
+            return array_map(
+                static fn (mixed $row) => is_array($row) ? $row : ['value' => $row],
+                $source
+            );
+        }
+
+        if (is_array($source)) {
+            return [$source];
+        }
+
+        return [['value' => $source]];
+    }
+
+    private function httpTotal(array $payload, mixed $source, array $templateConfig): ?int
+    {
+        $path = trim((string) ($templateConfig['total_path'] ?? ''));
+        if ($path !== '') {
+            $value = $this->extractHttpPath($payload, $path, '总数路径');
+            return is_numeric($value) ? (int) $value : null;
+        }
+
+        if (is_array($source) && isset($source['total']) && is_numeric($source['total'])) {
+            return (int) $source['total'];
+        }
+        if (isset($payload['total']) && is_numeric($payload['total'])) {
+            return (int) $payload['total'];
+        }
+
+        return null;
+    }
+
+    private function extractHttpPath(array $payload, string $path, string $label): mixed
+    {
+        if (!preg_match('/^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$/', $path)) {
+            throw new InvalidArgumentException("HTTP 查询模板{$label}格式不正确");
+        }
+
+        $current = $payload;
+        foreach (explode('.', $path) as $segment) {
+            if (!is_array($current) || !array_key_exists($segment, $current)) {
+                throw new InvalidArgumentException("HTTP 查询模板{$label}不存在：{$path}");
+            }
+            $current = $current[$segment];
+        }
+
+        return $current;
+    }
+
     private function normalizeObject(mixed $value, string $label): array
     {
         if ($value === null || $value === '') {
@@ -572,6 +686,18 @@ LUA;
         }
 
         return $value;
+    }
+
+    private function ensureHeader(array $headers, string $name, string $value): array
+    {
+        foreach ($headers as $header) {
+            if (str_starts_with(strtolower((string) $header), strtolower($name) . ':')) {
+                return $headers;
+            }
+        }
+
+        $headers[] = $name . ': ' . $value;
+        return $headers;
     }
 
     private function statusCodeFromHeaders(array $headers): int

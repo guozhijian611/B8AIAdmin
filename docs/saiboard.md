@@ -34,7 +34,7 @@
 │   ↓ 组件按 refresh 轮询                                                 │
 │ /app/saiboard/api/data?code=xx&cid=w_1 → 后端代执行                     │
 │   ├─ MySQL 数据源：按组件绑定的预置模板执行（只读 SELECT）              │
-│   └─ HTTP 数据源：带请求头远程 GET（含 SSRF 防护）                      │
+│   └─ HTTP 数据源：带请求头远程 GET / POST JSON（含 SSRF 防护）           │
 └────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -269,7 +269,7 @@ saiadmin-artd/src/views/plugin/saiboard/
 **`DataSourceExecutor`**
 
 - `mysql`：按数据源配置即时创建 PDO 连接，执行 `SqlBuilder` 产出的参数化 SELECT，返回 rows。
-- `http`：只支持 GET，按数据源 config 和模板 config 拼 URL，携带自定义请求头，使用 curl（无 curl 时降级 `file_get_contents`）请求 JSON；**发请求前做 SSRF 校验**。
+- `http`：支持 GET / POST JSON，按数据源 config 和模板 config 拼 URL，携带自定义请求头、查询参数和模板 JSON Body，使用 curl（无 curl 时降级 `file_get_contents`）请求 JSON；**发请求前做 SSRF 校验**。
 - 支持 `cache_ttl` 通过 `support\think\Cache` 缓存结果，缓存键含 `query_template_id`、数据源配置、模板配置和运行时白名单参数指纹，降低运行时轮询压力；缓存 miss 时优先使用 Redis token 锁做跨副本互斥，Redis 不可用时降级本机文件锁，并保留短期 stale 缓存作为数据源异常时的公开页兜底。
 - 运行时指标通过 `RuntimeMetrics` 写入 Cache，统计请求、限流、缓存命中 / 未命中、stale 命中、回源成功 / 失败、Redis / 文件锁与锁等待；具备大屏列表权限的后台用户可查看单个大屏最近统计窗口内的运行统计。
 
@@ -288,7 +288,7 @@ saiadmin-artd/src/views/plugin/saiboard/
 | SQL 注入 | 预置模板 + 参数化 SELECT + 表/字段白名单；生产只读账号兜底。 |
 | 越权取数（IDOR） | `data` 接口以 `code + cid` 为键，组件绑定的 `queryTemplateId` 由服务端从该大屏 `layout` 解析，**前端不能指定任意模板/数据源 id**；运行时还会校验模板、数据源与大屏创建者一致，兜底拦截历史异常 layout。 |
 | 后台数据越权 | 大屏、数据源、查询模板 Logic 显式开启 `scope`，按 `created_by` 与角色数据权限过滤；数据源测试 / 表结构、查询模板预览、layout 绑定模板、运行统计等自定义入口也走归属校验。 |
-| SSRF（HTTP 数据源） | 后端代发 GET 前解析目标域名 → 拒绝内网 / 环回 / 链路本地地址（`127.0.0.0/8`、`10/8`、`172.16/12`、`192.168/16`、`169.254/16`、`::1` 等）与云元数据地址；可选出网域名白名单。 |
+| SSRF（HTTP 数据源） | 后端代发 HTTP 请求前解析目标域名 → 拒绝内网 / 环回 / 链路本地地址（`127.0.0.0/8`、`10/8`、`172.16/12`、`192.168/16`、`169.254/16`、`::1` 等）与云元数据地址；可选出网域名白名单。 |
 | 密钥泄露 | 数据源 `config`（DB 密码、请求头 token）只在后端持有，`getScreen` 下发时剥离；大屏子令牌只保存哈希，明文仅创建 / 重置后显示一次。 |
 | 公开大屏被刷 | `cache_ttl` 通过 Webman Cache 缓存结果；公开运行时下发 layout 时强制 `dataset.refresh` 不低于 10 秒；按 IP / 大屏 / 创建人维度做固定窗口限流；缓存 miss 优先使用 Redis 原子锁互斥回源，锁竞争时返回“数据缓存刷新中”，异常时可回退 stale 缓存。 |
 | 日志脱敏 | 连接配置、token、Bearer 在日志/调试页脱敏，仅 `last_error` 存非敏感错误摘要。 |
@@ -341,7 +341,7 @@ getScreen / data 接口入口：
 - 条件支持 `= / != / > / >= / < / <= / like / in / between / time_range`，并支持条件组内 `AND / OR` 组合；顶层条件按 `AND` 合并，老的平铺条件数组继续兼容。`time_range` 只允许日期 / 时间字段，`value` 可用 `today`、`yesterday`、`last_7_days`、`last_30_days`、`this_week`、`this_month`、`last_month`、`this_year`。
 - MySQL 查询模板支持 `params[]` 参数白名单；条件值可写 `:param_name`，预览和公开运行时传入的同名参数会按 `string` / `number` / `date` / `datetime` / `time_range` 类型清洗后再进入参数绑定。未声明参数、非法参数名、类型不匹配或必填参数缺失都会被拒绝；URL 上的未知参数会被忽略。
 - `table_raw.field_aliases` 用真实字段名映射输出字段名；`computed_fields` 支持数值字段、数字、括号、`+ - * /` 四则运算，以及 `round` / `abs` / `ceil` / `floor` 安全函数白名单，不开放裸 SQL、任意函数、子查询或条件表达式。
-- HTTP 数据源使用 `http_passthrough`，配置路径和请求参数 JSON。
+- HTTP 数据源使用 `http_passthrough`，支持配置 GET / POST JSON、路径、请求参数 JSON、JSON Body、响应数据路径和总数路径。
 
 ### 模板市场 `/plugin/saiboard/market`
 
@@ -472,6 +472,31 @@ getScreen / data 接口入口：
 }
 ```
 
+数据源 config 只保存基础 URL、请求头和默认查询参数；具体 GET / POST、业务路径、JSON Body 和响应提取方式优先放在查询模板 config 里，便于同一个 HTTP 数据源复用多个取数模板。
+
+### HTTP 查询模板 config
+
+```json
+{
+  "path": "/orders/summary",
+  "method": "POST",
+  "params": {
+    "tenant": "b8"
+  },
+  "body": {
+    "range": "7d",
+    "status": "paid"
+  },
+  "response_path": "data.items",
+  "total_path": "data.total"
+}
+```
+
+- `method` 只支持 `GET` / `POST`；`POST` 会用 `body` 作为 JSON 请求体，并自动补 `Content-Type: application/json`。
+- `params` 会和数据源默认参数合并后拼到 URL 查询串，模板同名参数覆盖数据源默认参数。
+- `response_path` / `total_path` 使用点号路径，例如 `data.items`、`result.total`；`response_path` 留空时优先识别根对象 `rows`，其次识别 `data`，最后把根对象当单行。
+- 响应路径命中数组时转为多行；命中对象时转为单行；命中标量时转为 `{ "value": 标量 }`。
+
 ### 数据源测试返回
 
 后台「数据源管理」新增或编辑时可以直接点击测试。测试接口会使用当前表单里的未保存配置，不要求先保存。
@@ -490,7 +515,7 @@ getScreen / data 接口入口：
 | `table_raw` 表原始行 | MySQL | 返回明细 `rows`，字段来自「返回字段」和「计算字段」。 | 表格、排行榜、折线图、柱状图、散点图、漏斗图、热力图、K线图、仪表盘、图片轮播、时间轴。 |
 | `table_count` 表计数 | MySQL | 返回 `rows[0].total`，`total` 同步为计数值。 | 指标卡、仪表盘、总量统计、告警数量。 |
 | `table_aggregate` 表聚合 | MySQL | 按维度字段分组，固定输出 `label`；配置第二维度时额外输出 `series`；再输出一个或多个聚合指标。 | 柱状图、漏斗图、环图、雷达图、趋势图、多指标对比、仪表盘、热力图。 |
-| `http_passthrough` HTTP 透传 | HTTP | 若接口返回 `rows` 则直接使用；否则取 `data`，数组转多行，对象转单行。 | 外部系统指标、第三方接口、已聚合好的业务数据、漏斗图、热力图、K线图、仪表盘、时间轴。 |
+| `http_passthrough` HTTP 透传 | HTTP | 支持 GET / POST JSON；若配置 `response_path` 则从指定路径提取数据，否则优先使用 `rows` / `data`；数组转多行，对象转单行，标量转 `value`。 | 外部系统指标、第三方接口、已聚合好的业务数据、漏斗图、热力图、K线图、仪表盘、时间轴。 |
 
 K线图需要把数据行映射为 `time`、`open`、`close`、`high`、`low` 五类字段；编辑器属性面板支持分别选择时间、开盘、收盘、最高、最低字段。字段名命中 `time/date/open/close/high/low` 等常见命名时会自动识别，未命中时手动选择即可。
 
@@ -559,7 +584,7 @@ php webman b8:migrate
 | 模块 | 已落地内容 |
 | --- | --- |
 | 数据库 | 3 张表（含 `draft_layout`/`layout` 分离）+ Phinx 迁移（含菜单权限）。 |
-| 后端 | `SqlBuilder`（`table_raw` / `table_count` / `table_aggregate`）+ `DataSourceExecutor`（mysql / http + SSRF 防护 + Cache 缓存）。 |
+| 后端 | `SqlBuilder`（`table_raw` / `table_count` / `table_aggregate`）+ `DataSourceExecutor`（mysql / http GET / POST JSON + SSRF 防护 + Cache 缓存）。 |
 | 后端 | `ScreenController` 标准 CRUD + `saveLayout` / `publish`；`BoardController`（`getScreen` / `data`，IDOR 绑定校验）。 |
 | 后端 | `DatasourceController::test` 支持新增态 payload 测试校验，连接失败写入 `last_error` 并返回稳定错误消息；测试成功返回脱敏诊断信息。 |
 | 后端 | `table_aggregate` 支持 `metrics[]` 多指标聚合和可选第二维度聚合，指标 alias 白名单化、最多 8 项，排序只允许维度、第二维度或已校验指标。 |
@@ -567,7 +592,7 @@ php webman b8:migrate
 | 后端/前端 | MySQL 查询模板支持 `params[]` 参数白名单、`:param_name` 条件占位符、条件分组和组内 `AND / OR`；预览与公开运行时按白名单参数清洗后执行。 |
 | 前端 | `DraggableItem.vue`（封装 `vue3-draggable-resizable`）+ `widgets/` 注册表，复用 `art-*` 图表（柱/折线/横向柱/K线/仪表盘/漏斗/热力图/环形/雷达/散点 + 单值指标 / 表格 / 时间轴 / 点位地图）并提供 CSS 装饰边框 / 扫描线 / 标题装饰 / 分割线。 |
 | 前端 | 拖拽编辑器 + 编辑态真实数据预览 / 字段映射 + 查询模板表单化配置 + 对外运行时页（静态 `/screen/:code`、适配模式、is_public / token 鉴权）。 |
-| 前端 | 数据源新增/编辑态测试前先做表单校验；查询模板支持多指标聚合配置和取值类型说明；指标组件支持前缀 / 小数位 / 单位，表格支持最大行数 / 序号列 / 斑马纹，图表组件缩放后自动触发 resize。 |
+| 前端 | 数据源新增/编辑态测试前先做表单校验；查询模板支持多指标聚合配置、HTTP GET / POST JSON 配置和取值类型说明；指标组件支持前缀 / 小数位 / 单位，表格支持最大行数 / 序号列 / 斑马纹，图表组件缩放后自动触发 resize。 |
 
 ### P1 能力增强（部分完成）
 
