@@ -90,22 +90,29 @@ class DatasourceController extends AbstractCrudController
     #[Apidoc\Title('测试数据源')]
     #[Apidoc\Url('/app/saiboard/admin/Datasource/test')]
     #[Apidoc\Method('POST')]
+    #[Apidoc\Param('test_config', type: 'object', require: false, desc: 'HTTP 测试模板配置：path/method/params/body/response_path/total_path')]
     #[Permission('测试数据源', 'saiboard:datasource:test')]
     public function test(Request $request): Response
     {
         $id = (int) $request->post('id', 0);
         $datasource = null;
+        $data = $request->post();
+        $isDraftTest = $id <= 0 || array_key_exists('config', $data);
+        $persistLastError = !$isDraftTest && $id > 0;
         try {
-            $datasource = $id > 0 ? $this->logic->read($id) : $this->makeTestingDatasource($request->post());
+            $datasource = $isDraftTest ? $this->makeTestingDatasource($data) : $this->logic->read($id);
 
-            $result = $this->executor->testDatasource($datasource);
-            if ($id > 0 && (string) $datasource->last_error !== '') {
+            $result = $this->executor->testDatasource(
+                $datasource,
+                $isDraftTest ? $this->testingTemplateConfig($request->post('test_config', [])) : []
+            );
+            if ($persistLastError && (string) $datasource->last_error !== '') {
                 $datasource->save(['last_error' => null]);
             }
             return $this->success($result, '连接成功');
         } catch (Throwable $exception) {
             $message = $this->safeTestError($exception->getMessage());
-            if ($id > 0 && $datasource instanceof Datasource && !$datasource->isEmpty()) {
+            if ($persistLastError && $datasource instanceof Datasource && !$datasource->isEmpty()) {
                 $datasource->save(['last_error' => $message]);
             }
             return $this->fail($message);
@@ -192,6 +199,18 @@ class DatasourceController extends AbstractCrudController
     private function isObjectConfig(mixed $value): bool
     {
         return is_array($value) && ($value === [] || !array_is_list($value));
+    }
+
+    private function testingTemplateConfig(mixed $config): array
+    {
+        if ($config === null || $config === '') {
+            return [];
+        }
+        if (!$this->isObjectConfig($config)) {
+            throw new InvalidArgumentException('HTTP 测试配置必须是 JSON 对象');
+        }
+
+        return $config;
     }
 
     private function friendlyTestError(string $message): string

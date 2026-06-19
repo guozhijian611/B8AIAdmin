@@ -60,7 +60,7 @@
       </ElTable>
     </ElCard>
 
-    <ElDialog v-model="dialogVisible" :title="form.id ? '编辑数据源' : '新增数据源'" width="720px">
+    <ElDialog v-model="dialogVisible" :title="form.id ? '编辑数据源' : '新增数据源'" width="860px">
       <ElForm ref="formRef" :model="form" :rules="rules" label-width="110px">
         <ElFormItem label="名称" prop="name"><ElInput v-model="form.name" /></ElFormItem>
         <ElFormItem label="类型" prop="type">
@@ -107,6 +107,50 @@
               placeholder='例如 {"range":"7d"}'
             />
           </ElFormItem>
+          <ElDivider content-position="left">测试配置</ElDivider>
+          <ElFormItem label="测试方法">
+            <ElRadioGroup v-model="httpTestConfig.method">
+              <ElRadioButton label="GET">GET</ElRadioButton>
+              <ElRadioButton label="POST">POST JSON</ElRadioButton>
+            </ElRadioGroup>
+          </ElFormItem>
+          <ElFormItem label="测试路径">
+            <ElInput
+              v-model="httpTestConfig.path"
+              clearable
+              placeholder="例如 /metrics/orders，可留空直接请求 URL"
+            />
+          </ElFormItem>
+          <ElFormItem label="测试参数">
+            <ElInput
+              v-model="testParamsText"
+              type="textarea"
+              :rows="4"
+              placeholder='例如 {"range":"7d"}'
+            />
+          </ElFormItem>
+          <ElFormItem v-if="httpTestConfig.method === 'POST'" label="测试 Body">
+            <ElInput
+              v-model="testBodyText"
+              type="textarea"
+              :rows="4"
+              placeholder='例如 {"range":"7d","tenant":"b8"}'
+            />
+          </ElFormItem>
+          <ElFormItem label="响应路径">
+            <ElInput
+              v-model="httpTestConfig.response_path"
+              clearable
+              placeholder="例如 data.items，可留空自动识别 rows 或 data"
+            />
+          </ElFormItem>
+          <ElFormItem label="总数路径">
+            <ElInput
+              v-model="httpTestConfig.total_path"
+              clearable
+              placeholder="例如 data.total，可留空使用 total 或行数"
+            />
+          </ElFormItem>
         </template>
         <ElFormItem label="缓存秒"
           ><ElInputNumber v-model="form.cache_ttl" :min="0" :max="86400"
@@ -151,6 +195,14 @@
   const search = reactive({ name: '', type: '' })
   const headersText = ref('{}')
   const paramsText = ref('{}')
+  const testParamsText = ref('{}')
+  const testBodyText = ref('{}')
+  const httpTestConfig = reactive<any>({
+    path: '',
+    method: 'GET',
+    response_path: '',
+    total_path: ''
+  })
   const form = reactive<any>({
     id: undefined,
     name: '',
@@ -185,6 +237,13 @@
     params: {}
   })
 
+  const httpTestDefaults = () => ({
+    path: '',
+    method: 'GET',
+    response_path: '',
+    total_path: ''
+  })
+
   const loadData = async () => {
     loading.value = true
     try {
@@ -206,6 +265,7 @@
     })
     headersText.value = '{}'
     paramsText.value = '{}'
+    resetHttpTestConfig()
     if (row) {
       Object.assign(form, { ...row, config: { ...(row.config || {}) } })
       headersText.value = stringifyJsonObject(row.config?.headers)
@@ -224,10 +284,31 @@
     return { ...form, config }
   }
 
+  const buildTestPayload = () => {
+    const payload = buildPayload()
+    if (payload.type === 'http') {
+      payload.test_config = buildHttpTestConfig()
+    }
+    return payload
+  }
+
+  const buildHttpTestConfig = () => {
+    const method = normalizeHttpMethod(httpTestConfig.method)
+    return {
+      path: String(httpTestConfig.path || '').trim(),
+      method,
+      params: parseJsonObject(testParamsText.value, '测试参数'),
+      body: method === 'POST' ? parseJsonObject(testBodyText.value, '测试 Body') : {},
+      response_path: String(httpTestConfig.response_path || '').trim(),
+      total_path: String(httpTestConfig.total_path || '').trim()
+    }
+  }
+
   const onDatasourceTypeChange = () => {
     form.config = form.type === 'mysql' ? mysqlDefaults() : httpDefaults()
     headersText.value = '{}'
     paramsText.value = '{}'
+    resetHttpTestConfig()
     formRef.value?.clearValidate()
   }
 
@@ -251,7 +332,7 @@
       testLoading.value = true
     }
     try {
-      const result = await api.test(isFormTesting ? buildPayload() : { id: row.id })
+      const result = await api.test(isFormTesting ? buildTestPayload() : { id: row.id })
       ElMessage.success(testSuccessMessage(result))
       if (!isFormTesting) loadData()
     } finally {
@@ -290,9 +371,20 @@
     const parts: string[] = []
     const total = Number(result?.total ?? result?.rows?.length ?? 0)
     if (Number.isFinite(total)) parts.push(`返回 ${total} 行`)
+    if (diagnostics.method) parts.push(`方法 ${diagnostics.method}`)
     if (diagnostics.host) parts.push(`主机 ${diagnostics.host}`)
     if (diagnostics.status) parts.push(`状态码 ${diagnostics.status}`)
     return parts.length ? `连接成功（${parts.join('，')}）` : '连接成功'
+  }
+
+  function normalizeHttpMethod(method: unknown) {
+    return String(method || '').toUpperCase() === 'POST' ? 'POST' : 'GET'
+  }
+
+  function resetHttpTestConfig() {
+    Object.assign(httpTestConfig, httpTestDefaults())
+    testParamsText.value = '{}'
+    testBodyText.value = '{}'
   }
 
   function stringifyJsonObject(value: any) {

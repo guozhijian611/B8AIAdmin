@@ -22,11 +22,15 @@ class DataSourceExecutor
     {
     }
 
-    public function testDatasource(Datasource $datasource): array
+    public function testDatasource(Datasource $datasource, array $templateConfig = []): array
     {
         return match ((string) $datasource->type) {
             'mysql' => $this->testMysql($datasource->config),
-            'http' => $this->executeHttp($datasource->config, ['dataset_type' => 'http_passthrough', 'config' => []], true),
+            'http' => $this->executeHttp(
+                $datasource->config,
+                ['dataset_type' => 'http_passthrough', 'config' => $templateConfig],
+                true
+            ),
             default => throw new InvalidArgumentException('数据源类型不支持'),
         };
     }

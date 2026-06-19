@@ -95,7 +95,7 @@ server/plugin/saiboard/
 saiadmin-artd/src/views/plugin/saiboard/
 ├── api/            screen.ts, datasource.ts, queryTemplate.ts
 ├── screen/         大屏列表（标准 CRUD，Element Plus）
-├── datasource/     数据源管理（含测试连接 + 查询模板子管理）
+├── datasource/     数据源管理（含测试连接）
 ├── market/         模板市场（大屏模板 / 组件模板）
 ├── editor/         拖拽编辑器（Element Plus 外壳 + DraggableItem + art-* 画布）
 │   └── [id].vue
@@ -330,7 +330,7 @@ getScreen / data 接口入口：
 
 ### 数据源管理页 `/plugin/saiboard/datasource`
 
-- 标准 CRUD（Element Plus）+ 测试连接按钮 + 查询模板子管理。
+- 标准 CRUD（Element Plus）+ 测试连接按钮；查询模板在独立页面 `/plugin/saiboard/query-template` 维护。
 
 ### 查询模板页 `/plugin/saiboard/query-template`
 
@@ -502,8 +502,9 @@ getScreen / data 接口入口：
 后台「数据源管理」新增或编辑时可以直接点击测试。测试接口会使用当前表单里的未保存配置，不要求先保存。
 
 - MySQL 测试执行 `SELECT 1 AS ok`，成功返回 `rows` / `total` 和脱敏诊断信息 `diagnostics.type=mysql`、`host`、`port`、`database`。
-- HTTP 测试只允许公网 `http/https`，拒绝 localhost、内网地址、保留地址和无法 DNS 解析的域名；成功返回 `rows` / `total` 和 `diagnostics.host`、`diagnostics.status`。
+- HTTP 测试只允许公网 `http/https`，拒绝 localhost、内网地址、保留地址和无法 DNS 解析的域名；成功返回 `rows` / `total` 和 `diagnostics.host`、`diagnostics.method`、`diagnostics.status`。
 - HTTP `headers`、`params` 必须是 JSON 对象，例如 `{ "Authorization": "Bearer xxx" }`，不能填数组。
+- HTTP 数据源表单里的「测试配置」只用于当前测试请求，不会保存到数据源；可临时填写 `path`、`method`、`params`、`body`、`response_path`、`total_path` 来模拟后续查询模板的真实请求。
 - 常见 MySQL 连接错误会转成可读提示：数据库不存在、用户名或密码不正确、主机或端口无法连接。
 
 ### 查询模板取值类型
