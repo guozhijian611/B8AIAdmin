@@ -408,6 +408,109 @@
                 <ElSwitch v-model="selectedComponent.option!.showDataLabel" />
               </ElFormItem>
             </template>
+            <template v-if="selectedComponent.type === 'art-k-line-chart'">
+              <ElFormItem label="时间字段">
+                <ElSelect
+                  v-model="selectedComponent.option!.timeField"
+                  clearable
+                  filterable
+                  placeholder="自动识别"
+                  :disabled="!fieldOptions.length"
+                >
+                  <ElOption
+                    v-for="field in fieldOptions"
+                    :key="field"
+                    :label="field"
+                    :value="field"
+                  />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="开盘字段">
+                <ElSelect
+                  v-model="selectedComponent.option!.openField"
+                  clearable
+                  filterable
+                  placeholder="自动识别"
+                  :disabled="!numericFieldOptions.length"
+                >
+                  <ElOption
+                    v-for="field in numericFieldOptions"
+                    :key="field"
+                    :label="field"
+                    :value="field"
+                  />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="收盘字段">
+                <ElSelect
+                  v-model="selectedComponent.option!.closeField"
+                  clearable
+                  filterable
+                  placeholder="自动识别"
+                  :disabled="!numericFieldOptions.length"
+                >
+                  <ElOption
+                    v-for="field in numericFieldOptions"
+                    :key="field"
+                    :label="field"
+                    :value="field"
+                  />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="最高字段">
+                <ElSelect
+                  v-model="selectedComponent.option!.highField"
+                  clearable
+                  filterable
+                  placeholder="自动识别"
+                  :disabled="!numericFieldOptions.length"
+                >
+                  <ElOption
+                    v-for="field in numericFieldOptions"
+                    :key="field"
+                    :label="field"
+                    :value="field"
+                  />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="最低字段">
+                <ElSelect
+                  v-model="selectedComponent.option!.lowField"
+                  clearable
+                  filterable
+                  placeholder="自动识别"
+                  :disabled="!numericFieldOptions.length"
+                >
+                  <ElOption
+                    v-for="field in numericFieldOptions"
+                    :key="field"
+                    :label="field"
+                    :value="field"
+                  />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="缩放条">
+                <ElSwitch v-model="selectedComponent.option!.showDataZoom" />
+              </ElFormItem>
+              <ElFormItem v-if="selectedComponent.option!.showDataZoom" label="缩放范围">
+                <ElSpace wrap>
+                  <ElInputNumber
+                    v-model="selectedComponent.option!.dataZoomStart"
+                    :min="0"
+                    :max="100"
+                    :step="1"
+                    step-strictly
+                  />
+                  <ElInputNumber
+                    v-model="selectedComponent.option!.dataZoomEnd"
+                    :min="0"
+                    :max="100"
+                    :step="1"
+                    step-strictly
+                  />
+                </ElSpace>
+              </ElFormItem>
+            </template>
             <template v-if="selectedComponent.type === 'image-carousel'">
               <ElFormItem label="图片字段">
                 <ElSelect
@@ -948,6 +1051,7 @@
     'image-carousel',
     'geo-point-map'
   ])
+  const kLineFieldOptionKeys = ['timeField', 'openField', 'closeField', 'highField', 'lowField']
   const decorTypes = new Set(['decor-border', 'decor-scanline'])
   const componentNeedsData = (component: BoardComponent) => !decorTypes.has(component.type)
   const componentGroupId = (component?: BoardComponent) => String(component?.option?.groupId || '')
@@ -1500,6 +1604,9 @@
       selectedComponent.value.option!.positiveField = ''
       selectedComponent.value.option!.negativeField = ''
     }
+    if (selectedComponent.value.type === 'art-k-line-chart') {
+      resetOptionFields(selectedComponent.value, kLineFieldOptionKeys)
+    }
     await refreshComponentData(selectedComponent.value)
   }
 
@@ -1530,6 +1637,18 @@
       if (component.option?.negativeField && !fields.includes(component.option.negativeField)) {
         component.option.negativeField = ''
       }
+    }
+    if (component.type === 'art-k-line-chart') {
+      resetOptionFields(component, kLineFieldOptionKeys, fields)
+    }
+  }
+
+  const resetOptionFields = (component: BoardComponent, keys: string[], fields?: string[]) => {
+    ensureDataset(component)
+    for (const key of keys) {
+      const value = String(component.option?.[key] || '')
+      if (!value) continue
+      if (!fields || !fields.includes(value)) component.option![key] = ''
     }
   }
 

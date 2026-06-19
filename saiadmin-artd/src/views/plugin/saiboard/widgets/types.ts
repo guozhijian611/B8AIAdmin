@@ -29,6 +29,7 @@ export type WidgetType =
   | 'art-line-chart'
   | 'art-h-bar-chart'
   | 'art-dual-bar-compare-chart'
+  | 'art-k-line-chart'
   | 'art-ring-chart'
   | 'art-radar-chart'
   | 'art-scatter-chart'

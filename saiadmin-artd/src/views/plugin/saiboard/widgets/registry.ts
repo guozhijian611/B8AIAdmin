@@ -38,6 +38,22 @@ export const widgetRegistry: WidgetMeta[] = [
     }
   },
   {
+    type: 'art-k-line-chart',
+    name: 'K线图',
+    icon: 'ri:line-chart-line',
+    defaultRect: { x: 680, y: 760, w: 620, h: 320, z: 1 },
+    defaultOption: {
+      timeField: '',
+      openField: '',
+      closeField: '',
+      highField: '',
+      lowField: '',
+      showDataZoom: true,
+      dataZoomStart: 0,
+      dataZoomEnd: 100
+    }
+  },
+  {
     type: 'art-ring-chart',
     name: '环形图',
     icon: 'ri:donut-chart-line',

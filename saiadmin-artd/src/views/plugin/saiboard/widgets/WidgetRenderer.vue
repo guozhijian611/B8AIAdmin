@@ -42,6 +42,15 @@
       <div v-else-if="component.type === 'art-dual-bar-compare-chart'" class="chart-empty">
         {{ dualCompareEmptyText }}
       </div>
+      <ArtKLineChart
+        v-else-if="component.type === 'art-k-line-chart' && kLineData.length"
+        height="100%"
+        :data="kLineData"
+        v-bind="component.option"
+      />
+      <div v-else-if="component.type === 'art-k-line-chart'" class="chart-empty">
+        {{ kLineEmptyText }}
+      </div>
       <ArtRingChart
         v-else-if="component.type === 'art-ring-chart'"
         height="100%"
@@ -157,10 +166,12 @@
   import ArtBarChart from '@/components/core/charts/art-bar-chart/index.vue'
   import ArtDualBarCompareChart from '@/components/core/charts/art-dual-bar-compare-chart/index.vue'
   import ArtHBarChart from '@/components/core/charts/art-h-bar-chart/index.vue'
+  import ArtKLineChart from '@/components/core/charts/art-k-line-chart/index.vue'
   import ArtLineChart from '@/components/core/charts/art-line-chart/index.vue'
   import ArtRadarChart from '@/components/core/charts/art-radar-chart/index.vue'
   import ArtRingChart from '@/components/core/charts/art-ring-chart/index.vue'
   import ArtScatterChart from '@/components/core/charts/art-scatter-chart/index.vue'
+  import type { KLineDataItem } from '@/types/component/chart'
   import type { BoardComponent, BoardTableColumn } from './types'
 
   type TableColumnAlign = NonNullable<BoardTableColumn['align']>
@@ -179,6 +190,7 @@
     'art-line-chart',
     'art-h-bar-chart',
     'art-dual-bar-compare-chart',
+    'art-k-line-chart',
     'art-ring-chart',
     'art-radar-chart',
     'art-scatter-chart'
@@ -202,6 +214,13 @@
   const widgetRef = ref<HTMLElement>()
   let widgetResizeObserver: ResizeObserver | undefined
   let chartResizeFrame = 0
+  const sampleKLineData: KLineDataItem[] = [
+    { time: '周一', open: 102, close: 108, high: 112, low: 98 },
+    { time: '周二', open: 108, close: 104, high: 111, low: 101 },
+    { time: '周三', open: 104, close: 116, high: 120, low: 103 },
+    { time: '周四', open: 116, close: 121, high: 128, low: 113 },
+    { time: '周五', open: 121, close: 118, high: 126, low: 115 }
+  ]
 
   const tableRows = computed(() => {
     const rows = props.rows || []
@@ -312,6 +331,81 @@
   const dualCompareEmptyText = computed(() =>
     hasBoundDataset.value ? '请配置两个数值字段' : '暂无对比数据'
   )
+  const kLineKeys = computed(() => ({
+    time: findOptionalKey(props.component.option?.timeField, [
+      'time',
+      'date',
+      'day',
+      'trade_date',
+      'created_at',
+      'create_time',
+      'label',
+      '名称'
+    ]),
+    open: findOptionalKey(props.component.option?.openField, [
+      'open',
+      'open_price',
+      'opening',
+      '开盘',
+      '开盘价'
+    ]),
+    close: findOptionalKey(props.component.option?.closeField, [
+      'close',
+      'close_price',
+      'closing',
+      '收盘',
+      '收盘价'
+    ]),
+    high: findOptionalKey(props.component.option?.highField, [
+      'high',
+      'high_price',
+      'highest',
+      '最高',
+      '最高价'
+    ]),
+    low: findOptionalKey(props.component.option?.lowField, [
+      'low',
+      'low_price',
+      'lowest',
+      '最低',
+      '最低价'
+    ])
+  }))
+  const kLineData = computed<KLineDataItem[]>(() => {
+    if (!tableRows.value.length) return hasBoundDataset.value ? [] : sampleKLineData
+    const keys = kLineKeys.value
+    if (!keys.time || !keys.open || !keys.close || !keys.high || !keys.low) {
+      return hasBoundDataset.value ? [] : sampleKLineData
+    }
+
+    const rows = tableRows.value
+      .map((row, index) => {
+        const open = toOptionalNumber(row[keys.open])
+        const close = toOptionalNumber(row[keys.close])
+        const high = toOptionalNumber(row[keys.high])
+        const low = toOptionalNumber(row[keys.low])
+        if ([open, close, high, low].some((value) => value === undefined)) return undefined
+
+        return {
+          time: String(row[keys.time] ?? `#${index + 1}`),
+          open,
+          close,
+          high,
+          low
+        }
+      })
+      .filter(Boolean) as KLineDataItem[]
+
+    return rows.length || hasBoundDataset.value ? rows : sampleKLineData
+  })
+  const kLineEmptyText = computed(() => {
+    if (!hasBoundDataset.value || !tableRows.value.length) return '暂无K线数据'
+    const keys = kLineKeys.value
+    if (!keys.time || !keys.open || !keys.close || !keys.high || !keys.low) {
+      return '请配置时间/开盘/收盘/最高/最低字段'
+    }
+    return '暂无有效K线数据'
+  })
 
   const ringData = computed(() => {
     if (!tableRows.value.length) {
@@ -470,6 +564,12 @@
     const normalized = typeof value === 'string' ? value.replace(/,/g, '').trim() : value
     const number = Number(normalized)
     return Number.isFinite(number) ? number : fallback
+  }
+
+  function toOptionalNumber(value: unknown) {
+    const normalized = typeof value === 'string' ? value.replace(/,/g, '').trim() : value
+    const number = Number(normalized)
+    return Number.isFinite(number) ? number : undefined
   }
 
   function normalizeTableFields(value: unknown): string[] {
