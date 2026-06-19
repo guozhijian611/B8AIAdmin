@@ -456,7 +456,8 @@ php webman b8:migrate
 
 ### P2 进阶
 
-- 组件 / 模板市场、克隆。
+- 已完成：大屏克隆（保留草稿 / 发布布局，重置访问编码、访问令牌和状态）。
+- 未完成：组件 / 模板市场。
 - 大屏版本管理（多快照，扩展 `layout` 历史）。
 - 多 token 子表（`saiboard_screen_token`，按客户分发可独立吊销）。
 - 数据权限 `scope`（按 `created_by` 隔离大屏归属，在对应 Logic 显式 `protected bool $scope = true;`）。

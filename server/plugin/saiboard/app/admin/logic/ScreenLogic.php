@@ -50,12 +50,17 @@ class ScreenLogic extends BaseLogic
     {
         $screen = $this->read($id);
         $data = $screen->toArray();
+        $width = (int) $data['width'];
+        $height = (int) $data['height'];
+        $draftLayout = $screen->draft_layout ?: $this->defaultLayout($width, $height);
+        $publishedLayout = $screen->layout ?: $draftLayout;
         unset($data['id'], $data['create_time'], $data['update_time'], $data['delete_time']);
         $data['name'] = $data['name'] . ' 副本';
         $data['code'] = $this->generateCode();
         $data['access_token'] = $this->generateToken();
         $data['status'] = 2;
-        $data['layout'] = $this->defaultLayout((int) $data['width'], (int) $data['height']);
+        $data['draft_layout'] = $this->normalizeLayout($draftLayout, $width, $height);
+        $data['layout'] = $this->normalizeLayout($publishedLayout, $width, $height);
 
         return (int) parent::add($data);
     }
