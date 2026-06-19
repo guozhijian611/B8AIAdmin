@@ -53,8 +53,8 @@ final class AddSaiboardMarketItem extends AbstractMigration
 
     public function down(): void
     {
-        $this->execute('DELETE FROM `sa_system_menu` WHERE `remark` = ' . $this->q(self::REMARK));
         if (!$this->hasTable('saiboard_market_item')) {
+            $this->execute('DELETE FROM `sa_system_menu` WHERE `remark` = ' . $this->q(self::REMARK));
             return;
         }
 
@@ -66,6 +66,7 @@ final class AddSaiboardMarketItem extends AbstractMigration
              LIMIT 1"
         )['TABLE_COMMENT'] ?? '');
         if (!str_contains($comment, self::REMARK)) {
+            $this->execute('DELETE FROM `sa_system_menu` WHERE `remark` = ' . $this->q(self::REMARK));
             return;
         }
 
@@ -74,6 +75,7 @@ final class AddSaiboardMarketItem extends AbstractMigration
             throw new RuntimeException('saiboard_market_item 已存在模板数据，为避免误删数据，请先备份并清空后再回滚。');
         }
 
+        $this->execute('DELETE FROM `sa_system_menu` WHERE `remark` = ' . $this->q(self::REMARK));
         $this->table('saiboard_market_item')->drop()->save();
     }
 

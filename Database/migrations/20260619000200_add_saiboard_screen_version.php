@@ -44,8 +44,8 @@ final class AddSaiboardScreenVersion extends AbstractMigration
 
     public function down(): void
     {
-        $this->execute('DELETE FROM `sa_system_menu` WHERE `remark` = ' . $this->q(self::REMARK));
         $this->dropTableIfEmpty('saiboard_screen_version', '版本快照');
+        $this->execute('DELETE FROM `sa_system_menu` WHERE `remark` = ' . $this->q(self::REMARK));
     }
 
     private function insertPermission(string $parentCode, string $name, string $slug): void

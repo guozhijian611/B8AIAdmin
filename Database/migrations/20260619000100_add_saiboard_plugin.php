@@ -16,6 +16,12 @@ final class AddSaiboardPlugin extends AbstractMigration
 
     public function down(): void
     {
+        $this->assertTablesEmpty([
+            'saiboard_query_template' => '查询模板',
+            'saiboard_screen' => '大屏',
+            'saiboard_datasource' => '数据源',
+        ]);
+
         $this->execute('DELETE FROM `sa_system_menu` WHERE `remark` = ' . $this->q(self::REMARK));
         $this->dropTableIfEmpty('saiboard_query_template', '查询模板');
         $this->dropTableIfEmpty('saiboard_screen', '大屏');
@@ -190,6 +196,23 @@ final class AddSaiboardPlugin extends AbstractMigration
         }
 
         $this->table($table)->drop()->save();
+    }
+
+    /**
+     * Preflight all business tables before touching menu permissions or dropping tables.
+     */
+    private function assertTablesEmpty(array $tables): void
+    {
+        foreach ($tables as $table => $label) {
+            if (!$this->hasTable((string) $table)) {
+                continue;
+            }
+
+            $count = (int) ($this->fetchRow("SELECT COUNT(*) AS `total` FROM `{$table}`")['total'] ?? 0);
+            if ($count > 0) {
+                throw new RuntimeException("{$table} 已存在{$label}数据，为避免误删数据，请先备份并清空后再回滚。");
+            }
+        }
     }
 
     private function q(mixed $value): string
