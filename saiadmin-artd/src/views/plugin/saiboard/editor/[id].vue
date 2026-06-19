@@ -565,6 +565,36 @@
           <div class="panel-title">批量操作</div>
           <ElText type="info" size="small"> 已选择 {{ selectedComponents.length }} 个组件 </ElText>
           <ElSpace class="bulk-actions" direction="vertical" alignment="stretch">
+            <div class="bulk-actions__section">
+              <ElText type="info" size="small">对齐</ElText>
+              <div class="bulk-action-grid">
+                <ElButton size="small" @click="alignSelected('left')">左</ElButton>
+                <ElButton size="small" @click="alignSelected('center')">水平中</ElButton>
+                <ElButton size="small" @click="alignSelected('right')">右</ElButton>
+                <ElButton size="small" @click="alignSelected('top')">上</ElButton>
+                <ElButton size="small" @click="alignSelected('middle')">垂直中</ElButton>
+                <ElButton size="small" @click="alignSelected('bottom')">下</ElButton>
+              </div>
+            </div>
+            <div class="bulk-actions__section">
+              <ElText type="info" size="small">分布</ElText>
+              <div class="bulk-action-grid">
+                <ElButton
+                  size="small"
+                  :disabled="selectedComponents.length < 3"
+                  @click="distributeSelected('horizontal')"
+                >
+                  水平
+                </ElButton>
+                <ElButton
+                  size="small"
+                  :disabled="selectedComponents.length < 3"
+                  @click="distributeSelected('vertical')"
+                >
+                  垂直
+                </ElButton>
+              </div>
+            </div>
             <ElButton @click="bringToFront">批量置顶</ElButton>
             <ElButton @click="sendSelectedToBottom">批量置底</ElButton>
             <ElButton type="danger" @click="removeSelected">批量删除</ElButton>
@@ -633,6 +663,9 @@
     future: string[]
     current: string
   }
+
+  type AlignMode = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom'
+  type DistributeAxis = 'horizontal' | 'vertical'
 
   const route = useRoute()
   const zoom = ref<'auto' | number>('auto')
@@ -1277,6 +1310,86 @@
     recordLayoutHistory()
   }
 
+  const alignSelected = (mode: AlignMode) => {
+    if (selectedComponents.value.length < 2) return
+    flushLayoutHistory()
+    const bounds = selectedBounds()
+    if (!bounds) return
+
+    for (const component of selectedComponents.value) {
+      if (mode === 'left') {
+        component.rect.x = bounds.left
+      } else if (mode === 'center') {
+        component.rect.x = Math.round(bounds.centerX - component.rect.w / 2)
+      } else if (mode === 'right') {
+        component.rect.x = bounds.right - component.rect.w
+      } else if (mode === 'top') {
+        component.rect.y = bounds.top
+      } else if (mode === 'middle') {
+        component.rect.y = Math.round(bounds.centerY - component.rect.h / 2)
+      } else if (mode === 'bottom') {
+        component.rect.y = bounds.bottom - component.rect.h
+      }
+      clampComponentRect(component)
+    }
+
+    recordLayoutHistory()
+  }
+
+  const distributeSelected = (axis: DistributeAxis) => {
+    if (selectedComponents.value.length < 3) return
+    flushLayoutHistory()
+    const sorted = selectedComponents.value.slice().sort((a, b) => {
+      const aCenter = axis === 'horizontal' ? a.rect.x + a.rect.w / 2 : a.rect.y + a.rect.h / 2
+      const bCenter = axis === 'horizontal' ? b.rect.x + b.rect.w / 2 : b.rect.y + b.rect.h / 2
+      return aCenter - bCenter
+    })
+    const first = sorted[0]
+    const last = sorted[sorted.length - 1]
+    const firstCenter =
+      axis === 'horizontal' ? first.rect.x + first.rect.w / 2 : first.rect.y + first.rect.h / 2
+    const lastCenter =
+      axis === 'horizontal' ? last.rect.x + last.rect.w / 2 : last.rect.y + last.rect.h / 2
+    const gap = (lastCenter - firstCenter) / (sorted.length - 1)
+
+    sorted.slice(1, -1).forEach((component, middleIndex) => {
+      const index = middleIndex + 1
+      const center = firstCenter + gap * index
+      if (axis === 'horizontal') {
+        component.rect.x = Math.round(center - component.rect.w / 2)
+      } else {
+        component.rect.y = Math.round(center - component.rect.h / 2)
+      }
+      clampComponentRect(component)
+    })
+    recordLayoutHistory()
+  }
+
+  const selectedBounds = () => {
+    const components = selectedComponents.value
+    if (!components.length) return undefined
+    const left = Math.min(...components.map((component) => component.rect.x))
+    const top = Math.min(...components.map((component) => component.rect.y))
+    const right = Math.max(...components.map((component) => component.rect.x + component.rect.w))
+    const bottom = Math.max(...components.map((component) => component.rect.y + component.rect.h))
+
+    return {
+      left,
+      top,
+      right,
+      bottom,
+      centerX: left + (right - left) / 2,
+      centerY: top + (bottom - top) / 2
+    }
+  }
+
+  const clampComponentRect = (component: BoardComponent) => {
+    const maxX = Math.max(0, Number(layout.canvas.width || 0) - Number(component.rect.w || 0))
+    const maxY = Math.max(0, Number(layout.canvas.height || 0) - Number(component.rect.h || 0))
+    component.rect.x = Math.min(maxX, Math.max(0, Math.round(component.rect.x)))
+    component.rect.y = Math.min(maxY, Math.max(0, Math.round(component.rect.y)))
+  }
+
   const removeSelected = () => {
     if (!selectedIds.value.length) return
     flushLayoutHistory()
@@ -1440,6 +1553,30 @@
   .table-column-config__width,
   .table-column-config__align {
     width: 100%;
+  }
+
+  .bulk-actions {
+    width: 100%;
+    margin-top: 12px;
+  }
+
+  .bulk-actions__section {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    gap: 8px;
+  }
+
+  .bulk-action-grid {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .bulk-action-grid :deep(.el-button) {
+    width: 100%;
+    margin-left: 0;
   }
 
   .widget-button {
