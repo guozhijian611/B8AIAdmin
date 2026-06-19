@@ -350,6 +350,9 @@ class ScreenLogic extends BaseLogic
                 '/status|type|category|method|source|channel|platform|lang|level|city|province/i',
             ], [$labelField]);
         }
+        $statusField = $this->matchedAutoField($dimensionColumns, [
+            '/status|state|health|level|result|online|risk|alarm|warn/i',
+        ]);
 
         return [
             'columns' => $normalized,
@@ -357,6 +360,7 @@ class ScreenLogic extends BaseLogic
             'metric_field' => $metricField,
             'label_field' => $labelField,
             'category_field' => $categoryField ?: $labelField,
+            'status_field' => $statusField,
             'raw_fields' => $this->autoRawFields($normalized),
             'order_field' => $dateField ?: $this->preferredAutoField($normalized, ['/^id$/i', '/_id$/i']),
         ];
@@ -374,6 +378,7 @@ class ScreenLogic extends BaseLogic
             'metric_field' => '指标字段',
             'label_field' => '排行维度',
             'category_field' => '分布维度',
+            'status_field' => '状态字段',
             'order_field' => '排序字段',
         ];
         foreach ($optionalFields as $key => $label) {
@@ -390,6 +395,7 @@ class ScreenLogic extends BaseLogic
         $this->assertAutoFieldKind($analysis['metric_field'], $columnMap, 'metric_field');
         $this->assertAutoFieldKind($analysis['label_field'], $columnMap, 'label_field');
         $this->assertAutoFieldKind($analysis['category_field'], $columnMap, 'category_field');
+        $this->assertAutoFieldKind($analysis['status_field'], $columnMap, 'status_field');
 
         if (array_key_exists('raw_fields', $data)) {
             $fields = [];
@@ -412,12 +418,12 @@ class ScreenLogic extends BaseLogic
             $analysis['raw_fields'] = array_keys($fields);
         }
 
-        $enabled = array_fill_keys(['count', 'trend', 'rank', 'distribution', 'raw'], true);
+        $enabled = array_fill_keys(['count', 'trend', 'rank', 'distribution', 'status', 'raw'], true);
         if (array_key_exists('chart_types', $data)) {
             $enabled = [];
             foreach ((array) $data['chart_types'] as $type) {
                 $type = trim((string) $type);
-                if (!in_array($type, ['count', 'trend', 'rank', 'distribution', 'raw'], true)) {
+                if (!in_array($type, ['count', 'trend', 'rank', 'distribution', 'status', 'raw'], true)) {
                     throw new ApiException('生成模块类型不正确');
                 }
                 $enabled[$type] = true;
@@ -437,6 +443,16 @@ class ScreenLogic extends BaseLogic
             && ($analysis['category_field'] === '' || $analysis['category_field'] === $analysis['label_field'])
         ) {
             unset($enabled['distribution']);
+        }
+        if (
+            isset($enabled['status'])
+            && (
+                $analysis['status_field'] === ''
+                || $analysis['label_field'] === ''
+                || $analysis['status_field'] === $analysis['label_field']
+            )
+        ) {
+            unset($enabled['status']);
         }
         if ($enabled === []) {
             throw new ApiException('当前字段配置无法生成任何模块');
@@ -459,12 +475,14 @@ class ScreenLogic extends BaseLogic
             'metric_field' => '指标字段必须是数值类型',
             'label_field' => '排行维度必须是文本类型',
             'category_field' => '分布维度必须是文本类型或状态类数字字段',
+            'status_field' => '状态字段必须是文本类型或状态类数字字段',
         ];
         $valid = match ($fieldKey) {
             'date_field' => $kind === 'date',
             'metric_field' => $kind === 'number' && !$this->isAutoMetricExcludedNumber($field),
             'label_field' => $kind === 'string',
             'category_field' => $kind === 'string' || $this->isAutoDimensionOnlyNumber($field),
+            'status_field' => $kind === 'string' || $this->isAutoDimensionOnlyNumber($field),
             default => true,
         };
         if (!$valid) {
@@ -558,6 +576,23 @@ class ScreenLogic extends BaseLogic
                 ],
             ];
         }
+        if (isset($analysis['enabled_charts']['status']) && $analysis['status_field']) {
+            $items['status'] = [
+                'name' => "{$screenName} 状态概览",
+                'dataset_type' => 'table_raw',
+                'config' => [
+                    'table' => $table,
+                    'fields' => $this->autoStatusFields($analysis),
+                    'field_aliases' => $this->autoStatusAliases($analysis),
+                    'computed_fields' => [],
+                    'conditions' => [],
+                    'order' => $analysis['order_field']
+                        ? [['field' => $analysis['order_field'], 'direction' => 'desc']]
+                        : [],
+                    'limit' => 12,
+                ],
+            ];
+        }
 
         $templates = [];
         foreach ($items as $key => $item) {
@@ -622,6 +657,29 @@ class ScreenLogic extends BaseLogic
             );
         }
 
+        if (isset($templates['status'])) {
+            $components[] = $this->autoDataComponent(
+                'auto_status',
+                'status-matrix',
+                '状态概览',
+                $this->autoStatusRect(isset($templates['count']), isset($templates['distribution'])),
+                $templates['status']['id'],
+                [
+                    'labelField' => 'label',
+                    'statusField' => 'status',
+                    'valueField' => $analysis['metric_field'] ? 'value' : '',
+                    'groupField' => $this->autoStatusGroupAlias($analysis),
+                ],
+                [
+                    'columns' => 2,
+                    'unit' => '',
+                    'decimals' => 0,
+                    'showStatus' => true,
+                    'showValue' => $analysis['metric_field'] !== '',
+                ]
+            );
+        }
+
         if (isset($templates['rank'])) {
             $components[] = $this->autoDataComponent(
                 'auto_rank',
@@ -661,6 +719,76 @@ class ScreenLogic extends BaseLogic
             ],
             'components' => $components,
         ];
+    }
+
+    private function autoStatusRect(bool $hasCount, bool $hasDistribution): array
+    {
+        if ($hasDistribution) {
+            return [
+                'x' => 40,
+                'y' => $hasCount ? 292 : 112,
+                'w' => 360,
+                'h' => $hasCount ? 180 : 360,
+                'z' => 2,
+            ];
+        }
+
+        return ['x' => 1340, 'y' => 112, 'w' => 540, 'h' => 360, 'z' => 2];
+    }
+
+    private function autoStatusFields(array $analysis): array
+    {
+        $fields = [];
+        foreach ([
+            $analysis['label_field'] ?? '',
+            $analysis['status_field'] ?? '',
+            $analysis['metric_field'] ?? '',
+            $this->autoStatusGroupField($analysis),
+        ] as $field) {
+            $field = (string) $field;
+            if ($field !== '' && !in_array($field, $fields, true)) {
+                $fields[] = $field;
+            }
+        }
+
+        return $fields;
+    }
+
+    private function autoStatusAliases(array $analysis): array
+    {
+        $aliases = [
+            (string) $analysis['label_field'] => 'label',
+            (string) $analysis['status_field'] => 'status',
+        ];
+        if ((string) $analysis['metric_field'] !== '') {
+            $aliases[(string) $analysis['metric_field']] = 'value';
+        }
+        $groupField = $this->autoStatusGroupField($analysis);
+        if ($groupField !== '') {
+            $aliases[$groupField] = 'group';
+        }
+
+        return array_filter(
+            $aliases,
+            static fn (string $alias, string $field) => $field !== '' && $alias !== '',
+            ARRAY_FILTER_USE_BOTH
+        );
+    }
+
+    private function autoStatusGroupField(array $analysis): string
+    {
+        $categoryField = (string) ($analysis['category_field'] ?? '');
+        $labelField = (string) ($analysis['label_field'] ?? '');
+        $statusField = (string) ($analysis['status_field'] ?? '');
+
+        return $categoryField !== '' && $categoryField !== $labelField && $categoryField !== $statusField
+            ? $categoryField
+            : '';
+    }
+
+    private function autoStatusGroupAlias(array $analysis): string
+    {
+        return $this->autoStatusGroupField($analysis) !== '' ? 'group' : '';
     }
 
     private function autoDecorTitle(string $name, string $table): array
@@ -728,6 +856,20 @@ class ScreenLogic extends BaseLogic
             $name = (string) ($column['name'] ?? '');
             if ($name !== '' && !in_array($name, $excluded, true)) {
                 return $name;
+            }
+        }
+
+        return '';
+    }
+
+    private function matchedAutoField(array $columns, array $patterns, array $excluded = []): string
+    {
+        foreach ($patterns as $pattern) {
+            foreach ($columns as $column) {
+                $name = (string) ($column['name'] ?? '');
+                if ($name !== '' && !in_array($name, $excluded, true) && preg_match($pattern, $name)) {
+                    return $name;
+                }
             }
         }
 

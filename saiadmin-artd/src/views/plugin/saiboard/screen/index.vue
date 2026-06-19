@@ -310,6 +310,23 @@
             />
           </ElSelect>
         </ElFormItem>
+        <ElFormItem label="状态字段">
+          <ElSelect
+            v-model="autoForm.status_field"
+            clearable
+            filterable
+            placeholder="用于状态矩阵"
+            style="width: 100%"
+            @change="applyAutoChartAvailability"
+          >
+            <ElOption
+              v-for="item in autoStatusOptions"
+              :key="item.name"
+              :label="fieldOptionLabel(item)"
+              :value="item.name"
+            />
+          </ElSelect>
+        </ElFormItem>
         <ElFormItem label="明细字段" prop="raw_fields">
           <ElSelect
             v-model="autoForm.raw_fields"
@@ -581,6 +598,7 @@
     metric_field: '',
     label_field: '',
     category_field: '',
+    status_field: '',
     order_field: '',
     raw_fields: [] as string[]
   })
@@ -610,6 +628,7 @@
     { label: '趋势图', value: 'trend' },
     { label: '排行图', value: 'rank' },
     { label: '分布图', value: 'distribution' },
+    { label: '状态矩阵', value: 'status' },
     { label: '明细表', value: 'raw' }
   ]
   const versionSourceMap: Record<string, string> = {
@@ -658,6 +677,9 @@
   const autoDimensionOptions = computed(() =>
     autoColumns.value.filter((item) => item.kind === 'string' || isDimensionNumberField(item.name))
   )
+  const autoStatusOptions = computed(() =>
+    autoDimensionOptions.value.filter((item) => isStatusLikeField(item.name))
+  )
   const autoChartOptions = computed(() =>
     baseAutoChartOptions.map((item) => ({
       ...item,
@@ -666,6 +688,10 @@
         (item.value === 'rank' && !autoForm.label_field) ||
         (item.value === 'distribution' &&
           (!autoForm.category_field || autoForm.category_field === autoForm.label_field)) ||
+        (item.value === 'status' &&
+          (!autoForm.status_field ||
+            !autoForm.label_field ||
+            autoForm.status_field === autoForm.label_field)) ||
         (item.value === 'raw' && autoForm.raw_fields.length === 0)
     }))
   )
@@ -706,6 +732,7 @@
       metric_field: '',
       label_field: '',
       category_field: '',
+      status_field: '',
       order_field: '',
       raw_fields: []
     })
@@ -721,6 +748,9 @@
     name.endsWith('_status') ||
     name.endsWith('_type') ||
     name.endsWith('_level')
+
+  const isStatusLikeField = (name: string) =>
+    /status|state|health|level|result|online|risk|alarm|warn/i.test(name)
 
   const isMetricExcludedField = (name: string) =>
     name === 'id' ||
@@ -743,6 +773,17 @@
     }
 
     return columns.find((column) => !excluded.includes(column.name))?.name || ''
+  }
+
+  const matchedAutoField = (columns: AutoColumn[], patterns: RegExp[], excluded: string[] = []) => {
+    for (const pattern of patterns) {
+      const matched = columns.find(
+        (column) => !excluded.includes(column.name) && pattern.test(column.name)
+      )
+      if (matched) return matched.name
+    }
+
+    return ''
   }
 
   const preferredRawFields = () => {
@@ -801,11 +842,15 @@
         [/status|type|category|method|source|channel|platform|lang|level|city|province/i],
         labelField ? [labelField] : []
       ) || labelField
+    const statusField = matchedAutoField(dimensionColumns, [
+      /status|state|health|level|result|online|risk|alarm|warn/i
+    ])
     const rawFields = preferredRawFields()
     const chartTypes = ['count']
     if (dateField) chartTypes.push('trend')
     if (labelField) chartTypes.push('rank')
     if (categoryField && categoryField !== labelField) chartTypes.push('distribution')
+    if (statusField && labelField && statusField !== labelField) chartTypes.push('status')
     if (rawFields.length) chartTypes.push('raw')
 
     Object.assign(autoForm, {
@@ -813,6 +858,7 @@
       metric_field: metricField,
       label_field: labelField,
       category_field: categoryField,
+      status_field: statusField,
       order_field: dateField || preferredAutoField(autoColumns.value, [/^id$/i, /_id$/i]),
       raw_fields: rawFields,
       chart_types: chartTypes
@@ -825,6 +871,13 @@
     if (autoForm.label_field) allowed.add('rank')
     if (autoForm.category_field && autoForm.category_field !== autoForm.label_field) {
       allowed.add('distribution')
+    }
+    if (
+      autoForm.status_field &&
+      autoForm.label_field &&
+      autoForm.status_field !== autoForm.label_field
+    ) {
+      allowed.add('status')
     }
     if (autoForm.raw_fields.length) allowed.add('raw')
     autoForm.chart_types = autoForm.chart_types.filter((item) => allowed.has(item))
