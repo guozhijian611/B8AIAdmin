@@ -148,45 +148,8 @@ class DatasourceController extends AbstractCrudController
     {
         $this->validate('test', $data);
         $type = (string) ($data['type'] ?? '');
-        $config = $data['config'] ?? [];
-        if (!is_array($config)) {
-            throw new InvalidArgumentException('数据源连接配置不正确');
-        }
-
-        $this->assertTestingConfig($type, $config);
-        $data['config'] = $config;
+        $data['config'] = $this->executor->normalizeDatasourceConfig($type, $data['config'] ?? []);
         return new Datasource($data);
-    }
-
-    private function assertTestingConfig(string $type, array $config): void
-    {
-        if ($type === 'mysql') {
-            foreach ([
-                'host' => 'MySQL 主机必须填写',
-                'database' => 'MySQL 数据库必须填写',
-                'username' => 'MySQL 用户名必须填写',
-            ] as $key => $message) {
-                if (trim((string) ($config[$key] ?? '')) === '') {
-                    throw new InvalidArgumentException($message);
-                }
-            }
-
-            $port = (int) ($config['port'] ?? 3306);
-            if ($port < 1 || $port > 65535) {
-                throw new InvalidArgumentException('MySQL 端口必须在 1-65535 之间');
-            }
-            return;
-        }
-
-        if ($type === 'http') {
-            $url = trim((string) ($config['url'] ?? ''));
-            if ($url === '') {
-                throw new InvalidArgumentException('HTTP 数据源 URL 必须填写');
-            }
-            if (!$this->isObjectConfig($config['headers'] ?? []) || !$this->isObjectConfig($config['params'] ?? [])) {
-                throw new InvalidArgumentException('HTTP 请求头和默认参数必须是 JSON 对象');
-            }
-        }
     }
 
     private function safeTestError(string $message): string

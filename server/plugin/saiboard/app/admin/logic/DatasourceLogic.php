@@ -2,9 +2,11 @@
 
 namespace plugin\saiboard\app\admin\logic;
 
+use InvalidArgumentException;
 use plugin\saiadmin\basic\think\BaseLogic;
 use plugin\saiadmin\exception\ApiException;
 use plugin\saiboard\app\model\Datasource;
+use plugin\saiboard\app\service\DataSourceExecutor;
 
 class DatasourceLogic extends BaseLogic
 {
@@ -53,7 +55,19 @@ class DatasourceLogic extends BaseLogic
 
     private function sanitizePayload(array $data): array
     {
-        unset($data['created_by'], $data['updated_by'], $data['create_time'], $data['update_time'], $data['delete_time']);
+        unset($data['created_by'], $data['updated_by'], $data['create_time'], $data['update_time'], $data['delete_time'], $data['last_error']);
+
+        $data['type'] = (string) ($data['type'] ?? '');
+        try {
+            $data['config'] = (new DataSourceExecutor())->normalizeDatasourceConfig(
+                $data['type'],
+                $data['config'] ?? []
+            );
+        } catch (InvalidArgumentException $exception) {
+            throw new ApiException($exception->getMessage());
+        }
+
+        $data['cache_ttl'] = min(86400, max(0, (int) ($data['cache_ttl'] ?? 0)));
         return $data;
     }
 }

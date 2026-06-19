@@ -40,6 +40,100 @@ class DataSourceExecutor
         return $this->execute($template, true, $runtimeParams);
     }
 
+    public function normalizeDatasourceConfig(string $type, mixed $config): array
+    {
+        $config = $this->normalizeObject($config, '数据源连接配置');
+        if ($type === 'mysql') {
+            foreach ([
+                'host' => 'MySQL 主机必须填写',
+                'database' => 'MySQL 数据库必须填写',
+                'username' => 'MySQL 用户名必须填写',
+            ] as $key => $message) {
+                if (trim((string) ($config[$key] ?? '')) === '') {
+                    throw new InvalidArgumentException($message);
+                }
+            }
+
+            $port = (int) ($config['port'] ?? 3306);
+            if ($port < 1 || $port > 65535) {
+                throw new InvalidArgumentException('MySQL 端口必须在 1-65535 之间');
+            }
+
+            $charset = trim((string) ($config['charset'] ?? 'utf8mb4')) ?: 'utf8mb4';
+            if (!preg_match('/^[A-Za-z0-9_]+$/', $charset)) {
+                throw new InvalidArgumentException('MySQL 字符集不正确');
+            }
+
+            return [
+                'host' => trim((string) $config['host']),
+                'port' => $port,
+                'database' => trim((string) $config['database']),
+                'username' => trim((string) $config['username']),
+                'password' => (string) ($config['password'] ?? ''),
+                'charset' => $charset,
+            ];
+        }
+
+        if ($type === 'http') {
+            $url = trim((string) ($config['url'] ?? ''));
+            $this->assertHttpBaseUrl($url);
+
+            return [
+                'url' => $url,
+                'method' => $this->normalizeHttpMethod($config['method'] ?? 'GET'),
+                'headers' => $this->normalizeObject($config['headers'] ?? [], 'HTTP 请求头'),
+                'params' => $this->normalizeObject($config['params'] ?? [], 'HTTP 默认参数'),
+            ];
+        }
+
+        throw new InvalidArgumentException('数据源类型不支持');
+    }
+
+    public function normalizeQueryTemplateConfig(Datasource $datasource, string $datasetType, mixed $config): array
+    {
+        $config = $this->normalizeObject($config, '查询模板配置');
+        $datasourceType = (string) $datasource->type;
+        if ($datasourceType === 'mysql') {
+            if (!in_array($datasetType, ['table_raw', 'table_count', 'table_aggregate'], true)) {
+                throw new InvalidArgumentException('MySQL 数据源只能使用 MySQL 取数类型');
+            }
+
+            (new SqlBuilder())->build(
+                $this->pdo($datasource->config),
+                $datasetType,
+                $config,
+                $this->validationRuntimeParams($config['params'] ?? [])
+            );
+            return $config;
+        }
+
+        if ($datasourceType === 'http') {
+            if ($datasetType !== 'http_passthrough') {
+                throw new InvalidArgumentException('HTTP 数据源只能使用 HTTP 透传取数类型');
+            }
+
+            $config['method'] = $this->normalizeHttpMethod($config['method'] ?? 'GET');
+            $config['params'] = $this->normalizeObject($config['params'] ?? [], 'HTTP 查询模板请求参数');
+            $config['body'] = $config['method'] === 'POST'
+                ? $this->normalizeObject($config['body'] ?? [], 'HTTP 查询模板 JSON Body')
+                : [];
+            $config['response_path'] = trim((string) ($config['response_path'] ?? ''));
+            $config['total_path'] = trim((string) ($config['total_path'] ?? ''));
+            $this->assertHttpPath($config['response_path'], '响应数据路径');
+            $this->assertHttpPath($config['total_path'], '总数路径');
+
+            $request = $this->buildHttpRequest(
+                $datasource->config,
+                $config,
+                $this->validationHttpRuntimeParams($datasource->config, $config)
+            );
+            $this->assertPublicHttpUrl($request['url']);
+            return $config;
+        }
+
+        throw new InvalidArgumentException('数据源类型不支持');
+    }
+
     public function schema(Datasource $datasource, string $table = ''): array
     {
         if ((string) $datasource->type !== 'mysql') {
@@ -403,6 +497,27 @@ LUA;
         );
     }
 
+    private function assertHttpBaseUrl(string $url): void
+    {
+        if ($url === '') {
+            throw new InvalidArgumentException('HTTP 数据源 URL 必须填写');
+        }
+
+        $parts = parse_url($url);
+        $scheme = strtolower((string) ($parts['scheme'] ?? ''));
+        $host = strtolower((string) ($parts['host'] ?? ''));
+        if (!in_array($scheme, ['http', 'https'], true) || $host === '') {
+            throw new InvalidArgumentException('HTTP 数据源 URL 不正确，只允许 http/https');
+        }
+        if (in_array($host, ['localhost', 'localhost.localdomain'], true)) {
+            throw new InvalidArgumentException("HTTP 数据源不允许访问本机地址：{$host}");
+        }
+        if (filter_var($host, FILTER_VALIDATE_IP)
+            && !filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+            throw new InvalidArgumentException("HTTP 数据源不允许访问内网或保留地址：{$host}");
+        }
+    }
+
     private function executeHttp(
         array $datasourceConfig,
         array $template,
@@ -546,6 +661,55 @@ LUA;
         }
 
         return mb_substr(trim((string) $value), 0, 500);
+    }
+
+    private function validationRuntimeParams(mixed $definitions): array
+    {
+        if (!is_array($definitions) || !array_is_list($definitions)) {
+            return [];
+        }
+
+        $result = [];
+        foreach ($definitions as $definition) {
+            if (!is_array($definition)) {
+                continue;
+            }
+
+            $name = trim((string) ($definition['name'] ?? ''));
+            if ($name === '') {
+                continue;
+            }
+
+            $result[$name] = match (strtolower(trim((string) ($definition['type'] ?? 'string')))) {
+                'number' => 1,
+                'date' => '2026-01-01',
+                'datetime' => '2026-01-01 00:00:00',
+                'time_range' => 'last_7_days',
+                default => 'demo',
+            };
+        }
+
+        return $result;
+    }
+
+    private function validationHttpRuntimeParams(array $datasourceConfig, array $templateConfig): array
+    {
+        $names = $this->httpRuntimeParamNames([
+            'datasource_params' => $datasourceConfig['params'] ?? [],
+            'path' => $templateConfig['path'] ?? '',
+            'params' => $templateConfig['params'] ?? [],
+            'body' => $templateConfig['body'] ?? [],
+        ]);
+
+        return array_fill_keys($names, 'demo');
+    }
+
+    private function assertHttpPath(string $path, string $label): void
+    {
+        $path = trim($path);
+        if ($path !== '' && !preg_match('/^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$/', $path)) {
+            throw new InvalidArgumentException("HTTP 查询模板{$label}格式不正确");
+        }
     }
 
     private function assertPublicHttpUrl(string $url): void

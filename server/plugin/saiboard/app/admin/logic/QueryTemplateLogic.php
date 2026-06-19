@@ -2,10 +2,12 @@
 
 namespace plugin\saiboard\app\admin\logic;
 
+use InvalidArgumentException;
 use plugin\saiadmin\basic\think\BaseLogic;
 use plugin\saiadmin\exception\ApiException;
 use plugin\saiboard\app\model\Datasource;
 use plugin\saiboard\app\model\QueryTemplate;
+use plugin\saiboard\app\service\DataSourceExecutor;
 
 class QueryTemplateLogic extends BaseLogic
 {
@@ -21,7 +23,8 @@ class QueryTemplateLogic extends BaseLogic
     public function add(array $data): mixed
     {
         $data = $this->sanitizePayload($data);
-        $this->assertDatasourceOwned((int) ($data['datasource_id'] ?? 0), (int) (getCurrentInfo()['id'] ?? 0));
+        $datasource = $this->ownedDatasource((int) ($data['datasource_id'] ?? 0), (int) (getCurrentInfo()['id'] ?? 0));
+        $data['config'] = $this->normalizeTemplateConfig($datasource, $data);
         return parent::add($data);
     }
 
@@ -29,7 +32,8 @@ class QueryTemplateLogic extends BaseLogic
     {
         $data = $this->sanitizePayload($data);
         $template = $this->read($id);
-        $this->assertDatasourceOwned((int) ($data['datasource_id'] ?? 0), (int) ($template->created_by ?? 0));
+        $datasource = $this->ownedDatasource((int) ($data['datasource_id'] ?? 0), (int) ($template->created_by ?? 0));
+        $data['config'] = $this->normalizeTemplateConfig($datasource, $data);
         return parent::edit($id, $data);
     }
 
@@ -61,6 +65,11 @@ class QueryTemplateLogic extends BaseLogic
 
     public function assertDatasourceOwned(int $datasourceId, int $owner): void
     {
+        $this->ownedDatasource($datasourceId, $owner);
+    }
+
+    private function ownedDatasource(int $datasourceId, int $owner): Datasource
+    {
         if ($datasourceId <= 0 || $owner <= 0) {
             throw new ApiException('数据源不存在或已停用');
         }
@@ -68,6 +77,21 @@ class QueryTemplateLogic extends BaseLogic
         $datasource = (new DatasourceLogic())->enabled($datasourceId);
         if ((int) ($datasource->created_by ?? 0) !== $owner) {
             throw new ApiException('数据源必须与查询模板归属一致');
+        }
+
+        return $datasource;
+    }
+
+    private function normalizeTemplateConfig(Datasource $datasource, array $data): array
+    {
+        try {
+            return (new DataSourceExecutor())->normalizeQueryTemplateConfig(
+                $datasource,
+                (string) ($data['dataset_type'] ?? ''),
+                $data['config'] ?? []
+            );
+        } catch (InvalidArgumentException $exception) {
+            throw new ApiException($exception->getMessage());
         }
     }
 

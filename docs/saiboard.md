@@ -356,6 +356,7 @@ getScreen / data 接口入口：
 - MySQL 查询模板支持 `params[]` 参数白名单；条件值可写 `:param_name`，预览和公开运行时传入的同名参数会按 `string` / `number` / `date` / `datetime` / `time_range` 类型清洗后再进入参数绑定。未声明参数、非法参数名、类型不匹配或必填参数缺失都会被拒绝；URL 上的未知参数会被忽略。
 - `table_raw.field_aliases` 用真实字段名映射输出字段名；`computed_fields` 支持数值字段、数字、括号、`+ - * /` 四则运算，以及 `round` / `abs` / `ceil` / `floor` 安全函数白名单，不开放裸 SQL、任意函数、子查询或条件表达式。
 - HTTP 数据源使用 `http_passthrough`，支持配置 GET / POST JSON、路径、请求参数 JSON、JSON Body、响应数据路径和总数路径；路径、请求参数和 JSON Body 里的 `:param_name` 会按运行时同名参数替换。
+- 查询模板保存 / 更新会按数据源类型做深度配置校验：MySQL 模板会连接目标数据源并复用 `SqlBuilder` 校验表、字段、条件、排序、别名、计算字段、聚合指标和参数定义；HTTP 模板会校验方法、请求参数、JSON Body、响应路径、总数路径和最终公开 URL。无效配置会在保存阶段直接返回业务错误，不再等到预览或运行时才暴露。
 
 ### 模板市场 `/plugin/saiboard/market`
 
@@ -520,6 +521,7 @@ getScreen / data 接口入口：
 - HTTP `headers`、`params` 必须是 JSON 对象，例如 `{ "Authorization": "Bearer xxx" }`，不能填数组。
 - HTTP 数据源表单里的「测试配置」只用于当前测试请求，不会保存到数据源；可临时填写 `path`、`method`、`params`、`body`、`response_path`、`total_path` 来模拟后续查询模板的真实请求。
 - 常见 MySQL 连接错误会转成可读提示：数据库不存在、用户名或密码不正确、主机或端口无法连接。
+- 数据源保存 / 更新会复用同一套连接配置校验：MySQL 必须具备主机、端口、数据库、用户名和合法字符集；HTTP 必须是 `http/https` 基础 URL，且请求头 / 默认参数必须是 JSON 对象。连接是否真实可用仍以「测试」为准。
 
 ### 查询模板取值类型
 
