@@ -328,6 +328,7 @@ getScreen / data 接口入口：
 ### 对外运行时页 `/screen/:code`（静态公开路由，复用 widgets/）
 
 - 在 `staticRoutes.ts` 显式注册，不进后台布局、不依赖动态菜单；页面级是否放行交给后端 `getScreen` / `data` 接口按大屏配置判定。
+- 管理端当前使用 `createWebHashHistory()`；对外裸入口 `/screen/:code` 会在前端启动时归一化为 `/#/screen/:code`，后台列表和编辑器预览也使用 hash 入口打开，避免未登录用户被后台首页守卫误导到登录页。
 - 复用 `widgets/` 同一套组件，外层只读容器；按 `screen.width/height` 设计稿做运行时适配（监听 resize）。
 - `bg_config.fit_mode` 支持 `contain` / `cover` / `stretch`：`contain` 完整显示设计稿并居中留边，`cover` 等比铺满视口并允许边缘裁切，`stretch` 按视口宽高分别拉伸，适合固定比例投屏。
 - `bg_config` 支持 `theme` 主题预设、背景色、背景图 URL 和 `image_fit`（铺满裁切 / 完整显示 / 拉伸 / 平铺）；编辑器和运行时复用同一套样式生成逻辑。

@@ -1,3 +1,4 @@
+import './utils/saiboard-runtime-entry'
 import App from './App.vue'
 import { createApp } from 'vue'
 import { initStore } from './store'                 // Store
