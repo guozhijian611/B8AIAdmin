@@ -786,16 +786,18 @@ class ScreenLogic extends BaseLogic
     {
         unset($data['created_by'], $data['updated_by'], $data['create_time'], $data['update_time'], $data['delete_time']);
         if ($ignoreId > 0) {
-            unset($data['layout'], $data['draft_layout']);
+            unset($data['layout'], $data['draft_layout'], $data['status']);
         }
 
         $width = max(320, (int) ($data['width'] ?? 1920));
         $height = max(240, (int) ($data['height'] ?? 1080));
         $data['width'] = $width;
         $data['height'] = $height;
-        $data['code'] = trim((string) ($data['code'] ?? '')) ?: $this->generateCode();
+        $data['code'] = $this->normalizeCode($data['code'] ?? '');
         $data['is_public'] = (int) ($data['is_public'] ?? 1);
-        $data['status'] = (int) ($data['status'] ?? 2);
+        if ($ignoreId <= 0) {
+            $data['status'] = 2;
+        }
         $data['bg_config'] = $this->normalizeBgConfig($data['bg_config'] ?? []);
         if ($ignoreId <= 0) {
             $owner = (int) (getCurrentInfo()['id'] ?? 0);
@@ -822,6 +824,20 @@ class ScreenLogic extends BaseLogic
         }
 
         return $data;
+    }
+
+    private function normalizeCode(mixed $code): string
+    {
+        $code = trim((string) $code);
+        if ($code === '') {
+            return $this->generateCode();
+        }
+
+        if (!preg_match('/^[A-Za-z0-9_-]{1,32}$/', $code)) {
+            throw new ApiException('访问编码只能包含字母、数字、下划线和短横线，最多32个字符');
+        }
+
+        return $code;
     }
 
     private function normalizeLayout(array $layout, int $width, int $height): array

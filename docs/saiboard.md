@@ -133,7 +133,7 @@ saiadmin-artd/src/views/plugin/saiboard/
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `id` | int unsigned PK | 主键。 |
-| `code` | varchar(32) | 对外访问编码，唯一索引。 |
+| `code` | varchar(32) | 对外访问编码，唯一索引；留空自动生成，手动填写仅允许字母、数字、下划线和短横线。 |
 | `name` | varchar(60) | 大屏名称。 |
 | `width` / `height` | int | 画布设计尺寸，如 1920×1080。 |
 | `bg_config` | json | 背景、主题与运行时适配：`color`、`theme`、`fit_mode`、`image`、`image_fit` 等。 |
@@ -250,7 +250,7 @@ saiadmin-artd/src/views/plugin/saiboard/
 
 | 控制器 | 方法 | 权限 slug |
 | --- | --- | --- |
-| `ScreenController` | index / read / save / update / destroy / changeStatus / saveLayout / publish / copy / generateFromTable | `saiboard:screen:*` |
+| `ScreenController` | index / read / save / update / destroy / changeStatus / saveLayout / publish / copy / generateFromTable | `saiboard:screen:*`；普通保存不会发布，`changeStatus` 仅允许退回草稿，发布必须走 `publish`。 |
 | `DatasourceController` | 标准 CRUD + `test`（测连接 / 请求）+ `options` / `schema`（模板配置读取） | `saiboard:datasource:*`，`options` / `schema` 复用 `saiboard:datasource:index` |
 | `QueryTemplateController` | 标准 CRUD + `preview`（执行预览） | `saiboard:query_template:*` |
 | `MarketItemController` | 标准 CRUD + `options`（编辑器读取可用模板摘要） | `saiboard:market_item:*` |
@@ -317,11 +317,11 @@ getScreen / data 接口入口：
 
 ## 前端关键点
 
-### 拖拽编辑器 `/plugin/saiboard/editor/:id`（主应用内，Element Plus）
+### 拖拽编辑器 `#/saiboard/editor/:id`（主应用内，Element Plus）
 
 - 三栏布局：左侧组件面板（拖出组件）、中间画布（`DraggableItem` 包裹真实 `art-*` 组件）、右侧属性面板（标题、样式、绑定查询模板、字段映射、`refresh`）。
 - `DraggableItem.vue` 封装 `vue3-draggable-resizable`，负责 x/y/w/h/z 的拖拽、缩放与对齐吸附，**不感知图表内容**；组件本身就是运行时同款，天然所见即所得。
-- 保存写 `draft_layout`；点「发布」才拷贝到 `layout` 上线。
+- 保存写 `draft_layout`；点「发布」才拷贝到 `layout` 上线。新增和普通编辑都会保持草稿或原发布状态，不接受表单直接把草稿改成已发布。
 - 「预览草稿」会先保存当前 `draft_layout`，再打开 `/screen/:code?admin_preview=1&draft=1`；后台列表的「发布预览」只打开已发布 `layout`，草稿未发布时需进入编辑器预览。
 - 编辑器绑定查询模板后通过 `QueryTemplate/preview` 取真实数据预览，并从首行数据生成字段映射下拉；未绑定模板时才使用示例数据占位。
 
@@ -334,9 +334,9 @@ getScreen / data 接口入口：
 - 按各数据组件 `dataset.refresh` 轮询 `/data`，公开运行时最小 10 秒；运行时默认用 POST 传递组件级复杂参数，后端保留 GET 兼容；纯装饰组件不绑定查询模板、不触发运行时取数。
 - `draft=1` 只作为后台草稿预览开关使用，运行时和后端都会把它作为系统参数过滤，避免误传给查询模板。
 
-### 数据源管理页 `/plugin/saiboard/datasource`
+### 数据源管理页 `#/saiboard/datasource`
 
-- 标准 CRUD（Element Plus）+ 测试连接按钮；查询模板在独立页面 `/plugin/saiboard/query-template` 维护。
+- 标准 CRUD（Element Plus）+ 测试连接按钮；查询模板在独立页面 `#/saiboard/query-template` 维护。
 
 ### 从数据表生成大屏
 
@@ -344,9 +344,9 @@ getScreen / data 接口入口：
 - 弹窗选定数据表后会读取真实字段结构，自动推荐生成模块、时间字段、指标字段、排行维度、分布维度和明细字段；管理员可在生成前手动调整，明细字段最多 8 个。
 - 后端会按真实表字段白名单校验配置，在同一事务中按所选模块创建 `table_count`、`table_raw`、`table_aggregate` 趋势 / 排行 / 分布查询模板；随后创建一个 `status=2`、`is_public=2` 的鉴权草稿大屏。
 - 自动生成布局会根据最终字段配置生成指标卡、折线趋势、横向排行、环形分布和明细表；识别不到或被禁用的模块不会生成。
-- 生成结果只是草稿，不会自动发布；生成后进入编辑器继续调整字段映射、组件位置、标题、访问方式和发布状态。
+- 生成结果只是草稿，不会自动发布；生成后进入编辑器继续调整字段映射、组件位置、标题、访问方式，确认后通过发布按钮上线。
 
-### 查询模板页 `/plugin/saiboard/query-template`
+### 查询模板页 `#/saiboard/query-template`
 
 - 支持按数据源读取 MySQL 表和字段，表单化配置 `table_raw` / `table_count` / `table_aggregate`。
 - `table_raw` 可选返回字段、字段别名、计算字段、条件、排序和 limit。
@@ -358,7 +358,7 @@ getScreen / data 接口入口：
 - HTTP 数据源使用 `http_passthrough`，支持配置 GET / POST JSON、路径、请求参数 JSON、JSON Body、响应数据路径和总数路径；路径、请求参数和 JSON Body 里的 `:param_name` 会按运行时同名参数替换。
 - 查询模板保存 / 更新会按数据源类型做深度配置校验：MySQL 模板会连接目标数据源并复用 `SqlBuilder` 校验表、字段、条件、排序、别名、计算字段、聚合指标和参数定义；HTTP 模板会校验方法、请求参数、JSON Body、响应路径、总数路径和最终公开 URL。无效配置会在保存阶段直接返回业务错误，不再等到预览或运行时才暴露。
 
-### 模板市场 `/plugin/saiboard/market`
+### 模板市场 `#/saiboard/market`
 
 - 支持大屏模板和组件模板两类市场项，后台可维护名称、分类、说明、公开状态、状态和模板 JSON。
 - 大屏编辑器顶部提供「模板市场」和「保存为模板」入口；左侧组件面板提供「组件市场」入口；右侧属性 / 批量操作区支持把当前选中组件保存为组件模板。
@@ -592,9 +592,9 @@ php webman b8:migrate
 
 迁移包含：
 
-- `20260619000100_add_saiboard_plugin.php`：建表 `saiboard_datasource` / `saiboard_screen` / `saiboard_query_template`，幂等。
-- `20260619000200_add_saiboard_screen_version.php`：建表 `saiboard_screen_version`，增加版本权限。
-- `20260619000300_add_saiboard_screen_token.php`：建表 `saiboard_screen_token`，增加访问令牌权限。
+- `20260619000100_add_saiboard_plugin.php`：建表 `saiboard_datasource` / `saiboard_screen` / `saiboard_query_template`，幂等；回滚前会检查表内业务数据，非空时拒绝删除。
+- `20260619000200_add_saiboard_screen_version.php`：建表 `saiboard_screen_version`，增加版本权限；回滚前会检查版本快照数据，非空时拒绝删除。
+- `20260619000300_add_saiboard_screen_token.php`：建表 `saiboard_screen_token`，增加访问令牌权限；回滚前会检查令牌数据，非空时拒绝删除。
 - `20260619000400_add_saiboard_market_item.php`：建表 `saiboard_market_item`，增加模板市场菜单和权限；回滚只会删除带本迁移标记且无模板数据的表，避免误删已有模板。
 - `20260619000500_add_saiboard_generate_from_table_permission.php`：增加「从数据表生成大屏」按钮权限。
 - 后台菜单「大屏管理 / 数据源管理 / 查询模板 / 模板市场 / 大屏编辑器」，权限 slug 见后端分层表。

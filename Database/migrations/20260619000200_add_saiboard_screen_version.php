@@ -45,7 +45,7 @@ final class AddSaiboardScreenVersion extends AbstractMigration
     public function down(): void
     {
         $this->execute('DELETE FROM `sa_system_menu` WHERE `remark` = ' . $this->q(self::REMARK));
-        $this->execute('DROP TABLE IF EXISTS `saiboard_screen_version`');
+        $this->dropTableIfEmpty('saiboard_screen_version', '版本快照');
     }
 
     private function insertPermission(string $parentCode, string $name, string $slug): void
@@ -59,6 +59,20 @@ final class AddSaiboardScreenVersion extends AbstractMigration
               AND NOT EXISTS (SELECT 1 FROM `sa_system_menu` WHERE `slug` = ' . $this->q($slug) . ' AND `delete_time` IS NULL)
             LIMIT 1'
         );
+    }
+
+    private function dropTableIfEmpty(string $table, string $label): void
+    {
+        if (!$this->hasTable($table)) {
+            return;
+        }
+
+        $count = (int) ($this->fetchRow("SELECT COUNT(*) AS `total` FROM `{$table}`")['total'] ?? 0);
+        if ($count > 0) {
+            throw new RuntimeException("{$table} 已存在{$label}数据，为避免误删数据，请先备份并清空后再回滚。");
+        }
+
+        $this->table($table)->drop()->save();
     }
 
     private function q(mixed $value): string

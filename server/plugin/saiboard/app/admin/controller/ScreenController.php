@@ -86,9 +86,19 @@ class ScreenController extends AbstractCrudController
     #[Apidoc\Title('大屏状态')]
     #[Apidoc\Url('/app/saiboard/admin/Screen/changeStatus')]
     #[Apidoc\Method('POST')]
+    #[Apidoc\Param('id', type: 'int', require: true, desc: '大屏ID')]
+    #[Apidoc\Param('status', type: 'int', require: true, desc: '状态，仅允许改为草稿2；发布请使用 publish')]
     #[Permission('大屏状态', 'saiboard:screen:changeStatus')]
     public function changeStatus(Request $request): Response
     {
+        $status = (int) $request->post('status', 2);
+        if ($status === 1) {
+            return $this->fail('发布大屏请使用发布接口');
+        }
+        if ($status !== 2) {
+            return $this->fail('状态值不正确');
+        }
+
         return parent::changeStatus($request);
     }
 

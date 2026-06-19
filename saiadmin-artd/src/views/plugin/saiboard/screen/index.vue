@@ -135,7 +135,7 @@
           <ElInput v-model="form.name" maxlength="60" />
         </ElFormItem>
         <ElFormItem label="访问编码" prop="code">
-          <ElInput v-model="form.code" placeholder="留空自动生成" />
+          <ElInput v-model="form.code" maxlength="32" placeholder="留空自动生成" />
         </ElFormItem>
         <ElFormItem label="设计尺寸" required>
           <ElSpace>
@@ -174,12 +174,6 @@
         </ElFormItem>
         <ElFormItem v-if="form.is_public === 2" label="旧单令牌">
           <ElInput v-model="form.access_token" show-password placeholder="建议使用访问令牌管理" />
-        </ElFormItem>
-        <ElFormItem label="状态" prop="status">
-          <ElRadioGroup v-model="form.status">
-            <ElRadioButton :label="1">已发布</ElRadioButton>
-            <ElRadioButton :label="2">草稿</ElRadioButton>
-          </ElRadioGroup>
         </ElFormItem>
       </ElForm>
       <template #footer>
@@ -628,8 +622,22 @@
     save_layout: '保存'
   }
 
+  const validateScreenCode = (
+    _rule: unknown,
+    value: unknown,
+    callback: (error?: Error) => void
+  ) => {
+    const code = String(value || '').trim()
+    if (code !== '' && !/^[A-Za-z0-9_-]{1,32}$/.test(code)) {
+      callback(new Error('访问编码只能包含字母、数字、下划线和短横线，最多32位'))
+      return
+    }
+    callback()
+  }
+
   const rules: FormRules = {
     name: [{ required: true, message: '名称必填', trigger: 'blur' }],
+    code: [{ validator: validateScreenCode, trigger: 'blur' }],
     width: [{ required: true, message: '设计宽度必填', trigger: 'blur' }],
     height: [{ required: true, message: '设计高度必填', trigger: 'blur' }]
   }
@@ -959,6 +967,7 @@
         fit_mode: normalizeFitMode(form.fitMode)
       })
     }
+    delete payload.status
     if (!form.id) {
       payload.draft_layout = {
         canvas: { width: form.width, height: form.height },
