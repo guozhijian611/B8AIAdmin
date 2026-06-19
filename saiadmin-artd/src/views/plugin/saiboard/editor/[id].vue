@@ -31,6 +31,13 @@
         <ElButton v-permission="'saiboard:screen:saveLayout'" type="primary" @click="saveLayout">
           保存
         </ElButton>
+        <ElButton
+          v-permission="'saiboard:screen:read'"
+          :disabled="!screen.code"
+          @click="openDraftPreview"
+        >
+          预览草稿
+        </ElButton>
         <ElButton v-permission="'saiboard:screen:publish'" type="success" @click="publish">
           发布
         </ElButton>
@@ -1511,7 +1518,7 @@
     if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
 
     const result: Record<string, any> = {}
-    const reserved = new Set(['code', 'cid', 'token', 'admin_preview'])
+    const reserved = new Set(['code', 'cid', 'token', 'admin_preview', 'draft'])
     for (const [key, rawValue] of Object.entries(value as Record<string, any>).slice(0, 50)) {
       const name = key.trim()
       if (!/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(name)) continue
@@ -2727,6 +2734,19 @@
     await persistDraftLayout()
     ElMessage.success('保存成功')
     await loadData()
+  }
+
+  const openDraftPreview = async () => {
+    if (!applySelectedDatasetParams()) return
+    const code = String(screen.code || '')
+    if (!code) {
+      ElMessage.warning('大屏编码不存在')
+      return
+    }
+
+    await persistDraftLayout()
+    const params = new URLSearchParams({ admin_preview: '1', draft: '1' })
+    window.open(`#/screen/${code}?${params.toString()}`, '_blank')
   }
 
   const publish = async () => {

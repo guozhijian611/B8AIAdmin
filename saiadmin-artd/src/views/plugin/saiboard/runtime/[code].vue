@@ -48,11 +48,12 @@
   const dataMap = reactive<Record<string, { rows: Record<string, any>[]; error: string }>>({})
   const minRefreshSeconds = 10
   const maxRefreshSeconds = 3600
-  const reservedParamNames = new Set(['code', 'cid', 'token', 'admin_preview'])
+  const reservedParamNames = new Set(['code', 'cid', 'token', 'admin_preview', 'draft'])
 
   const code = computed(() => String(route.params.code || ''))
   const token = computed(() => String(route.query.token || ''))
   const adminPreview = computed(() => route.query.admin_preview === '1')
+  const draftPreview = computed(() => route.query.draft === '1')
   const runtimeParams = computed(() => {
     const params: Record<string, any> = {}
     for (const [key, value] of Object.entries(route.query)) {
@@ -133,7 +134,8 @@
 
   const authParams = () => ({
     ...(token.value ? { token: token.value } : {}),
-    ...(adminPreview.value ? { admin_preview: 1 } : {})
+    ...(adminPreview.value ? { admin_preview: 1 } : {}),
+    ...(adminPreview.value && draftPreview.value ? { draft: 1 } : {})
   })
 
   const componentRuntimeParams = (component: BoardComponent) => {

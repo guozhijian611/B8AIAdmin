@@ -79,7 +79,7 @@
                 size="small"
                 @click="openRuntime(row)"
               >
-                预览
+                发布预览
               </ElButton>
               <SaButton
                 v-permission="'saiboard:screen:update'"
@@ -680,6 +680,10 @@
   }
 
   const openRuntime = (row: any) => {
+    if (row.status !== 1) {
+      ElMessage.warning('草稿尚未发布，请进入编辑器预览草稿')
+      return
+    }
     const params = new URLSearchParams()
     if (row.is_public === 2) {
       params.set('admin_preview', '1')

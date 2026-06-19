@@ -38,16 +38,16 @@ class BoardController
     #[Apidoc\Method('GET')]
     #[Apidoc\Query('token', type: 'string', require: false, desc: '访问令牌')]
     #[Apidoc\Query('admin_preview', type: 'int', require: false, desc: '后台预览标记，需携带后台 JWT')]
+    #[Apidoc\Query('draft', type: 'int', require: false, desc: '草稿预览标记，仅后台预览可用')]
     #[Apidoc\Returned('screen', type: 'object', desc: '脱敏大屏配置')]
     public function getScreen(Request $request, string $code): Response
     {
-        $screen = $this->publishedScreen($code);
-        if (!$screen) {
-            return fail('大屏不存在或未发布', 404);
+        $context = $this->screenContext($request, $code);
+        if (isset($context['error'])) {
+            return fail($context['error'], (int) ($context['status'] ?? 400));
         }
-        if (!$this->authorized($request, $screen)) {
-            return fail('无权访问大屏', 401);
-        }
+        /** @var Screen $screen */
+        $screen = $context['screen'];
         if ($limited = $this->guard->assertAllowed($request, $screen, 'screen')) {
             return $this->rateLimited($limited);
         }
@@ -61,7 +61,8 @@ class BoardController
                 'bg_config' => $screen->bg_config,
                 'is_public' => (int) $screen->is_public,
                 'status' => (int) $screen->status,
-                'layout' => $this->publicLayout($screen->layout),
+                'preview_mode' => $context['draft'] ? 'draft' : 'published',
+                'layout' => $context['layout'],
             ],
         ]);
     }
@@ -73,6 +74,7 @@ class BoardController
     #[Apidoc\Query('cid', type: 'string', require: true, desc: '组件ID')]
     #[Apidoc\Query('token', type: 'string', require: false, desc: '访问令牌')]
     #[Apidoc\Query('admin_preview', type: 'int', require: false, desc: '后台预览标记，需携带后台 JWT')]
+    #[Apidoc\Query('draft', type: 'int', require: false, desc: '草稿预览标记，仅后台预览可用')]
     #[Apidoc\Query('params', type: 'object', require: false, desc: '运行时查询参数')]
     #[Apidoc\Returned('rows', type: 'array', desc: '数据行')]
     public function data(Request $request): Response
@@ -83,18 +85,17 @@ class BoardController
             return fail('参数错误');
         }
 
-        $screen = $this->publishedScreen($code);
-        if (!$screen) {
-            return fail('大屏不存在或未发布', 404);
+        $context = $this->screenContext($request, $code);
+        if (isset($context['error'])) {
+            return fail($context['error'], (int) ($context['status'] ?? 400));
         }
-        if (!$this->authorized($request, $screen)) {
-            return fail('无权访问大屏', 401);
-        }
+        /** @var Screen $screen */
+        $screen = $context['screen'];
         if ($limited = $this->guard->assertAllowed($request, $screen, 'data')) {
             return $this->rateLimited($limited);
         }
 
-        $dataset = $this->componentDataset($screen->layout, $cid);
+        $dataset = $this->componentDataset($context['layout'], $cid);
         $queryTemplateId = (int) ($dataset['queryTemplateId'] ?? $dataset['query_template_id'] ?? 0);
         if ($queryTemplateId <= 0) {
             return fail('组件未绑定查询模板');
@@ -126,15 +127,54 @@ class BoardController
         }
     }
 
-    private function publishedScreen(string $code): ?Screen
+    /**
+     * @return array{screen?: Screen, layout?: array, draft?: bool, error?: string, status?: int}
+     */
+    private function screenContext(Request $request, string $code): array
+    {
+        $draftPreview = $this->isDraftPreview($request);
+        if ($draftPreview && (!$this->isAdminPreview($request) || !$this->canUseAdminPreview())) {
+            return ['error' => '无权预览草稿', 'status' => 401];
+        }
+
+        $screen = $this->screenByCode($code, !$draftPreview);
+        if (!$screen) {
+            return [
+                'error' => $draftPreview ? '大屏不存在或无权预览' : '大屏不存在或未发布',
+                'status' => 404,
+            ];
+        }
+
+        if ($draftPreview) {
+            if (!$this->canAdminPreview($screen)) {
+                return ['error' => '大屏不存在或无权预览', 'status' => 404];
+            }
+        } elseif (!$this->authorized($request, $screen)) {
+            return ['error' => '无权访问大屏', 'status' => 401];
+        }
+
+        $layout = $draftPreview
+            ? ($screen->draft_layout ?: $screen->layout)
+            : $screen->layout;
+
+        return [
+            'screen' => $screen,
+            'layout' => $this->publicLayout($layout),
+            'draft' => $draftPreview,
+        ];
+    }
+
+    private function screenByCode(string $code, bool $publishedOnly): ?Screen
     {
         if (!preg_match('/^[A-Za-z0-9_-]{1,32}$/', $code)) {
             return null;
         }
 
-        $screen = Screen::where('code', $code)
-            ->where('status', 1)
-            ->findOrEmpty();
+        $query = Screen::where('code', $code);
+        if ($publishedOnly) {
+            $query->where('status', 1);
+        }
+        $screen = $query->findOrEmpty();
 
         return $screen->isEmpty() ? null : $screen;
     }
@@ -171,18 +211,15 @@ class BoardController
         return in_array($value, [1, '1', true, 'true'], true);
     }
 
+    private function isDraftPreview(Request $request): bool
+    {
+        $value = $request->input('draft', '');
+        return in_array($value, [1, '1', true, 'true'], true);
+    }
+
     private function canAdminPreview(Screen $screen): bool
     {
-        $current = getCurrentInfo();
-        if (!is_array($current) || ($current['plat'] ?? '') !== 'saiadmin') {
-            return false;
-        }
-
-        $adminId = (int) ($current['id'] ?? 0);
-        if ($adminId <= 0) {
-            return false;
-        }
-        if ($adminId !== 1 && !in_array('saiboard:screen:read', UserAuthCache::getUserAuth($adminId), true)) {
+        if (!$this->canUseAdminPreview()) {
             return false;
         }
 
@@ -194,6 +231,21 @@ class BoardController
         } catch (Throwable) {
             return false;
         }
+    }
+
+    private function canUseAdminPreview(): bool
+    {
+        $current = getCurrentInfo();
+        if (!is_array($current) || ($current['plat'] ?? '') !== 'saiadmin') {
+            return false;
+        }
+
+        $adminId = (int) ($current['id'] ?? 0);
+        if ($adminId <= 0) {
+            return false;
+        }
+
+        return $adminId === 1 || in_array('saiboard:screen:read', UserAuthCache::getUserAuth($adminId), true);
     }
 
     private function validScreenToken(Screen $screen, string $token): bool
@@ -310,7 +362,13 @@ class BoardController
 
     private function runtimeParams(Request $request): array
     {
-        $reserved = ['code' => true, 'cid' => true, 'token' => true, 'admin_preview' => true];
+        $reserved = [
+            'code' => true,
+            'cid' => true,
+            'token' => true,
+            'admin_preview' => true,
+            'draft' => true,
+        ];
         $params = $request->input('params', []);
         $result = is_array($params) ? array_diff_key($params, $reserved) : [];
 

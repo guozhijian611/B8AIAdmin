@@ -240,7 +240,7 @@ saiadmin-artd/src/views/plugin/saiboard/
 - `type` 直接对应 `widgets/` 注册表里的组件名，编辑器与运行时都靠它 `<component :is>` 渲染。
 - `id`（如 `w_1`）是组件在大屏内的稳定标识，**取数接口以 `code + id` 为键**，不接受前端传任意 `queryTemplateId`（见安全设计）。
 - `dataset.mapping` 是组件级字段映射：图表类用 `labelField` / `valueField`，表格用 `tableFields` 控制列顺序，并可用 `tableColumns[]` 配置列显示名、宽度和对齐；未配置时运行时按 `label/value/total` 等常用字段自动兜底。
-- `dataset.params` 是组件级运行参数，编辑器预览和公开运行时都会传给查询模板；运行时 URL 参数仍可作为全局参数，同名时组件级参数优先。`code` / `cid` / `token` / `admin_preview` 是系统保留字段，不能作为模板运行参数。
+- `dataset.params` 是组件级运行参数，编辑器预览和公开运行时都会传给查询模板；运行时 URL 参数仍可作为全局参数，同名时组件级参数优先。`code` / `cid` / `token` / `admin_preview` / `draft` 是系统保留字段，不能作为模板运行参数。
 - 保存时 `draft_layout` 整体入库（拖拽是原子操作）；发布时拷贝到 `layout`。
 - 运行时下发 `layout` 时保留 `queryTemplateId`，但**剥离所有数据源连接信息**，前端拿不到密钥。
 
@@ -259,10 +259,10 @@ saiadmin-artd/src/views/plugin/saiboard/
 
 ### api（对外，自鉴权）— `BoardController`
 
-- `getScreen(code)`：下发**已发布** `layout`（脱敏，不含任何密钥）。
+- `getScreen(code)`：默认下发**已发布** `layout`（脱敏，不含任何密钥）；仅后台用户带 `admin_preview=1&draft=1` 时下发 `draft_layout` 做草稿预览。
 - `data(code, cid)`：
   1. 按 `code` 取大屏 → 校验 `is_public` / 多访问令牌 / 旧 `access_token` / 登录态；
-  2. 在该大屏 `layout.components` 中按 `cid` 找到组件 → 取其绑定的 `queryTemplateId`（**服务端解析，不信任前端传入**）；
+  2. 在该大屏当前预览布局的 `components` 中按 `cid` 找到组件 → 取其绑定的 `queryTemplateId`（**服务端解析，不信任前端传入**）；
   3. 取 `query_template` → `DataSourceExecutor` 执行 → 返回 `{rows, total}`。
 
 `middleware.php` 的 `api` 数组留空，鉴权在控制器内按大屏配置自行判定。
@@ -313,7 +313,7 @@ getScreen / data 接口入口：
 
 后台管理端额外启用 SaiAdmin 数据权限：普通角色只能管理自己 `created_by` 范围内的大屏、数据源和查询模板；大屏保存 / 发布时会校验 layout 中绑定的查询模板归属，查询模板保存 / 预览时会校验数据源归属。若具备数据范围权限的用户复制他人可见大屏，副本会保留视觉布局但清空查询模板绑定，避免跨归属数据依赖。
 
-> 旧 `access_token` 字段继续作为无子令牌时的兼容兜底存在；新建客户级令牌应优先使用 `saiboard_screen_token` 子表，避免在数据库保存明文 token，并获得独立吊销能力。后台列表「预览」使用 `admin_preview=1` 和当前后台 JWT 放行，不依赖也不暴露子令牌明文。
+> 旧 `access_token` 字段继续作为无子令牌时的兼容兜底存在；新建客户级令牌应优先使用 `saiboard_screen_token` 子表，避免在数据库保存明文 token，并获得独立吊销能力。后台列表「发布预览」使用 `admin_preview=1` 和当前后台 JWT 放行，只查看已发布快照；编辑器「预览草稿」会额外携带 `draft=1`，仅后台有大屏读取权限且通过数据范围校验时可查看草稿快照。
 
 ## 前端关键点
 
@@ -322,6 +322,7 @@ getScreen / data 接口入口：
 - 三栏布局：左侧组件面板（拖出组件）、中间画布（`DraggableItem` 包裹真实 `art-*` 组件）、右侧属性面板（标题、样式、绑定查询模板、字段映射、`refresh`）。
 - `DraggableItem.vue` 封装 `vue3-draggable-resizable`，负责 x/y/w/h/z 的拖拽、缩放与对齐吸附，**不感知图表内容**；组件本身就是运行时同款，天然所见即所得。
 - 保存写 `draft_layout`；点「发布」才拷贝到 `layout` 上线。
+- 「预览草稿」会先保存当前 `draft_layout`，再打开 `/screen/:code?admin_preview=1&draft=1`；后台列表的「发布预览」只打开已发布 `layout`，草稿未发布时需进入编辑器预览。
 - 编辑器绑定查询模板后通过 `QueryTemplate/preview` 取真实数据预览，并从首行数据生成字段映射下拉；未绑定模板时才使用示例数据占位。
 
 ### 对外运行时页 `/screen/:code`（静态公开路由，复用 widgets/）
@@ -331,6 +332,7 @@ getScreen / data 接口入口：
 - `bg_config.fit_mode` 支持 `contain` / `cover` / `stretch`：`contain` 完整显示设计稿并居中留边，`cover` 等比铺满视口并允许边缘裁切，`stretch` 按视口宽高分别拉伸，适合固定比例投屏。
 - `bg_config` 支持 `theme` 主题预设、背景色、背景图 URL 和 `image_fit`（铺满裁切 / 完整显示 / 拉伸 / 平铺）；编辑器和运行时复用同一套样式生成逻辑。
 - 按各数据组件 `dataset.refresh` 轮询 `/data`，公开运行时最小 10 秒；运行时默认用 POST 传递组件级复杂参数，后端保留 GET 兼容；纯装饰组件不绑定查询模板、不触发运行时取数。
+- `draft=1` 只作为后台草稿预览开关使用，运行时和后端都会把它作为系统参数过滤，避免误传给查询模板。
 
 ### 数据源管理页 `/plugin/saiboard/datasource`
 
@@ -610,7 +612,7 @@ php webman b8:migrate
 | 后端/前端 | HTTP 查询模板支持路径、请求参数和 JSON Body 中的 `:param_name` 运行时占位符替换，缓存键只包含被模板实际引用的参数。 |
 | 后端/前端 | 大屏管理支持从已有 MySQL 数据源和数据表自动生成查询模板与鉴权草稿大屏，生成后直接进入编辑器继续调整。 |
 | 前端 | `DraggableItem.vue`（封装 `vue3-draggable-resizable`）+ `widgets/` 注册表，复用 `art-*` 图表（柱/折线/横向柱/K线/仪表盘/漏斗/热力图/环形/雷达/散点 + 单值指标 / 表格 / 时间轴 / 点位地图）并提供 CSS 装饰边框 / 扫描线 / 标题装饰 / 分割线。 |
-| 前端 | 拖拽编辑器 + 编辑态真实数据预览 / 字段映射 / 组件级运行参数 + 查询模板表单化配置 + 对外运行时页（静态 `/screen/:code`、适配模式、is_public / token 鉴权）。 |
+| 前端 | 拖拽编辑器 + 草稿预览 / 编辑态真实数据预览 / 字段映射 / 组件级运行参数 + 查询模板表单化配置 + 对外运行时页（静态 `/screen/:code`、适配模式、is_public / token 鉴权）。 |
 | 前端 | 数据源新增/编辑态测试前先做表单校验；查询模板支持多指标聚合配置、HTTP GET / POST JSON 配置和取值类型说明；指标组件支持前缀 / 小数位 / 单位，表格支持最大行数 / 序号列 / 斑马纹，图表组件缩放后自动触发 resize。 |
 
 ### P1 能力增强（部分完成）
@@ -635,7 +637,7 @@ php webman b8:migrate
 
 ## 排障
 
-- 运行时 401：检查大屏是否公开；如为 token 模式，对外访问 `/screen/:code?token=...` 或请求头传递 `X-Saiboard-Token`；多访问令牌只在创建 / 重置时显示一次，后台列表只能看到前缀。后台管理端预览私有大屏会自动追加 `admin_preview=1`，需要当前后台登录态具备大屏读取权限并通过数据范围校验。
+- 运行时 401：检查大屏是否公开；如为 token 模式，对外访问 `/screen/:code?token=...` 或请求头传递 `X-Saiboard-Token`；多访问令牌只在创建 / 重置时显示一次，后台列表只能看到前缀。后台管理端发布预览私有大屏会自动追加 `admin_preview=1`；草稿预览还会追加 `draft=1`，两者都需要当前后台登录态具备大屏读取权限并通过数据范围校验。
 - SQL 白名单拦截：确认查询模板里的 `table`、`fields`、`conditions.field`、`order.field` 都是目标数据源真实存在的表和字段。
 - HTTP 数据源失败：确认 URL 是公网 `http/https` 地址；localhost、内网 IP、保留地址和无法 DNS 解析的域名会被 SSRF 防护拦截。
 - 数据不刷新：检查数据源 `cache_ttl` 和组件 `dataset.refresh`；预览接口会强制绕过缓存，运行时接口会按 `cache_ttl` 复用结果，公开运行时轮询下限为 10 秒。
