@@ -936,6 +936,66 @@
                 />
               </ElFormItem>
             </template>
+            <template v-if="selectedComponent.type === 'decor-title'">
+              <ElFormItem label="主标题">
+                <ElInput v-model="selectedComponent.option!.text" />
+              </ElFormItem>
+              <ElFormItem label="副标题">
+                <ElInput v-model="selectedComponent.option!.subtitle" clearable />
+              </ElFormItem>
+              <ElFormItem label="样式">
+                <ElSelect v-model="selectedComponent.option!.variant">
+                  <ElOption label="标题栏" value="bar" />
+                  <ElOption label="辉光" value="glow" />
+                  <ElOption label="括号" value="bracket" />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="对齐">
+                <ElSelect v-model="selectedComponent.option!.align">
+                  <ElOption label="左对齐" value="left" />
+                  <ElOption label="居中" value="center" />
+                  <ElOption label="右对齐" value="right" />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="强调色">
+                <ElColorPicker v-model="selectedComponent.option!.accent" />
+              </ElFormItem>
+            </template>
+            <template v-if="selectedComponent.type === 'decor-divider'">
+              <ElFormItem label="方向">
+                <ElSelect v-model="selectedComponent.option!.direction">
+                  <ElOption label="横向" value="horizontal" />
+                  <ElOption label="纵向" value="vertical" />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="样式">
+                <ElSelect v-model="selectedComponent.option!.variant">
+                  <ElOption label="单线" value="line" />
+                  <ElOption label="双线" value="double" />
+                  <ElOption label="流光" value="pulse" />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="强调色">
+                <ElColorPicker v-model="selectedComponent.option!.accent" />
+              </ElFormItem>
+              <ElFormItem label="速度秒">
+                <ElInputNumber
+                  v-model="selectedComponent.option!.speed"
+                  :min="1"
+                  :max="12"
+                  :step="0.5"
+                  step-strictly
+                />
+              </ElFormItem>
+              <ElFormItem label="透明度">
+                <ElSlider
+                  v-model="selectedComponent.option!.opacity"
+                  :min="0.1"
+                  :max="1"
+                  :step="0.05"
+                />
+              </ElFormItem>
+            </template>
             <ElFormItem>
               <ElSpace>
                 <ElButton @click="bringToFront">置顶</ElButton>
@@ -1136,7 +1196,12 @@
   import api from '../api/screen'
   import templateApi from '../api/query-template'
   import DraggableItem from '../widgets/DraggableItem.vue'
-  import { createDefaultComponent, getWidgetMeta, widgetRegistry } from '../widgets/registry'
+  import {
+    createDefaultComponent,
+    decorWidgetTypes,
+    getWidgetMeta,
+    widgetRegistry
+  } from '../widgets/registry'
   import {
     backgroundFitOptions,
     boardCanvasStyle,
@@ -1289,7 +1354,7 @@
   ])
   const kLineFieldOptionKeys = ['timeField', 'openField', 'closeField', 'highField', 'lowField']
   const timelineFieldOptionKeys = ['timeField', 'titleField', 'contentField', 'statusField']
-  const decorTypes = new Set(['decor-border', 'decor-scanline'])
+  const decorTypes = decorWidgetTypes
   const componentNeedsData = (component: BoardComponent) => !decorTypes.has(component.type)
   const componentGroupId = (component?: BoardComponent) => String(component?.option?.groupId || '')
   const createGroupId = () => `g_${Date.now()}_${Math.floor(Math.random() * 1000)}`

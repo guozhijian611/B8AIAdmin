@@ -43,6 +43,8 @@ export type WidgetType =
   | 'geo-point-map'
   | 'decor-border'
   | 'decor-scanline'
+  | 'decor-title'
+  | 'decor-divider'
 
 export interface BoardBgConfig {
   color?: string

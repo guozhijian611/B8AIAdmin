@@ -31,6 +31,7 @@
 <script setup lang="ts">
   import api from '../api/runtime'
   import WidgetRenderer from '../widgets/WidgetRenderer.vue'
+  import { decorWidgetTypes } from '../widgets/registry'
   import { boardCanvasStyle, normalizeBgConfig, normalizeFitMode } from '../widgets/theme'
   import type { BoardComponent, BoardLayout } from '../widgets/types'
 
@@ -67,7 +68,7 @@
     top: fit.y + 'px',
     transform: `scale(${fit.scaleX}, ${fit.scaleY})`
   }))
-  const decorTypes = new Set(['decor-border', 'decor-scanline'])
+  const decorTypes = decorWidgetTypes
   const componentNeedsData = (component: BoardComponent) => !decorTypes.has(component.type)
 
   const loadScreen = async () => {

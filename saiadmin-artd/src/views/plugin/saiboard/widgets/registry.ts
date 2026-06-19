@@ -198,17 +198,50 @@ export const widgetRegistry: WidgetMeta[] = [
       accent: '#23d8ff',
       opacity: 0.68
     }
+  },
+  {
+    type: 'decor-title',
+    name: '标题装饰',
+    icon: 'ri:text-block',
+    defaultRect: { x: 720, y: 980, w: 560, h: 96, z: 1 },
+    defaultOption: {
+      text: '数据总览',
+      subtitle: '',
+      variant: 'bar',
+      align: 'center',
+      accent: '#69b7ff'
+    }
+  },
+  {
+    type: 'decor-divider',
+    name: '分割线',
+    icon: 'ri:separator',
+    defaultRect: { x: 720, y: 1100, w: 560, h: 48, z: 1 },
+    defaultOption: {
+      direction: 'horizontal',
+      variant: 'pulse',
+      accent: '#23d8ff',
+      opacity: 0.72,
+      speed: 4
+    }
   }
 ]
 
 export const getWidgetMeta = (type: string) => widgetRegistry.find((item) => item.type === type)
+
+export const decorWidgetTypes = new Set<string>([
+  'decor-border',
+  'decor-scanline',
+  'decor-title',
+  'decor-divider'
+])
 
 export const createDefaultComponent = (type: WidgetType | string, order: number) => {
   const meta = getWidgetMeta(type) || widgetRegistry[0]
   return {
     id: `w_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
     type: meta.type,
-    title: meta.type === 'decor-border' || meta.type === 'decor-scanline' ? '' : meta.name,
+    title: decorWidgetTypes.has(meta.type) ? '' : meta.name,
     rect: {
       ...meta.defaultRect,
       x: meta.defaultRect.x + order * 20,

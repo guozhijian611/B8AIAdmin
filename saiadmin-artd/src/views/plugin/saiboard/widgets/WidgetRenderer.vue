@@ -212,6 +212,27 @@
       >
         <span class="decor-scanline__beam"></span>
       </div>
+      <div
+        v-else-if="component.type === 'decor-title'"
+        class="decor-title"
+        :class="[`is-${decorTitleVariant}`, `is-${decorTitleAlign}`]"
+        :style="decorTitleStyleVars"
+      >
+        <div class="decor-title__content">
+          <div class="decor-title__text">{{ decorTitleText }}</div>
+          <div v-if="decorTitleSubtitle" class="decor-title__subtitle">
+            {{ decorTitleSubtitle }}
+          </div>
+        </div>
+      </div>
+      <div
+        v-else-if="component.type === 'decor-divider'"
+        class="decor-divider"
+        :class="[`is-${dividerDirection}`, `is-${dividerVariant}`]"
+        :style="dividerStyleVars"
+      >
+        <span class="decor-divider__line"></span>
+      </div>
       <div v-else class="unsupported">组件不可用</div>
     </div>
     <div v-if="error" class="widget-error">{{ error }}</div>
@@ -231,6 +252,7 @@
   import ArtRingChart from '@/components/core/charts/art-ring-chart/index.vue'
   import ArtScatterChart from '@/components/core/charts/art-scatter-chart/index.vue'
   import type { HeatmapDataItem, KLineDataItem } from '@/types/component/chart'
+  import { decorWidgetTypes } from './registry'
   import type { BoardComponent, BoardTableColumn } from './types'
 
   type TableColumnAlign = NonNullable<BoardTableColumn['align']>
@@ -266,7 +288,7 @@
     'art-radar-chart',
     'art-scatter-chart'
   ])
-  const decorTypes = new Set(['decor-border', 'decor-scanline'])
+  const decorTypes = decorWidgetTypes
 
   const props = withDefaults(
     defineProps<{
@@ -816,6 +838,41 @@
     '--scanline-opacity': String(normalizeOpacity(props.component.option?.opacity ?? 0.68)),
     '--scanline-duration': `${normalizeScanlineSpeed(props.component.option?.speed)}s`
   }))
+  const decorTitleText = computed(() =>
+    normalizeDecorText(props.component.option?.text || props.component.title, '数据总览')
+  )
+  const decorTitleSubtitle = computed(() =>
+    normalizeDecorText(props.component.option?.subtitle, '')
+  )
+  const decorTitleVariant = computed(() => {
+    const value = String(props.component.option?.variant || 'bar')
+    return ['bar', 'glow', 'bracket'].includes(value) ? value : 'bar'
+  })
+  const decorTitleAlign = computed(() => {
+    const value = String(props.component.option?.align || 'center')
+    return ['left', 'center', 'right'].includes(value) ? value : 'center'
+  })
+  const decorTitleStyleVars = computed(() => ({
+    '--decor-title-accent': String(
+      props.component.option?.accent || 'var(--saiboard-accent, #69b7ff)'
+    ),
+    '--decor-title-align': decorTitleAlign.value
+  }))
+  const dividerDirection = computed(() => {
+    const value = String(props.component.option?.direction || 'horizontal')
+    return value === 'vertical' ? 'vertical' : 'horizontal'
+  })
+  const dividerVariant = computed(() => {
+    const value = String(props.component.option?.variant || 'pulse')
+    return ['line', 'double', 'pulse'].includes(value) ? value : 'pulse'
+  })
+  const dividerStyleVars = computed(() => ({
+    '--decor-divider-accent': String(
+      props.component.option?.accent || 'var(--saiboard-accent, #23d8ff)'
+    ),
+    '--decor-divider-opacity': String(normalizeOpacity(props.component.option?.opacity ?? 0.72)),
+    '--decor-divider-duration': `${normalizeScanlineSpeed(props.component.option?.speed)}s`
+  }))
 
   const metricValue = computed(() => {
     if (!tableRows.value.length) return hasBoundDataset.value ? '-' : '0'
@@ -846,6 +903,11 @@
     const speed = Number(value ?? 4)
     if (!Number.isFinite(speed) || speed <= 0) return 4
     return Math.min(12, Math.max(1, speed))
+  }
+
+  function normalizeDecorText(value: unknown, fallback: string) {
+    const text = String(value ?? '').trim()
+    return text || fallback
   }
 
   function toFiniteNumber(value: unknown, fallback = 0) {
@@ -1209,8 +1271,8 @@
     display: flex;
     flex-direction: column;
     width: 100%;
-    height: 100%;
     min-width: 0;
+    height: 100%;
     min-height: 0;
     overflow: hidden;
     color: var(--saiboard-text, #e5eefb);
@@ -1247,11 +1309,11 @@
 
   .metric {
     display: flex;
+    gap: 8px;
     align-items: baseline;
     justify-content: center;
-    height: 100%;
     min-width: 0;
-    gap: 8px;
+    height: 100%;
     overflow: hidden;
     color: #f8fbff;
   }
@@ -1414,10 +1476,10 @@
 
   .event-timeline__meta {
     display: flex;
+    gap: 8px;
     align-items: center;
     justify-content: space-between;
     min-width: 0;
-    gap: 8px;
     margin-bottom: 4px;
     font-size: 12px;
     color: rgb(215 231 255 / 64%);
@@ -1522,8 +1584,8 @@
     font-size: 12px;
     font-weight: 700;
     color: rgb(215 231 255 / 68%);
-    letter-spacing: 0;
     text-transform: uppercase;
+    letter-spacing: 0;
   }
 
   .geo-map__point {
@@ -1593,9 +1655,9 @@
     position: relative;
     width: 100%;
     height: 100%;
-    opacity: var(--decor-opacity);
     border: 1px solid color-mix(in srgb, var(--decor-accent) 42%, transparent);
     border-radius: 4px;
+    opacity: var(--decor-opacity);
   }
 
   .decor-border::before,
@@ -1637,7 +1699,6 @@
     width: 100%;
     height: 100%;
     overflow: hidden;
-    opacity: var(--scanline-opacity);
     background:
       linear-gradient(rgb(255 255 255 / 5%) 1px, transparent 1px),
       linear-gradient(90deg, rgb(255 255 255 / 5%) 1px, transparent 1px),
@@ -1653,6 +1714,7 @@
     border: 1px solid color-mix(in srgb, var(--scanline-accent) 24%, transparent);
     border-radius: 4px;
     box-shadow: inset 0 0 24px color-mix(in srgb, var(--scanline-accent) 14%, transparent);
+    opacity: var(--scanline-opacity);
   }
 
   .decor-scanline__beam {
@@ -1677,6 +1739,197 @@
     animation: saiboard-scanline-x var(--scanline-duration) linear infinite;
   }
 
+  .decor-title {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    padding: 0 24px;
+    overflow: hidden;
+    color: #eff7ff;
+    text-align: var(--decor-title-align);
+  }
+
+  .decor-title.is-left {
+    justify-content: flex-start;
+  }
+
+  .decor-title.is-center {
+    justify-content: center;
+  }
+
+  .decor-title.is-right {
+    justify-content: flex-end;
+  }
+
+  .decor-title::before,
+  .decor-title::after {
+    position: absolute;
+    pointer-events: none;
+    content: '';
+  }
+
+  .decor-title__content {
+    position: relative;
+    z-index: 1;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .decor-title__text {
+    overflow: hidden;
+    font-size: 26px;
+    font-weight: 700;
+    line-height: 1.18;
+    text-overflow: ellipsis;
+    text-shadow: 0 0 14px color-mix(in srgb, var(--decor-title-accent) 44%, transparent);
+    letter-spacing: 0;
+    white-space: nowrap;
+  }
+
+  .decor-title__subtitle {
+    margin-top: 6px;
+    overflow: hidden;
+    font-size: 12px;
+    line-height: 1.2;
+    color: rgb(215 231 255 / 72%);
+    text-overflow: ellipsis;
+    letter-spacing: 0;
+    white-space: nowrap;
+  }
+
+  .decor-title.is-bar {
+    background:
+      linear-gradient(
+          90deg,
+          transparent,
+          color-mix(in srgb, var(--decor-title-accent) 18%, transparent),
+          transparent
+        )
+        center bottom / 100% 1px no-repeat,
+      linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--decor-title-accent) 16%, transparent),
+        transparent 28%,
+        transparent 72%,
+        color-mix(in srgb, var(--decor-title-accent) 16%, transparent)
+      );
+  }
+
+  .decor-title.is-bar::after {
+    right: 18px;
+    bottom: 0;
+    left: 18px;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--decor-title-accent), transparent);
+  }
+
+  .decor-title.is-glow {
+    background: radial-gradient(
+      circle at 50% 50%,
+      color-mix(in srgb, var(--decor-title-accent) 22%, transparent),
+      transparent 62%
+    );
+  }
+
+  .decor-title.is-glow::after {
+    inset: 10px 16px;
+    border: 1px solid color-mix(in srgb, var(--decor-title-accent) 22%, transparent);
+    box-shadow: inset 0 0 22px color-mix(in srgb, var(--decor-title-accent) 18%, transparent);
+  }
+
+  .decor-title.is-bracket::before,
+  .decor-title.is-bracket::after {
+    top: 20%;
+    bottom: 20%;
+    width: 28px;
+    border-color: var(--decor-title-accent);
+    border-style: solid;
+  }
+
+  .decor-title.is-bracket::before {
+    left: 8px;
+    border-width: 2px 0 2px 2px;
+  }
+
+  .decor-title.is-bracket::after {
+    right: 8px;
+    border-width: 2px 2px 2px 0;
+  }
+
+  .decor-divider {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    opacity: var(--decor-divider-opacity);
+  }
+
+  .decor-divider__line {
+    position: absolute;
+    display: block;
+    background: linear-gradient(90deg, transparent, var(--decor-divider-accent), transparent);
+    box-shadow: 0 0 18px color-mix(in srgb, var(--decor-divider-accent) 45%, transparent);
+  }
+
+  .decor-divider.is-horizontal .decor-divider__line {
+    right: 12px;
+    left: 12px;
+    height: 2px;
+  }
+
+  .decor-divider.is-vertical .decor-divider__line {
+    top: 12px;
+    bottom: 12px;
+    width: 2px;
+    background: linear-gradient(180deg, transparent, var(--decor-divider-accent), transparent);
+  }
+
+  .decor-divider.is-double.is-horizontal .decor-divider__line {
+    height: 1px;
+    box-shadow:
+      0 -6px 0 color-mix(in srgb, var(--decor-divider-accent) 42%, transparent),
+      0 6px 0 color-mix(in srgb, var(--decor-divider-accent) 42%, transparent),
+      0 0 18px color-mix(in srgb, var(--decor-divider-accent) 45%, transparent);
+  }
+
+  .decor-divider.is-double.is-vertical .decor-divider__line {
+    width: 1px;
+    box-shadow:
+      -6px 0 0 color-mix(in srgb, var(--decor-divider-accent) 42%, transparent),
+      6px 0 0 color-mix(in srgb, var(--decor-divider-accent) 42%, transparent),
+      0 0 18px color-mix(in srgb, var(--decor-divider-accent) 45%, transparent);
+  }
+
+  .decor-divider.is-pulse .decor-divider__line {
+    overflow: hidden;
+  }
+
+  .decor-divider.is-pulse .decor-divider__line::after {
+    position: absolute;
+    content: '';
+    background: #fff;
+    box-shadow: 0 0 18px #fff;
+  }
+
+  .decor-divider.is-pulse.is-horizontal .decor-divider__line::after {
+    top: 0;
+    bottom: 0;
+    width: 72px;
+    animation: saiboard-divider-pulse-x var(--decor-divider-duration) linear infinite;
+  }
+
+  .decor-divider.is-pulse.is-vertical .decor-divider__line::after {
+    right: 0;
+    left: 0;
+    height: 72px;
+    animation: saiboard-divider-pulse-y var(--decor-divider-duration) linear infinite;
+  }
+
   @keyframes saiboard-scanline-y {
     from {
       top: -2px;
@@ -1694,6 +1947,26 @@
 
     to {
       left: 100%;
+    }
+  }
+
+  @keyframes saiboard-divider-pulse-x {
+    from {
+      left: -72px;
+    }
+
+    to {
+      left: 100%;
+    }
+  }
+
+  @keyframes saiboard-divider-pulse-y {
+    from {
+      top: -72px;
+    }
+
+    to {
+      top: 100%;
     }
   }
 
