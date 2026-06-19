@@ -20,6 +20,8 @@
         <ElButton :disabled="!canRedo" @click="redoLayout">重做</ElButton>
         <ElButton :disabled="!canCopy" @click="copySelected">复制</ElButton>
         <ElButton :disabled="!canPaste" @click="pasteCopied">粘贴</ElButton>
+        <ElButton :disabled="!canGroup" @click="groupSelected">组合</ElButton>
+        <ElButton :disabled="!canUngroup" @click="ungroupSelected">取消组合</ElButton>
         <ElButton v-permission="'saiboard:screen:saveLayout'" type="primary" @click="saveLayout">
           保存
         </ElButton>
@@ -54,6 +56,7 @@
           >
             <span class="layer-item__name">{{ component.title || componentName(component) }}</span>
             <span class="layer-item__type">{{ componentName(component) }}</span>
+            <span v-if="componentGroupId(component)" class="layer-item__tag">组</span>
             <span class="layer-item__actions">
               <button
                 type="button"
@@ -566,6 +569,15 @@
           <ElText type="info" size="small"> 已选择 {{ selectedComponents.length }} 个组件 </ElText>
           <ElSpace class="bulk-actions" direction="vertical" alignment="stretch">
             <div class="bulk-actions__section">
+              <ElText type="info" size="small">编组</ElText>
+              <div class="bulk-action-grid bulk-action-grid--two">
+                <ElButton size="small" :disabled="!canGroup" @click="groupSelected">组合</ElButton>
+                <ElButton size="small" :disabled="!canUngroup" @click="ungroupSelected">
+                  取消组合
+                </ElButton>
+              </div>
+            </div>
+            <div class="bulk-actions__section">
               <ElText type="info" size="small">对齐</ElText>
               <div class="bulk-action-grid">
                 <ElButton size="small" @click="alignSelected('left')">左</ElButton>
@@ -739,6 +751,8 @@
   ])
   const decorTypes = new Set(['decor-border', 'decor-scanline'])
   const componentNeedsData = (component: BoardComponent) => !decorTypes.has(component.type)
+  const componentGroupId = (component?: BoardComponent) => String(component?.option?.groupId || '')
+  const createGroupId = () => `g_${Date.now()}_${Math.floor(Math.random() * 1000)}`
 
   const selectedComponents = computed(() =>
     layout.components.filter((item) => selectedIds.value.includes(item.id))
@@ -774,6 +788,12 @@
   const canRedo = computed(() => layoutHistory.future.length > 0)
   const canCopy = computed(() => selectedComponents.value.length > 0)
   const canPaste = computed(() => copiedComponents.value.length > 0)
+  const canGroup = computed(
+    () => selectedComponents.value.length > 1 && !selectedComponentsInSingleGroup()
+  )
+  const canUngroup = computed(() =>
+    selectedComponents.value.some((component) => Boolean(componentGroupId(component)))
+  )
   const effectiveZoom = computed(() =>
     zoom.value === 'auto' ? autoZoom.value : Number(zoom.value)
   )
@@ -884,23 +904,64 @@
     selectedIds.value = []
   }
 
+  const selectionIdsForComponent = (id: string) => {
+    const component = layout.components.find((item) => item.id === id)
+    const groupId = componentGroupId(component)
+    if (!groupId) return [id]
+
+    return layout.components
+      .filter((item) => componentGroupId(item) === groupId)
+      .map((item) => item.id)
+  }
+
+  const selectedComponentsInSingleGroup = () => {
+    const components = selectedComponents.value
+    if (components.length < 2) return false
+    const groupIds = components.map((component) => componentGroupId(component))
+
+    return groupIds.every(Boolean) && new Set(groupIds).size === 1
+  }
+
   const selectComponent = (id: string, additive = false) => {
+    const targetIds = selectionIdsForComponent(id)
     if (!additive) {
-      setSingleSelection(id)
+      selectedIds.value = targetIds
+      selectedId.value = targetIds[targetIds.length - 1] || ''
       return
     }
 
-    const exists = selectedIds.value.includes(id)
+    const exists = targetIds.every((targetId) => selectedIds.value.includes(targetId))
     selectedIds.value = exists
-      ? selectedIds.value.filter((item) => item !== id)
-      : [...selectedIds.value, id]
-    selectedId.value = exists ? selectedIds.value[selectedIds.value.length - 1] || '' : id
+      ? selectedIds.value.filter((item) => !targetIds.includes(item))
+      : Array.from(new Set([...selectedIds.value, ...targetIds]))
+    selectedId.value = exists
+      ? selectedIds.value[selectedIds.value.length - 1] || ''
+      : targetIds[targetIds.length - 1] || ''
   }
 
   const updateComponent = (component: BoardComponent) => {
     ensureDataset(component)
     const index = layout.components.findIndex((item) => item.id === component.id)
-    if (index >= 0) layout.components.splice(index, 1, component)
+    if (index < 0) return
+
+    const current = layout.components[index]
+    const deltaX = Number(component.rect.x || 0) - Number(current.rect.x || 0)
+    const deltaY = Number(component.rect.y || 0) - Number(current.rect.y || 0)
+    const isPositionOnlyUpdate =
+      Number(component.rect.w || 0) === Number(current.rect.w || 0) &&
+      Number(component.rect.h || 0) === Number(current.rect.h || 0)
+    const shouldMoveSelection =
+      isPositionOnlyUpdate &&
+      selectedIds.value.includes(component.id) &&
+      selectedComponents.value.length > 1 &&
+      (deltaX !== 0 || deltaY !== 0)
+
+    if (shouldMoveSelection) {
+      moveSelectedBy(deltaX, deltaY)
+      return
+    }
+
+    layout.components.splice(index, 1, component)
   }
 
   const ensureDataset = (component: BoardComponent) => {
@@ -1174,8 +1235,9 @@
 
   const pasteCopied = async () => {
     if (!copiedComponents.value.length) return
+    const groupIdMap = new Map<string, string>()
     const components = copiedComponents.value.map((component, index) =>
-      createPastedComponent(component, index)
+      createPastedComponent(component, index, groupIdMap)
     )
     components.forEach(ensureDataset)
     layout.components.push(...components)
@@ -1188,20 +1250,49 @@
     )
   }
 
-  const createPastedComponent = (source: BoardComponent, index = 0): BoardComponent => {
+  const createPastedComponent = (
+    source: BoardComponent,
+    index = 0,
+    groupIdMap: Map<string, string> = new Map()
+  ): BoardComponent => {
     const component = clonePlain(source)
     const maxZ = Math.max(0, ...layout.components.map((item) => Number(item.rect.z || 1)))
     const offset = 24 + index * 12
     const maxX = Math.max(0, Number(layout.canvas.width || 0) - Number(component.rect.w || 0))
     const maxY = Math.max(0, Number(layout.canvas.height || 0) - Number(component.rect.h || 0))
+    const groupId = componentGroupId(component)
 
     component.id = `w_${Date.now()}_${Math.floor(Math.random() * 1000)}`
     component.title = component.title ? `${component.title}副本` : component.title
     component.rect.x = Math.min(maxX, Math.max(0, Number(component.rect.x || 0) + offset))
     component.rect.y = Math.min(maxY, Math.max(0, Number(component.rect.y || 0) + offset))
     component.rect.z = maxZ + index + 1
+    if (groupId) {
+      if (!groupIdMap.has(groupId)) groupIdMap.set(groupId, createGroupId())
+      component.option = { ...(component.option || {}), groupId: groupIdMap.get(groupId) }
+    }
 
     return normalizeLayout({ canvas: layout.canvas, components: [component] }).components[0]
+  }
+
+  const groupSelected = () => {
+    if (!canGroup.value) return
+    flushLayoutHistory()
+    const groupId = createGroupId()
+    selectedComponents.value.forEach((component) => {
+      component.option = { ...(component.option || {}), groupId }
+    })
+    recordLayoutHistory()
+  }
+
+  const ungroupSelected = () => {
+    if (!canUngroup.value) return
+    flushLayoutHistory()
+    selectedComponents.value.forEach((component) => {
+      if (!component.option) return
+      delete component.option.groupId
+    })
+    recordLayoutHistory()
   }
 
   const componentName = (component: BoardComponent) =>
@@ -1240,41 +1331,126 @@
 
   const isLayerTop = (component: BoardComponent) => {
     const ordered = orderedLayerComponents()
-    return ordered[ordered.length - 1]?.id === component.id
+    const selected = new Set(selectionIdsForComponent(component.id))
+    const positions = ordered
+      .map((item, index) => (selected.has(item.id) ? index : -1))
+      .filter((index) => index >= 0)
+    if (!positions.length) return true
+    const topIndex = Math.max(...positions)
+
+    return !ordered.slice(topIndex + 1).some((item) => !selected.has(item.id))
   }
 
   const isLayerBottom = (component: BoardComponent) => {
     const ordered = orderedLayerComponents()
-    return ordered[0]?.id === component.id
+    const selected = new Set(selectionIdsForComponent(component.id))
+    const positions = ordered
+      .map((item, index) => (selected.has(item.id) ? index : -1))
+      .filter((index) => index >= 0)
+    if (!positions.length) return true
+    const bottomIndex = Math.min(...positions)
+
+    return !ordered.slice(0, bottomIndex).some((item) => !selected.has(item.id))
   }
 
   const moveLayer = (component: BoardComponent, direction: 'up' | 'down') => {
     flushLayoutHistory()
     const ordered = orderedLayerComponents()
-    const index = ordered.findIndex((item) => item.id === component.id)
-    const targetIndex = direction === 'up' ? index + 1 : index - 1
-    if (index < 0 || targetIndex < 0 || targetIndex >= ordered.length) return
-    ;[ordered[index], ordered[targetIndex]] = [ordered[targetIndex], ordered[index]]
-    normalizeLayerOrder(ordered)
-    setSingleSelection(component.id)
+    const moveIds = selectionIdsForComponent(component.id)
+    const moveSet = new Set(moveIds)
+    if (moveSet.size <= 1) {
+      const index = ordered.findIndex((item) => item.id === component.id)
+      const targetIndex = direction === 'up' ? index + 1 : index - 1
+      if (index < 0 || targetIndex < 0 || targetIndex >= ordered.length) {
+        selectComponent(component.id)
+        return
+      }
+      ;[ordered[index], ordered[targetIndex]] = [ordered[targetIndex], ordered[index]]
+      normalizeLayerOrder(ordered)
+      selectComponent(component.id)
+      recordLayoutHistory()
+      return
+    }
+
+    const nextOrdered = moveLayerBlock(ordered, moveSet, direction)
+    if (!nextOrdered) {
+      selectComponent(component.id)
+      return
+    }
+    normalizeLayerOrder(nextOrdered)
+    selectComponent(component.id)
+    recordLayoutHistory()
+  }
+
+  const moveLayerBlock = (
+    ordered: BoardComponent[],
+    moveSet: Set<string>,
+    direction: 'up' | 'down'
+  ) => {
+    const positions = ordered
+      .map((item, index) => (moveSet.has(item.id) ? index : -1))
+      .filter((index) => index >= 0)
+    if (!positions.length) return undefined
+
+    const moving = ordered.filter((item) => moveSet.has(item.id))
+    const others = ordered.filter((item) => !moveSet.has(item.id))
+    if (direction === 'up') {
+      const topIndex = Math.max(...positions)
+      const next = ordered.slice(topIndex + 1).find((item) => !moveSet.has(item.id))
+      if (!next) return undefined
+      const insertIndex = others.findIndex((item) => item.id === next.id) + 1
+      others.splice(insertIndex, 0, ...moving)
+      return others
+    }
+
+    const bottomIndex = Math.min(...positions)
+    const previous = ordered
+      .slice(0, bottomIndex)
+      .reverse()
+      .find((item) => !moveSet.has(item.id))
+    if (!previous) return undefined
+    const insertIndex = others.findIndex((item) => item.id === previous.id)
+    others.splice(insertIndex, 0, ...moving)
+
+    return others
+  }
+
+  const sendLayerGroupToEdge = (component: BoardComponent, edge: 'top' | 'bottom') => {
+    flushLayoutHistory()
+    const selected = new Set(selectionIdsForComponent(component.id))
+    const ordered = orderedLayerComponents()
+    const moving = ordered.filter((item) => selected.has(item.id))
+    if (!moving.length) return
+    const rest = ordered.filter((item) => !selected.has(item.id))
+    const nextOrdered = edge === 'top' ? [...rest, ...moving] : [...moving, ...rest]
+    normalizeLayerOrder(nextOrdered)
+    selectComponent(component.id)
     recordLayoutHistory()
   }
 
   const sendLayerToTop = (component: BoardComponent) => {
+    if (componentGroupId(component)) {
+      sendLayerGroupToEdge(component, 'top')
+      return
+    }
     flushLayoutHistory()
     const ordered = orderedLayerComponents().filter((item) => item.id !== component.id)
     ordered.push(component)
     normalizeLayerOrder(ordered)
-    setSingleSelection(component.id)
+    selectComponent(component.id)
     recordLayoutHistory()
   }
 
   const sendLayerToBottom = (component: BoardComponent) => {
+    if (componentGroupId(component)) {
+      sendLayerGroupToEdge(component, 'bottom')
+      return
+    }
     flushLayoutHistory()
     const ordered = orderedLayerComponents().filter((item) => item.id !== component.id)
     ordered.unshift(component)
     normalizeLayerOrder(ordered)
-    setSingleSelection(component.id)
+    selectComponent(component.id)
     recordLayoutHistory()
   }
 
@@ -1308,6 +1484,46 @@
       ...ordered.filter((component) => !selected.has(component.id))
     ])
     recordLayoutHistory()
+  }
+
+  const moveSelectedBy = (deltaX: number, deltaY: number) => {
+    const selected = new Set(selectedIds.value)
+    const delta = clampSelectedDelta(deltaX, deltaY)
+    if (delta.x === 0 && delta.y === 0) return
+
+    for (const component of layout.components) {
+      if (!selected.has(component.id)) continue
+      component.rect.x += delta.x
+      component.rect.y += delta.y
+      clampComponentRect(component)
+    }
+  }
+
+  const clampSelectedDelta = (deltaX: number, deltaY: number) => {
+    const components = selectedComponents.value
+    if (!components.length) return { x: 0, y: 0 }
+
+    const minDeltaX = Math.max(...components.map((component) => -Number(component.rect.x || 0)))
+    const maxDeltaX = Math.min(
+      ...components.map(
+        (component) =>
+          Math.max(0, Number(layout.canvas.width || 0) - Number(component.rect.w || 0)) -
+          Number(component.rect.x || 0)
+      )
+    )
+    const minDeltaY = Math.max(...components.map((component) => -Number(component.rect.y || 0)))
+    const maxDeltaY = Math.min(
+      ...components.map(
+        (component) =>
+          Math.max(0, Number(layout.canvas.height || 0) - Number(component.rect.h || 0)) -
+          Number(component.rect.y || 0)
+      )
+    )
+
+    return {
+      x: clampNumber(Math.round(deltaX), minDeltaX, maxDeltaX),
+      y: clampNumber(Math.round(deltaY), minDeltaY, maxDeltaY)
+    }
   }
 
   const alignSelected = (mode: AlignMode) => {
@@ -1389,6 +1605,9 @@
     component.rect.x = Math.min(maxX, Math.max(0, Math.round(component.rect.x)))
     component.rect.y = Math.min(maxY, Math.max(0, Math.round(component.rect.y)))
   }
+
+  const clampNumber = (value: number, min: number, max: number) =>
+    Math.min(max, Math.max(min, value))
 
   const removeSelected = () => {
     if (!selectedIds.value.length) return
@@ -1574,6 +1793,10 @@
     gap: 6px;
   }
 
+  .bulk-action-grid--two {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .bulk-action-grid :deep(.el-button) {
     width: 100%;
     margin-left: 0;
@@ -1608,7 +1831,7 @@
 
   .layer-item {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto auto;
     gap: 4px 8px;
     padding: 8px;
     cursor: pointer;
@@ -1641,10 +1864,22 @@
     color: var(--art-gray-500);
   }
 
+  .layer-item__tag {
+    grid-row: 1 / span 2;
+    grid-column: 2;
+    align-self: center;
+    padding: 1px 5px;
+    font-size: 11px;
+    color: var(--el-color-primary);
+    background: var(--el-color-primary-light-9);
+    border: 1px solid var(--el-color-primary-light-5);
+    border-radius: 4px;
+  }
+
   .layer-item__actions {
     display: grid;
     grid-row: 1 / span 2;
-    grid-column: 2;
+    grid-column: 3;
     grid-template-columns: repeat(2, 24px);
     gap: 4px;
     align-self: center;
