@@ -179,6 +179,37 @@
         </template>
         <div v-else class="timeline-empty">{{ timelineEmptyText }}</div>
       </div>
+      <div v-else-if="component.type === 'alarm-list'" class="alarm-list" :style="alarmStyleVars">
+        <template v-if="alarmItems.length">
+          <div
+            v-for="(item, index) in alarmItems"
+            :key="`${item.time}-${item.title}-${index}`"
+            class="alarm-list__item"
+            :class="`is-${item.tone}`"
+          >
+            <span class="alarm-list__pulse"></span>
+            <div class="alarm-list__main">
+              <div class="alarm-list__header">
+                <span class="alarm-list__title">{{ item.title }}</span>
+                <span v-if="item.status" class="alarm-list__level">{{ item.status }}</span>
+              </div>
+              <div
+                v-if="component.option?.showContent !== false && item.content"
+                class="alarm-list__desc"
+              >
+                {{ item.content }}
+              </div>
+              <div
+                v-if="component.option?.showTime !== false && item.time"
+                class="alarm-list__time"
+              >
+                {{ item.time }}
+              </div>
+            </div>
+          </div>
+        </template>
+        <div v-else class="alarm-list__empty">{{ alarmEmptyText }}</div>
+      </div>
       <div v-else-if="component.type === 'geo-point-map'" class="geo-map">
         <div class="geo-map__grid"></div>
         <div class="geo-map__region">{{ geoRegionName }}</div>
@@ -258,6 +289,7 @@
   type TableColumnAlign = NonNullable<BoardTableColumn['align']>
   type RuntimeTableColumn = Required<Pick<BoardTableColumn, 'field' | 'label' | 'align'>> &
     Pick<BoardTableColumn, 'width'>
+  type StatusTone = 'primary' | 'success' | 'warning' | 'danger' | 'info'
   interface GeoPoint {
     x: number
     y: number
@@ -270,7 +302,16 @@
     title: string
     content: string
     status: string
-    tone: 'primary' | 'success' | 'warning' | 'danger' | 'info'
+    tone: StatusTone
+    timestamp: number
+    index: number
+  }
+  interface AlarmItem {
+    time: string
+    title: string
+    content: string
+    status: string
+    tone: StatusTone
     timestamp: number
     index: number
   }
@@ -359,6 +400,35 @@
       status: '告警',
       tone: 'warning',
       timestamp: 11 * 3600 + 20 * 60,
+      index: 2
+    }
+  ]
+  const sampleAlarmItems: AlarmItem[] = [
+    {
+      time: '刚刚',
+      title: '支付失败率升高',
+      content: '微信支付最近 5 分钟失败率超过 8%',
+      status: '严重',
+      tone: 'danger',
+      timestamp: 3,
+      index: 0
+    },
+    {
+      time: '10 分钟前',
+      title: '库存低水位',
+      content: '核心 SKU 可售库存低于预警阈值',
+      status: '警告',
+      tone: 'warning',
+      timestamp: 2,
+      index: 1
+    },
+    {
+      time: '24 分钟前',
+      title: '工单处理超时',
+      content: '3 个售后工单接近 SLA 截止时间',
+      status: '待处理',
+      tone: 'primary',
+      timestamp: 1,
       index: 2
     }
   ]
@@ -799,6 +869,97 @@
   const timelineStyleVars = computed(() => ({
     '--timeline-accent': String(props.component.option?.accent || 'var(--saiboard-accent, #69b7ff)')
   }))
+  const alarmTimeKey = computed(() =>
+    findOptionalKey(props.component.option?.timeField, [
+      'time',
+      'date',
+      'datetime',
+      'alarm_time',
+      'event_time',
+      'created_at',
+      'create_time',
+      'updated_at',
+      'timestamp',
+      '日期',
+      '时间'
+    ])
+  )
+  const alarmTitleKey = computed(() =>
+    findOptionalKey(props.component.option?.titleField, [
+      'title',
+      'name',
+      'label',
+      'alarm',
+      'alarm_title',
+      'message',
+      'subject',
+      'event',
+      '标题',
+      '名称',
+      '告警'
+    ])
+  )
+  const alarmContentKey = computed(() =>
+    findOptionalKey(props.component.option?.contentField, [
+      'content',
+      'description',
+      'desc',
+      'summary',
+      'detail',
+      'reason',
+      'message',
+      'remark',
+      '内容',
+      '说明',
+      '原因'
+    ])
+  )
+  const alarmLevelKey = computed(() =>
+    findOptionalKey(props.component.option?.levelField || props.component.option?.statusField, [
+      'level',
+      'severity',
+      'priority',
+      'status',
+      'state',
+      'type',
+      'risk',
+      '等级',
+      '级别',
+      '状态',
+      '类型'
+    ])
+  )
+  const alarmItems = computed<AlarmItem[]>(() => {
+    if (!hasBoundDataset.value && !(props.rows || []).length) return sampleAlarmItems
+    if (!alarmTitleKey.value) return []
+
+    const rows = props.rows || []
+    const items = rows
+      .map((row, index) => createAlarmItem(row, index))
+      .filter(Boolean) as AlarmItem[]
+
+    if (!items.some((item) => Number.isFinite(item.timestamp))) {
+      const maxRows = normalizeTimelineMaxRows(props.component.option?.maxRows)
+      return maxRows > 0 ? items.slice(0, maxRows) : items
+    }
+
+    const sortOrder = String(props.component.option?.sortOrder || 'desc')
+    const sorted = items.slice().sort((a, b) => {
+      const left = Number.isFinite(a.timestamp) ? a.timestamp : a.index
+      const right = Number.isFinite(b.timestamp) ? b.timestamp : b.index
+      return sortOrder === 'asc' ? left - right : right - left
+    })
+    const maxRows = normalizeTimelineMaxRows(props.component.option?.maxRows)
+    return maxRows > 0 ? sorted.slice(0, maxRows) : sorted
+  })
+  const alarmEmptyText = computed(() => {
+    if (!hasBoundDataset.value || !(props.rows || []).length) return '暂无告警'
+    if (!alarmTitleKey.value) return '请配置标题字段'
+    return '暂无有效告警'
+  })
+  const alarmStyleVars = computed(() => ({
+    '--alarm-accent': String(props.component.option?.accent || 'var(--saiboard-accent, #ffcf5a)')
+  }))
   const geoPoints = computed(() => {
     const points = normalizeGeoPoints()
     if (points.length) return points
@@ -1048,6 +1209,28 @@
     }
   }
 
+  function createAlarmItem(row: Record<string, any>, index: number) {
+    const title = String(row[alarmTitleKey.value] ?? '').trim()
+    if (!title) return undefined
+
+    const status = alarmLevelKey.value ? String(row[alarmLevelKey.value] ?? '').trim() : ''
+    const rawTime = alarmTimeKey.value ? String(row[alarmTimeKey.value] ?? '').trim() : ''
+    const contentKey =
+      alarmContentKey.value && alarmContentKey.value !== alarmTitleKey.value
+        ? alarmContentKey.value
+        : ''
+
+    return {
+      time: rawTime,
+      title,
+      content: contentKey ? String(row[contentKey] ?? '').trim() : '',
+      status,
+      tone: timelineTone(status),
+      timestamp: rawTime ? parseTimelineTimestamp(rawTime) : Number.NaN,
+      index
+    }
+  }
+
   function normalizeTimelineMaxRows(value: unknown) {
     const maxRows = Number(value ?? 8)
     if (!Number.isFinite(maxRows) || maxRows < 0) return 8
@@ -1070,20 +1253,52 @@
     return Number.isFinite(timestamp) ? timestamp : Number.NaN
   }
 
-  function timelineTone(status: string): TimelineItem['tone'] {
+  function timelineTone(status: string): StatusTone {
     const normalized = status.toLowerCase()
     if (
-      ['success', 'done', 'completed', 'ok', '1', '成功', '完成', '已完成'].includes(normalized)
+      [
+        'success',
+        'done',
+        'completed',
+        'ok',
+        'normal',
+        '1',
+        '成功',
+        '完成',
+        '已完成',
+        '正常'
+      ].includes(normalized)
     ) {
       return 'success'
     }
-    if (['warning', 'warn', 'pending', '2', '告警', '警告', '待处理'].includes(normalized)) {
+    if (
+      ['warning', 'warn', 'medium', 'pending', '2', '告警', '警告', '中', '待处理'].includes(
+        normalized
+      )
+    ) {
       return 'warning'
     }
-    if (['error', 'fail', 'failed', 'danger', '0', '失败', '异常', '错误'].includes(normalized)) {
+    if (
+      [
+        'error',
+        'fail',
+        'failed',
+        'danger',
+        'critical',
+        'high',
+        'urgent',
+        '0',
+        '失败',
+        '异常',
+        '错误',
+        '严重',
+        '高',
+        '紧急'
+      ].includes(normalized)
+    ) {
       return 'danger'
     }
-    if (['info', 'notice', '通知', '提示'].includes(normalized)) return 'info'
+    if (['info', 'notice', 'low', '通知', '提示', '低'].includes(normalized)) return 'info'
     return 'primary'
   }
 
@@ -1533,6 +1748,139 @@
     border-radius: 4px;
   }
 
+  .alarm-list {
+    height: 100%;
+    min-height: 0;
+    overflow: auto;
+  }
+
+  .alarm-list__item {
+    position: relative;
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr);
+    gap: 10px;
+    align-items: stretch;
+    min-height: 58px;
+    padding: 9px 10px;
+    margin-bottom: 8px;
+    overflow: hidden;
+    color: #d7e7ff;
+    background:
+      linear-gradient(90deg, color-mix(in srgb, var(--alarm-accent) 10%, transparent), transparent),
+      rgb(255 255 255 / 4%);
+    border: 1px solid color-mix(in srgb, var(--alarm-accent) 18%, transparent);
+    border-radius: 4px;
+  }
+
+  .alarm-list__item:last-child {
+    margin-bottom: 0;
+  }
+
+  .alarm-list__pulse {
+    position: relative;
+    width: 10px;
+    height: 10px;
+    margin-top: 7px;
+    background: var(--alarm-accent);
+    border-radius: 50%;
+    box-shadow:
+      0 0 0 4px color-mix(in srgb, var(--alarm-accent) 16%, transparent),
+      0 0 16px color-mix(in srgb, var(--alarm-accent) 62%, transparent);
+  }
+
+  .alarm-list__pulse::after {
+    position: absolute;
+    inset: -7px;
+    content: '';
+    border: 1px solid color-mix(in srgb, var(--alarm-accent) 42%, transparent);
+    border-radius: 50%;
+    animation: saiboard-alarm-pulse 1.8s ease-out infinite;
+  }
+
+  .alarm-list__item.is-success {
+    --alarm-accent: #14deba;
+  }
+
+  .alarm-list__item.is-warning {
+    --alarm-accent: #ffaf20;
+  }
+
+  .alarm-list__item.is-danger {
+    --alarm-accent: #fa8a6c;
+  }
+
+  .alarm-list__item.is-info {
+    --alarm-accent: #a8b4c6;
+  }
+
+  .alarm-list__main {
+    min-width: 0;
+  }
+
+  .alarm-list__header {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: space-between;
+    min-width: 0;
+  }
+
+  .alarm-list__title {
+    min-width: 0;
+    overflow: hidden;
+    font-size: 14px;
+    font-weight: 700;
+    color: #f8fbff;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .alarm-list__level {
+    flex: 0 0 auto;
+    max-width: 84px;
+    padding: 2px 7px;
+    overflow: hidden;
+    font-size: 12px;
+    line-height: 18px;
+    color: var(--alarm-accent);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    background: color-mix(in srgb, var(--alarm-accent) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--alarm-accent) 26%, transparent);
+    border-radius: 4px;
+  }
+
+  .alarm-list__desc {
+    display: -webkit-box;
+    margin-top: 5px;
+    overflow: hidden;
+    font-size: 12px;
+    line-height: 1.42;
+    color: rgb(215 231 255 / 74%);
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  .alarm-list__time {
+    margin-top: 5px;
+    overflow: hidden;
+    font-size: 12px;
+    color: rgb(215 231 255 / 56%);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .alarm-list__empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: rgb(215 231 255 / 72%);
+    background: rgb(255 255 255 / 4%);
+    border: 1px dashed rgb(255 255 255 / 16%);
+    border-radius: 4px;
+  }
+
   .chart-empty {
     display: flex;
     align-items: center;
@@ -1967,6 +2315,18 @@
 
     to {
       top: 100%;
+    }
+  }
+
+  @keyframes saiboard-alarm-pulse {
+    from {
+      opacity: 0.7;
+      transform: scale(0.6);
+    }
+
+    to {
+      opacity: 0;
+      transform: scale(1.55);
     }
   }
 

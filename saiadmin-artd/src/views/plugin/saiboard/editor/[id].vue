@@ -763,6 +763,96 @@
                 <ElColorPicker v-model="selectedComponent.option!.accent" />
               </ElFormItem>
             </template>
+            <template v-if="selectedComponent.type === 'alarm-list'">
+              <ElFormItem label="时间字段">
+                <ElSelect
+                  v-model="selectedComponent.option!.timeField"
+                  clearable
+                  filterable
+                  placeholder="自动识别"
+                  :disabled="!fieldOptions.length"
+                >
+                  <ElOption
+                    v-for="field in fieldOptions"
+                    :key="field"
+                    :label="field"
+                    :value="field"
+                  />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="标题字段">
+                <ElSelect
+                  v-model="selectedComponent.option!.titleField"
+                  clearable
+                  filterable
+                  placeholder="自动识别"
+                  :disabled="!fieldOptions.length"
+                >
+                  <ElOption
+                    v-for="field in fieldOptions"
+                    :key="field"
+                    :label="field"
+                    :value="field"
+                  />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="内容字段">
+                <ElSelect
+                  v-model="selectedComponent.option!.contentField"
+                  clearable
+                  filterable
+                  placeholder="自动识别"
+                  :disabled="!fieldOptions.length"
+                >
+                  <ElOption
+                    v-for="field in fieldOptions"
+                    :key="field"
+                    :label="field"
+                    :value="field"
+                  />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="级别字段">
+                <ElSelect
+                  v-model="selectedComponent.option!.levelField"
+                  clearable
+                  filterable
+                  placeholder="自动识别"
+                  :disabled="!fieldOptions.length"
+                >
+                  <ElOption
+                    v-for="field in fieldOptions"
+                    :key="field"
+                    :label="field"
+                    :value="field"
+                  />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="排序">
+                <ElSelect v-model="selectedComponent.option!.sortOrder">
+                  <ElOption label="时间倒序" value="desc" />
+                  <ElOption label="时间正序" value="asc" />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="最大条数">
+                <ElInputNumber
+                  v-model="selectedComponent.option!.maxRows"
+                  :min="0"
+                  :max="50"
+                  :step="1"
+                  step-strictly
+                />
+              </ElFormItem>
+              <ElFormItem label="显示时间">
+                <ElSwitch v-model="selectedComponent.option!.showTime" />
+              </ElFormItem>
+              <ElFormItem label="显示内容">
+                <ElSwitch v-model="selectedComponent.option!.showContent" />
+              </ElFormItem>
+              <ElFormItem label="强调色">
+                <ElColorPicker v-model="selectedComponent.option!.accent" />
+              </ElFormItem>
+            </template>
             <template v-if="selectedComponent.type === 'image-carousel'">
               <ElFormItem label="图片字段">
                 <ElSelect
@@ -1379,6 +1469,7 @@
   ])
   const kLineFieldOptionKeys = ['timeField', 'openField', 'closeField', 'highField', 'lowField']
   const timelineFieldOptionKeys = ['timeField', 'titleField', 'contentField', 'statusField']
+  const alarmFieldOptionKeys = ['timeField', 'titleField', 'contentField', 'levelField']
   const decorTypes = decorWidgetTypes
   const componentNeedsData = (component: BoardComponent) => !decorTypes.has(component.type)
   const componentGroupId = (component?: BoardComponent) => String(component?.option?.groupId || '')
@@ -1994,7 +2085,9 @@
 
   const componentRows = (component: BoardComponent) => {
     if (!componentNeedsData(component)) return []
-    if (!component.dataset?.queryTemplateId) return sampleRows
+    if (!component.dataset?.queryTemplateId) {
+      return component.type === 'alarm-list' ? [] : sampleRows
+    }
     return previewMap[component.id]?.rows || []
   }
 
@@ -2059,6 +2152,9 @@
     if (selectedComponent.value.type === 'event-timeline') {
       resetOptionFields(selectedComponent.value, timelineFieldOptionKeys)
     }
+    if (selectedComponent.value.type === 'alarm-list') {
+      resetOptionFields(selectedComponent.value, alarmFieldOptionKeys)
+    }
     await refreshComponentData(selectedComponent.value)
   }
 
@@ -2096,6 +2192,9 @@
     }
     if (component.type === 'event-timeline') {
       resetOptionFields(component, timelineFieldOptionKeys, fields)
+    }
+    if (component.type === 'alarm-list') {
+      resetOptionFields(component, alarmFieldOptionKeys, fields)
     }
   }
 

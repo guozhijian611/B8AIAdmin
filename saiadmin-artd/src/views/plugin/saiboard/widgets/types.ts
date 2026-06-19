@@ -41,6 +41,7 @@ export type WidgetType =
   | 'data-table'
   | 'image-carousel'
   | 'event-timeline'
+  | 'alarm-list'
   | 'geo-point-map'
   | 'decor-border'
   | 'decor-scanline'

@@ -166,6 +166,23 @@ export const widgetRegistry: WidgetMeta[] = [
     }
   },
   {
+    type: 'alarm-list',
+    name: '告警列表',
+    icon: 'ri:alarm-warning-line',
+    defaultRect: { x: 600, y: 1120, w: 520, h: 360, z: 1 },
+    defaultOption: {
+      timeField: '',
+      titleField: '',
+      contentField: '',
+      levelField: '',
+      maxRows: 8,
+      sortOrder: 'desc',
+      showTime: true,
+      showContent: true,
+      accent: '#ffcf5a'
+    }
+  },
+  {
     type: 'geo-point-map',
     name: '点位地图',
     icon: 'ri:map-pin-line',
