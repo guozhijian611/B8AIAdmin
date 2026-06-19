@@ -87,6 +87,12 @@
                       版本
                     </ElDropdownItem>
                     <ElDropdownItem
+                      v-permission="'saiboard:screen:tokens'"
+                      @click="openTokens(row)"
+                    >
+                      访问令牌
+                    </ElDropdownItem>
+                    <ElDropdownItem
                       v-permission="'saiboard:screen:index'"
                       @click="openMetrics(row)"
                     >
@@ -150,8 +156,8 @@
             <ElRadioButton :label="2">鉴权</ElRadioButton>
           </ElRadioGroup>
         </ElFormItem>
-        <ElFormItem v-if="form.is_public === 2" label="访问令牌">
-          <ElInput v-model="form.access_token" show-password />
+        <ElFormItem v-if="form.is_public === 2" label="旧单令牌">
+          <ElInput v-model="form.access_token" show-password placeholder="建议使用访问令牌管理" />
         </ElFormItem>
         <ElFormItem label="状态" prop="status">
           <ElRadioGroup v-model="form.status">
@@ -268,6 +274,89 @@
         <ElButton type="primary" @click="refreshVersions">刷新</ElButton>
       </template>
     </ElDialog>
+
+    <ElDialog
+      v-model="tokenVisible"
+      :title="`${tokenTarget?.name || '大屏'}访问令牌`"
+      width="920px"
+    >
+      <div class="token-toolbar">
+        <ElInput
+          v-model="tokenForm.name"
+          maxlength="80"
+          clearable
+          placeholder="客户或用途"
+          class="token-name-input"
+        />
+        <ElDatePicker
+          v-model="tokenForm.expire_time"
+          type="datetime"
+          value-format="YYYY-MM-DD HH:mm:ss"
+          placeholder="过期时间"
+          clearable
+        />
+        <ElButton
+          v-permission="'saiboard:screen:createToken'"
+          type="primary"
+          :loading="tokenCreating"
+          @click="createToken"
+        >
+          新增令牌
+        </ElButton>
+      </div>
+      <ElTable v-loading="tokenLoading" :data="tokenRows" row-key="id" max-height="430">
+        <ElTableColumn prop="name" label="名称" min-width="160" show-overflow-tooltip />
+        <ElTableColumn prop="token_prefix" label="前缀" width="110">
+          <template #default="{ row }">
+            <span class="token-prefix">{{ row.token_prefix }}...</span>
+          </template>
+        </ElTableColumn>
+        <ElTableColumn label="状态" width="100">
+          <template #default="{ row }">
+            <ElTag :type="tokenStatusType(row)">{{ tokenStatusLabel(row) }}</ElTag>
+          </template>
+        </ElTableColumn>
+        <ElTableColumn prop="expire_time" label="过期时间" width="180">
+          <template #default="{ row }">{{ row.expire_time || '长期有效' }}</template>
+        </ElTableColumn>
+        <ElTableColumn prop="last_used_time" label="最近使用" width="180">
+          <template #default="{ row }">{{ row.last_used_time || '-' }}</template>
+        </ElTableColumn>
+        <ElTableColumn prop="create_time" label="创建时间" width="180" />
+        <ElTableColumn label="操作" width="210" fixed="right">
+          <template #default="{ row }">
+            <ElSpace>
+              <ElButton
+                v-permission="'saiboard:screen:resetToken'"
+                size="small"
+                @click="resetToken(row)"
+              >
+                重置
+              </ElButton>
+              <ElButton
+                v-permission="'saiboard:screen:changeTokenStatus'"
+                size="small"
+                @click="changeTokenStatus(row, row.status === 1 ? 2 : 1)"
+              >
+                {{ row.status === 1 ? '停用' : '启用' }}
+              </ElButton>
+              <ElButton
+                v-permission="'saiboard:screen:deleteToken'"
+                size="small"
+                type="danger"
+                @click="deleteToken(row)"
+              >
+                删除
+              </ElButton>
+            </ElSpace>
+          </template>
+        </ElTableColumn>
+      </ElTable>
+      <template #footer>
+        <ElButton @click="tokenVisible = false">关闭</ElButton>
+        <ElButton type="primary" @click="refreshTokens">刷新</ElButton>
+      </template>
+    </ElDialog>
   </div>
 </template>
 
@@ -293,8 +382,14 @@
   const versionLoading = ref(false)
   const versionRows = ref<any[]>([])
   const versionTarget = ref<any>(null)
+  const tokenVisible = ref(false)
+  const tokenLoading = ref(false)
+  const tokenCreating = ref(false)
+  const tokenRows = ref<any[]>([])
+  const tokenTarget = ref<any>(null)
   const formRef = ref<FormInstance>()
   const search = reactive({ name: '', code: '', status: undefined as number | undefined })
+  const tokenForm = reactive({ name: '', expire_time: '' })
   const form = reactive({
     id: undefined as number | undefined,
     name: '',
@@ -478,6 +573,74 @@
     refreshVersions()
   }
 
+  const openTokens = async (row: any) => {
+    tokenTarget.value = row
+    Object.assign(tokenForm, { name: '', expire_time: '' })
+    tokenVisible.value = true
+    await refreshTokens()
+  }
+
+  const refreshTokens = async () => {
+    if (!tokenTarget.value?.id) return
+    tokenLoading.value = true
+    try {
+      const data = await api.tokens({ id: tokenTarget.value.id })
+      tokenRows.value = Array.isArray(data) ? data : []
+    } finally {
+      tokenLoading.value = false
+    }
+  }
+
+  const createToken = async () => {
+    if (!tokenTarget.value?.id) return
+    if (!tokenForm.name.trim()) {
+      ElMessage.warning('请填写令牌名称')
+      return
+    }
+    tokenCreating.value = true
+    try {
+      const data = await api.createToken({
+        id: tokenTarget.value.id,
+        name: tokenForm.name,
+        expire_time: tokenForm.expire_time
+      })
+      Object.assign(tokenForm, { name: '', expire_time: '' })
+      await refreshTokens()
+      await showPlainToken(data?.token)
+    } finally {
+      tokenCreating.value = false
+    }
+  }
+
+  const resetToken = async (row: any) => {
+    if (!tokenTarget.value?.id) return
+    await ElMessageBox.confirm(
+      `确定重置「${row.name}」的访问令牌吗？旧令牌会立即失效。`,
+      '重置令牌',
+      {
+        type: 'warning'
+      }
+    )
+    const data = await api.resetToken({ id: tokenTarget.value.id, token_id: row.id })
+    await refreshTokens()
+    await showPlainToken(data?.token)
+  }
+
+  const changeTokenStatus = async (row: any, status: number) => {
+    if (!tokenTarget.value?.id) return
+    await api.changeTokenStatus({ id: tokenTarget.value.id, token_id: row.id, status })
+    ElMessage.success(status === 1 ? '已启用' : '已停用')
+    refreshTokens()
+  }
+
+  const deleteToken = async (row: any) => {
+    if (!tokenTarget.value?.id) return
+    await ElMessageBox.confirm(`确定删除「${row.name}」吗？`, '删除令牌', { type: 'warning' })
+    await api.deleteToken({ id: tokenTarget.value.id, token_id: row.id })
+    ElMessage.success('删除成功')
+    refreshTokens()
+  }
+
   const openMetrics = async (row: any) => {
     metricsTarget.value = row
     metricsVisible.value = true
@@ -509,11 +672,47 @@
 
   const versionSourceLabel = (source: string) => versionSourceMap[source] || source || '保存'
 
+  const tokenStatusLabel = (row: any) => {
+    if (row.status === 2) return '停用'
+    return row.is_expired ? '已过期' : '启用'
+  }
+
+  const tokenStatusType = (row: any) => {
+    if (row.status === 2) return 'info'
+    return row.is_expired ? 'warning' : 'success'
+  }
+
+  const showPlainToken = async (token?: string) => {
+    if (!token) return
+    await ElMessageBox.alert(
+      `令牌：${token}\n\n请立即保存，关闭后无法再次查看。`,
+      '访问令牌只显示一次',
+      {
+        confirmButtonText: '我已保存'
+      }
+    )
+  }
+
   onMounted(loadData)
 </script>
 
 <style scoped lang="scss">
   .metrics-panel {
     min-height: 160px;
+  }
+
+  .token-toolbar {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+
+  .token-name-input {
+    width: 220px;
+  }
+
+  .token-prefix {
+    font-family: monospace;
   }
 </style>

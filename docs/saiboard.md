@@ -1,6 +1,6 @@
 # SAI Board 大屏可视化插件说明（P0 已落地）
 
-本文档说明 `saiboard` 插件在 B8AIadmin 中的功能边界、技术选型、数据库设计、后端分层、前端集成、鉴权模型和后续计划。当前已完成 P0 最小可用版本，实际入口以 `server/plugin/saiboard`、`saiadmin-artd/src/views/plugin/saiboard`、`Database/migrations/20260619000100_add_saiboard_plugin.php` 和 `Database/migrations/20260619000200_add_saiboard_screen_version.php` 为准。
+本文档说明 `saiboard` 插件在 B8AIadmin 中的功能边界、技术选型、数据库设计、后端分层、前端集成、鉴权模型和后续计划。当前已完成 P0 最小可用版本和部分 P1/P2 能力，实际入口以 `server/plugin/saiboard`、`saiadmin-artd/src/views/plugin/saiboard`、`Database/migrations/20260619000100_add_saiboard_plugin.php`、`Database/migrations/20260619000200_add_saiboard_screen_version.php` 和 `Database/migrations/20260619000300_add_saiboard_screen_token.php` 为准。
 
 > 设计第一原则：**尽可能简单**。只用项目已有依赖（Vue 3 + Element Plus + echarts 6），不引入 go-view、naive-ui、DataV 等需要长期 fork 维护的重型前端工程；**编辑器与对外运行时共用同一套图表渲染组件**，保证「编辑所见 = 运行所得」，避免双引擎割裂。
 
@@ -80,7 +80,7 @@ server/plugin/saiboard/
 │   ├── service/
 │   │   ├── DataSourceExecutor.php   ← MySQL/HTTP 执行器（核心，含 SSRF 防护）
 │   │   └── SqlBuilder.php           ← 预置模板拼装（参数化 SELECT，替代裸 SQL）
-│   └── model/            Screen, Datasource, QueryTemplate
+│   └── model/            Screen, ScreenToken, ScreenVersion, Datasource, QueryTemplate
 ├── config/
 │   ├── route.php         ← 显式注册 admin 路由 + api 路由
 │   └── middleware.php    ← admin: CheckLogin+CheckAuth+SystemLog；api: 空（自鉴权）
@@ -135,13 +135,29 @@ saiadmin-artd/src/views/plugin/saiboard/
 | `width` / `height` | int | 画布设计尺寸，如 1920×1080。 |
 | `bg_config` | json | 背景、主题与运行时适配：`color`、`theme`、`fit_mode`、`image`、`image_fit` 等。 |
 | `is_public` | tinyint unsigned | 1对外公开 2需鉴权。 |
-| `access_token` | varchar(64) NULL | `is_public=2` 时校验用，空则要求后台登录态。 |
+| `access_token` | varchar(64) NULL | 旧单令牌入口；仅在未配置启用且未过期的子令牌时作为手动兼容兜底，空则要求后台登录态。 |
 | `draft_layout` | json | **编辑中的**画布尺寸、背景配置与组件树，`saveLayout` 只写这里。 |
 | `layout` | json | **已发布的**组件树，运行时只读这里；`publish` 时由 `draft_layout` 拷贝而来。 |
 | `status` | tinyint unsigned | 1已发布 2草稿。 |
 | 审计字段 | | 同上。 |
 
 > `draft_layout` 与 `layout` 分离：编辑过程不会污染线上已发布大屏，运行时永远拿稳定快照。这是 P0 就要落地的最小版本管理。
+
+### `saiboard_screen_token` 大屏访问令牌表
+
+用于一个大屏下发多个客户专属访问令牌，每个令牌可单独停用、重置或删除。子令牌明文只在创建 / 重置时返回一次，数据库只保存 SHA-256 哈希和前缀；只要存在启用且未过期的子令牌，公开运行时就不再接受旧 `access_token`，避免子令牌吊销被旧入口绕过。
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | bigint unsigned PK | 主键。 |
+| `screen_id` | bigint unsigned | 归属大屏。 |
+| `name` | varchar(80) | 令牌名称，通常填写客户名或用途。 |
+| `token_prefix` | varchar(16) | 明文令牌前缀，用于后台识别。 |
+| `token_hash` | char(64) | 明文令牌的 SHA-256 哈希，唯一索引。 |
+| `last_used_time` | datetime NULL | 最近一次公开运行时使用时间。 |
+| `expire_time` | datetime NULL | 过期时间，空表示长期有效。 |
+| `status` | tinyint unsigned | 1启用 2停用。 |
+| 审计字段 | | 同上。 |
 
 ### `saiboard_query_template` 查询模板表
 
@@ -221,7 +237,7 @@ saiadmin-artd/src/views/plugin/saiboard/
 
 - `getScreen(code)`：下发**已发布** `layout`（脱敏，不含任何密钥）。
 - `data(code, cid)`：
-  1. 按 `code` 取大屏 → 校验 `is_public` / `access_token` / 登录态；
+  1. 按 `code` 取大屏 → 校验 `is_public` / 多访问令牌 / 旧 `access_token` / 登录态；
   2. 在该大屏 `layout.components` 中按 `cid` 找到组件 → 取其绑定的 `queryTemplateId`（**服务端解析，不信任前端传入**）；
   3. 取 `query_template` → `DataSourceExecutor` 执行 → 返回 `{rows, total}`。
 
@@ -252,7 +268,7 @@ saiadmin-artd/src/views/plugin/saiboard/
 | 越权取数（IDOR） | `data` 接口以 `code + cid` 为键，组件绑定的 `queryTemplateId` 由服务端从该大屏 `layout` 解析，**前端不能指定任意模板/数据源 id**；运行时还会校验模板、数据源与大屏创建者一致，兜底拦截历史异常 layout。 |
 | 后台数据越权 | 大屏、数据源、查询模板 Logic 显式开启 `scope`，按 `created_by` 与角色数据权限过滤；数据源测试 / 表结构、查询模板预览、layout 绑定模板、运行统计等自定义入口也走归属校验。 |
 | SSRF（HTTP 数据源） | 后端代发 GET 前解析目标域名 → 拒绝内网 / 环回 / 链路本地地址（`127.0.0.0/8`、`10/8`、`172.16/12`、`192.168/16`、`169.254/16`、`::1` 等）与云元数据地址；可选出网域名白名单。 |
-| 密钥泄露 | 数据源 `config`（DB 密码、请求头 token）只在后端持有，`getScreen` 下发时剥离。 |
+| 密钥泄露 | 数据源 `config`（DB 密码、请求头 token）只在后端持有，`getScreen` 下发时剥离；大屏子令牌只保存哈希，明文仅创建 / 重置后显示一次。 |
 | 公开大屏被刷 | `cache_ttl` 通过 Webman Cache 缓存结果；公开运行时下发 layout 时强制 `dataset.refresh` 不低于 10 秒；按 IP / 大屏 / 创建人维度做固定窗口限流；缓存 miss 优先使用 Redis 原子锁互斥回源，锁竞争时返回“数据缓存刷新中”，异常时可回退 stale 缓存。 |
 | 日志脱敏 | 连接配置、token、Bearer 在日志/调试页脱敏，仅 `last_error` 存非敏感错误摘要。 |
 
@@ -262,15 +278,17 @@ saiadmin-artd/src/views/plugin/saiboard/
 getScreen / data 接口入口：
   if screen.is_public == 1:    放行（公开大屏，展厅 / 投屏场景）
   if screen.is_public == 2:
-      if access_token 非空:    校验请求中的 token（query 或 header）
-      else:                    要求后台 JWT 登录态（复用 CheckLogin 逻辑）
+      if 请求 token 命中启用且未过期的 screen_token: 放行，并节流刷新 last_used_time
+      else if 存在启用且未过期的 screen_token:        拒绝访问
+      else if access_token 非空:                      校验旧单 token 字段（兼容未迁移的已发布链接）
+      else:                                           要求后台 JWT 登录态（复用 CheckLogin 逻辑）
 ```
 
-覆盖三种场景：完全公开大屏、带令牌的对外大屏（客户专属）、仅内部登录可看的报表。
+覆盖三种场景：完全公开大屏、带令牌的对外大屏（客户专属 / 可独立吊销）、仅内部登录可看的报表。
 
 后台管理端额外启用 SaiAdmin 数据权限：普通角色只能管理自己 `created_by` 范围内的大屏、数据源和查询模板；大屏保存 / 发布时会校验 layout 中绑定的查询模板归属，查询模板保存 / 预览时会校验数据源归属。若具备数据范围权限的用户复制他人可见大屏，副本会保留视觉布局但清空查询模板绑定，避免跨归属数据依赖。
 
-> P0 用单 `access_token` 字段（最简）。若后续需要「按客户分发多个可独立吊销的 token」，再加 `saiboard_screen_token` 子表，放 P2。
+> 旧 `access_token` 字段继续作为无子令牌时的兼容兜底存在；新建客户级令牌应优先使用 `saiboard_screen_token` 子表，避免在数据库保存明文 token，并获得独立吊销能力。
 
 ## 前端关键点
 
@@ -421,7 +439,7 @@ cd ../saiadmin-artd
 pnpm install
 ```
 
-数据库结构和预设数据由 Phinx 迁移 `Database/migrations/20260619000100_add_saiboard_plugin.php` 维护：
+数据库结构和预设数据由 Phinx 迁移维护：
 
 ```bash
 cd server
@@ -432,7 +450,9 @@ php webman b8:migrate
 
 迁移包含：
 
-- 建表 `saiboard_datasource` / `saiboard_screen` / `saiboard_query_template`，幂等。
+- `20260619000100_add_saiboard_plugin.php`：建表 `saiboard_datasource` / `saiboard_screen` / `saiboard_query_template`，幂等。
+- `20260619000200_add_saiboard_screen_version.php`：建表 `saiboard_screen_version`，增加版本权限。
+- `20260619000300_add_saiboard_screen_token.php`：建表 `saiboard_screen_token`，增加访问令牌权限。
 - 后台菜单「大屏管理 / 数据源管理 / 查询模板 / 大屏编辑器」，权限 slug 见后端分层表。
 - 初始化只读账号使用说明（文档，不写入迁移）。
 
@@ -460,11 +480,11 @@ php webman b8:migrate
 
 ### P2 进阶
 
-- 已完成：大屏克隆（保留草稿 / 发布布局，重置访问编码、访问令牌和状态）。
+- 已完成：大屏克隆（保留草稿 / 发布布局，重置访问编码、清空旧单令牌和状态）。
 - 已完成：大屏版本管理（保存 / 发布自动快照、最近 50 个版本列表、恢复到草稿、删除快照）。
 - 已完成：数据权限 `scope`（按 `created_by` 隔离大屏 / 数据源 / 查询模板，并覆盖自定义数据源、预览、layout 绑定和运行统计入口）。
+- 已完成：多 token 子表（`saiboard_screen_token`，按客户分发、哈希存储、可独立停用 / 重置 / 删除）。
 - 未完成：组件 / 模板市场。
-- 多 token 子表（`saiboard_screen_token`，按客户分发可独立吊销）。
 
 ## 已知边界与后续风险
 
@@ -475,7 +495,7 @@ php webman b8:migrate
 
 ## 排障
 
-- 运行时 401：检查大屏是否公开；如为 token 模式，访问 `/screen/:code?token=...` 或请求头传递 `X-Saiboard-Token`。
+- 运行时 401：检查大屏是否公开；如为 token 模式，访问 `/screen/:code?token=...` 或请求头传递 `X-Saiboard-Token`；多访问令牌只在创建 / 重置时显示一次，后台列表只能看到前缀。
 - SQL 白名单拦截：确认查询模板里的 `table`、`fields`、`conditions.field`、`order.field` 都是目标数据源真实存在的表和字段。
 - HTTP 数据源失败：确认 URL 是公网 `http/https` 地址；localhost、内网 IP、保留地址和无法 DNS 解析的域名会被 SSRF 防护拦截。
 - 数据不刷新：检查数据源 `cache_ttl` 和组件 `dataset.refresh`；预览接口会强制绕过缓存，运行时接口会按 `cache_ttl` 复用结果，公开运行时轮询下限为 10 秒。

@@ -194,6 +194,95 @@ class ScreenController extends AbstractCrudController
             : $this->fail('删除失败');
     }
 
+    #[Apidoc\Title('大屏访问令牌列表')]
+    #[Apidoc\Url('/app/saiboard/admin/Screen/tokens')]
+    #[Apidoc\Method('GET')]
+    #[Apidoc\Query('id', type: 'int', require: true, desc: '大屏ID')]
+    #[Permission('大屏访问令牌列表', 'saiboard:screen:tokens')]
+    public function tokens(Request $request): Response
+    {
+        $id = (int) $request->input('id', 0);
+        if ($id <= 0) {
+            return $this->fail('请选择大屏');
+        }
+
+        return $this->success($this->logic->tokens($id));
+    }
+
+    #[Apidoc\Title('创建大屏访问令牌')]
+    #[Apidoc\Url('/app/saiboard/admin/Screen/createToken')]
+    #[Apidoc\Method('POST')]
+    #[Apidoc\Param('id', type: 'int', require: true, desc: '大屏ID')]
+    #[Apidoc\Param('name', type: 'string', require: true, desc: '令牌名称')]
+    #[Apidoc\Param('expire_time', type: 'string', require: false, desc: '过期时间')]
+    #[Permission('创建大屏访问令牌', 'saiboard:screen:createToken')]
+    public function createToken(Request $request): Response
+    {
+        $id = (int) $request->post('id', 0);
+        if ($id <= 0) {
+            return $this->fail('请选择大屏');
+        }
+
+        return $this->success($this->logic->createToken($id, $request->post()), '创建成功');
+    }
+
+    #[Apidoc\Title('重置大屏访问令牌')]
+    #[Apidoc\Url('/app/saiboard/admin/Screen/resetToken')]
+    #[Apidoc\Method('POST')]
+    #[Apidoc\Param('id', type: 'int', require: true, desc: '大屏ID')]
+    #[Apidoc\Param('token_id', type: 'int', require: true, desc: '令牌ID')]
+    #[Permission('重置大屏访问令牌', 'saiboard:screen:resetToken')]
+    public function resetToken(Request $request): Response
+    {
+        $id = (int) $request->post('id', 0);
+        $tokenId = (int) $request->post('token_id', 0);
+        if ($id <= 0 || $tokenId <= 0) {
+            return $this->fail('参数错误');
+        }
+
+        return $this->success($this->logic->resetToken($id, $tokenId), '重置成功');
+    }
+
+    #[Apidoc\Title('大屏访问令牌状态')]
+    #[Apidoc\Url('/app/saiboard/admin/Screen/changeTokenStatus')]
+    #[Apidoc\Method('POST')]
+    #[Apidoc\Param('id', type: 'int', require: true, desc: '大屏ID')]
+    #[Apidoc\Param('token_id', type: 'int', require: true, desc: '令牌ID')]
+    #[Apidoc\Param('status', type: 'int', require: true, desc: '状态 1启用 2停用')]
+    #[Permission('大屏访问令牌状态', 'saiboard:screen:changeTokenStatus')]
+    public function changeTokenStatus(Request $request): Response
+    {
+        $id = (int) $request->post('id', 0);
+        $tokenId = (int) $request->post('token_id', 0);
+        $status = (int) $request->post('status', 1);
+        if ($id <= 0 || $tokenId <= 0) {
+            return $this->fail('参数错误');
+        }
+
+        return $this->logic->changeTokenStatus($id, $tokenId, $status)
+            ? $this->success('操作成功')
+            : $this->fail('操作失败');
+    }
+
+    #[Apidoc\Title('删除大屏访问令牌')]
+    #[Apidoc\Url('/app/saiboard/admin/Screen/deleteToken')]
+    #[Apidoc\Method('DELETE')]
+    #[Apidoc\Param('id', type: 'int', require: true, desc: '大屏ID')]
+    #[Apidoc\Param('token_id', type: 'int', require: true, desc: '令牌ID')]
+    #[Permission('删除大屏访问令牌', 'saiboard:screen:deleteToken')]
+    public function deleteToken(Request $request): Response
+    {
+        $id = (int) $request->post('id', 0);
+        $tokenId = (int) $request->post('token_id', 0);
+        if ($id <= 0 || $tokenId <= 0) {
+            return $this->fail('参数错误');
+        }
+
+        return $this->logic->deleteToken($id, $tokenId)
+            ? $this->success('删除成功')
+            : $this->fail('删除失败');
+    }
+
     #[Apidoc\Title('大屏运行统计')]
     #[Apidoc\Url('/app/saiboard/admin/Screen/runtimeMetrics')]
     #[Apidoc\Method('GET')]

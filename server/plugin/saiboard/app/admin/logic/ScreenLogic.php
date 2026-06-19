@@ -5,6 +5,7 @@ namespace plugin\saiboard\app\admin\logic;
 use plugin\saiadmin\basic\think\BaseLogic;
 use plugin\saiadmin\exception\ApiException;
 use plugin\saiboard\app\model\Screen;
+use plugin\saiboard\app\model\ScreenToken;
 use plugin\saiboard\app\model\ScreenVersion;
 
 class ScreenLogic extends BaseLogic
@@ -89,7 +90,7 @@ class ScreenLogic extends BaseLogic
         unset($data['id'], $data['create_time'], $data['update_time'], $data['delete_time']);
         $data['name'] = $data['name'] . ' 副本';
         $data['code'] = $this->generateCode();
-        $data['access_token'] = $this->generateToken();
+        $data['access_token'] = '';
         $data['status'] = 2;
         $data['draft_layout'] = $this->normalizeLayout($draftLayout, $width, $height);
         $data['layout'] = $this->normalizeLayout($publishedLayout, $width, $height);
@@ -152,6 +153,73 @@ class ScreenLogic extends BaseLogic
         return (bool) $version->delete();
     }
 
+    public function tokens(int $screenId): array
+    {
+        $this->read($screenId);
+
+        $rows = [];
+        foreach (ScreenToken::where('screen_id', $screenId)
+            ->whereNull('delete_time')
+            ->order('id', 'desc')
+            ->select() as $token) {
+            $rows[] = $this->formatTokenRow($token);
+        }
+
+        return $rows;
+    }
+
+    public function createToken(int $screenId, array $data): array
+    {
+        $this->read($screenId);
+        $plainToken = $this->generateToken();
+        $token = ScreenToken::create([
+            'screen_id' => $screenId,
+            'name' => $this->normalizeTokenName($data['name'] ?? ''),
+            'token_prefix' => substr($plainToken, 0, 8),
+            'token_hash' => $this->tokenHash($plainToken),
+            'expire_time' => $this->normalizeExpireTime($data['expire_time'] ?? null),
+            'status' => 1,
+        ]);
+
+        return [
+            'token' => $plainToken,
+            'row' => $this->formatTokenRow($token),
+        ];
+    }
+
+    public function resetToken(int $screenId, int $tokenId): array
+    {
+        $this->read($screenId);
+        $token = $this->tokenRow($screenId, $tokenId);
+        $plainToken = $this->generateToken();
+        $token->save([
+            'token_prefix' => substr($plainToken, 0, 8),
+            'token_hash' => $this->tokenHash($plainToken),
+            'last_used_time' => null,
+        ]);
+
+        return [
+            'token' => $plainToken,
+            'row' => $this->formatTokenRow($token),
+        ];
+    }
+
+    public function changeTokenStatus(int $screenId, int $tokenId, int $status): bool
+    {
+        $this->read($screenId);
+        if (!in_array($status, [1, 2], true)) {
+            throw new ApiException('状态值不正确');
+        }
+
+        return (bool) $this->tokenRow($screenId, $tokenId)->save(['status' => $status]);
+    }
+
+    public function deleteToken(int $screenId, int $tokenId): bool
+    {
+        $this->read($screenId);
+        return (bool) $this->tokenRow($screenId, $tokenId)->delete();
+    }
+
     public function visibleIds(): array
     {
         $query = Screen::field('id');
@@ -199,10 +267,6 @@ class ScreenLogic extends BaseLogic
         }
         if ($query->whereNull('delete_time')->value('id')) {
             throw new ApiException('访问编码已存在');
-        }
-
-        if ((int) $data['is_public'] === 2 && trim((string) ($data['access_token'] ?? '')) === '') {
-            $data['access_token'] = $this->generateToken();
         }
 
         return $data;
@@ -346,5 +410,63 @@ class ScreenLogic extends BaseLogic
     private function generateToken(): string
     {
         return bin2hex(random_bytes(24));
+    }
+
+    private function tokenRow(int $screenId, int $tokenId): ScreenToken
+    {
+        $token = ScreenToken::where('screen_id', $screenId)
+            ->where('id', $tokenId)
+            ->whereNull('delete_time')
+            ->findOrEmpty();
+        if ($token->isEmpty()) {
+            throw new ApiException('访问令牌不存在');
+        }
+
+        return $token;
+    }
+
+    private function normalizeTokenName(mixed $name): string
+    {
+        $name = trim((string) $name);
+        if ($name === '') {
+            throw new ApiException('请填写令牌名称');
+        }
+
+        return mb_substr($name, 0, 80);
+    }
+
+    private function normalizeExpireTime(mixed $value): ?string
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return null;
+        }
+
+        $timestamp = strtotime($value);
+        if (!$timestamp) {
+            throw new ApiException('过期时间不正确');
+        }
+
+        return date('Y-m-d H:i:s', $timestamp);
+    }
+
+    private function tokenHash(string $token): string
+    {
+        return hash('sha256', $token);
+    }
+
+    private function formatTokenRow(ScreenToken $token): array
+    {
+        $row = $token->toArray();
+        unset($row['token_hash']);
+        $row['is_expired'] = $this->isTokenExpired($row['expire_time'] ?? null);
+
+        return $row;
+    }
+
+    private function isTokenExpired(mixed $expireTime): bool
+    {
+        $expireTime = trim((string) $expireTime);
+        return $expireTime !== '' && strtotime($expireTime) <= time();
     }
 }

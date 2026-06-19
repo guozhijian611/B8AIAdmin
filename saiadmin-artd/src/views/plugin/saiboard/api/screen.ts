@@ -37,6 +37,21 @@ export default {
   deleteVersion(data: Record<string, any>) {
     return request.del<any>({ url: '/app/saiboard/admin/Screen/deleteVersion', data })
   },
+  tokens(params: Record<string, any>) {
+    return request.get<any>({ url: '/app/saiboard/admin/Screen/tokens', params })
+  },
+  createToken(data: Record<string, any>) {
+    return request.post<any>({ url: '/app/saiboard/admin/Screen/createToken', data })
+  },
+  resetToken(data: Record<string, any>) {
+    return request.post<any>({ url: '/app/saiboard/admin/Screen/resetToken', data })
+  },
+  changeTokenStatus(data: Record<string, any>) {
+    return request.post<any>({ url: '/app/saiboard/admin/Screen/changeTokenStatus', data })
+  },
+  deleteToken(data: Record<string, any>) {
+    return request.del<any>({ url: '/app/saiboard/admin/Screen/deleteToken', data })
+  },
   runtimeMetrics(params: Record<string, any> = {}) {
     return request.get<any>({ url: '/app/saiboard/admin/Screen/runtimeMetrics', params })
   }

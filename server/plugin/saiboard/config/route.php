@@ -15,6 +15,11 @@ Route::group('/app/saiboard/admin', function () {
     Route::get('/Screen/versions', [ScreenController::class, 'versions']);
     Route::post('/Screen/restoreVersion', [ScreenController::class, 'restoreVersion']);
     Route::delete('/Screen/deleteVersion', [ScreenController::class, 'deleteVersion']);
+    Route::get('/Screen/tokens', [ScreenController::class, 'tokens']);
+    Route::post('/Screen/createToken', [ScreenController::class, 'createToken']);
+    Route::post('/Screen/resetToken', [ScreenController::class, 'resetToken']);
+    Route::post('/Screen/changeTokenStatus', [ScreenController::class, 'changeTokenStatus']);
+    Route::delete('/Screen/deleteToken', [ScreenController::class, 'deleteToken']);
     Route::get('/Screen/runtimeMetrics', [ScreenController::class, 'runtimeMetrics']);
 
     fastRoute('Datasource', DatasourceController::class);

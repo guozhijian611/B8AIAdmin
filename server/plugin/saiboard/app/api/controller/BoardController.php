@@ -7,6 +7,7 @@ use InvalidArgumentException;
 use plugin\saiboard\app\model\Datasource;
 use plugin\saiboard\app\model\QueryTemplate;
 use plugin\saiboard\app\model\Screen;
+use plugin\saiboard\app\model\ScreenToken;
 use plugin\saiboard\app\service\DataSourceExecutor;
 use plugin\saiboard\app\service\RuntimeGuard;
 use RuntimeException;
@@ -20,6 +21,7 @@ class BoardController
 {
     private const MIN_REFRESH_SECONDS = 10;
     private const MAX_REFRESH_SECONDS = 3600;
+    private const TOKEN_TOUCH_INTERVAL_SECONDS = 60;
 
     public function __construct(
         private readonly DataSourceExecutor $executor = new DataSourceExecutor(),
@@ -138,7 +140,14 @@ class BoardController
             return true;
         }
 
-        $token = (string) ($request->input('token', '') ?: $request->header('x-saiboard-token', ''));
+        $token = trim((string) ($request->input('token', '') ?: $request->header('x-saiboard-token', '')));
+        if ($token !== '' && $this->validScreenToken($screen, $token)) {
+            return true;
+        }
+        if ($this->hasActiveScreenTokens($screen)) {
+            return false;
+        }
+
         $accessToken = trim((string) $screen->access_token);
         if ($accessToken !== '') {
             return $token !== '' && hash_equals($accessToken, $token);
@@ -146,6 +155,55 @@ class BoardController
 
         $current = getCurrentInfo();
         return is_array($current) && ($current['plat'] ?? '') === 'saiadmin';
+    }
+
+    private function validScreenToken(Screen $screen, string $token): bool
+    {
+        $record = ScreenToken::where('screen_id', (int) $screen->id)
+            ->where('token_hash', hash('sha256', $token))
+            ->where('status', 1)
+            ->whereNull('delete_time')
+            ->findOrEmpty();
+        if ($record->isEmpty() || $this->tokenExpired($record->expire_time ?? null)) {
+            return false;
+        }
+
+        if ($this->shouldTouchToken($record->last_used_time ?? null)) {
+            $record->save(['last_used_time' => date('Y-m-d H:i:s')]);
+        }
+
+        return true;
+    }
+
+    private function hasActiveScreenTokens(Screen $screen): bool
+    {
+        foreach (ScreenToken::where('screen_id', (int) $screen->id)
+            ->where('status', 1)
+            ->whereNull('delete_time')
+            ->select() as $record) {
+            if (!$this->tokenExpired($record->expire_time ?? null)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function tokenExpired(mixed $expireTime): bool
+    {
+        $expireTime = trim((string) $expireTime);
+        return $expireTime !== '' && strtotime($expireTime) <= time();
+    }
+
+    private function shouldTouchToken(mixed $lastUsedTime): bool
+    {
+        $lastUsedTime = trim((string) $lastUsedTime);
+        if ($lastUsedTime === '') {
+            return true;
+        }
+
+        $timestamp = strtotime($lastUsedTime);
+        return !$timestamp || time() - $timestamp >= self::TOKEN_TOUCH_INTERVAL_SECONDS;
     }
 
     private function publicLayout(array $layout): array
