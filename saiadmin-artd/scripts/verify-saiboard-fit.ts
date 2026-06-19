@@ -22,7 +22,7 @@ const assertFit = (label: string, actual: ExpectedFit, expected: ExpectedFit) =>
 }
 
 assertFit(
-  'contain keeps the whole canvas visible and centers letterbox space',
+  'contain keeps the whole canvas visible and centers horizontal letterbox space',
   resolveBoardFit({
     viewportWidth: 2048,
     viewportHeight: 990,
@@ -41,13 +41,33 @@ assertFit(
 )
 
 assertFit(
-  'cover fills the viewport and allows horizontal cropping',
+  'cover fills the viewport and keeps the top edge visible by default',
   resolveBoardFit({
     viewportWidth: 2048,
     viewportHeight: 990,
     canvasWidth: 1920,
     canvasHeight: 1080,
     mode: 'cover'
+  }),
+  {
+    scaleX: 16 / 15,
+    scaleY: 16 / 15,
+    x: 0,
+    y: 0,
+    scaledWidth: 2048,
+    scaledHeight: 1152
+  }
+)
+
+assertFit(
+  'cover can still center vertical cropping when requested',
+  resolveBoardFit({
+    viewportWidth: 2048,
+    viewportHeight: 990,
+    canvasWidth: 1920,
+    canvasHeight: 1080,
+    mode: 'cover',
+    alignY: 'center'
   }),
   {
     scaleX: 16 / 15,
@@ -92,7 +112,7 @@ assertFit(
     scaleX: 1,
     scaleY: 1,
     x: 960,
-    y: 540,
+    y: 0,
     scaledWidth: 1920,
     scaledHeight: 1080
   }

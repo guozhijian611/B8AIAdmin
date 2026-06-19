@@ -55,6 +55,7 @@ export interface BoardBgConfig {
   color?: string
   theme?: string
   fit_mode?: string
+  fit_align?: string
   image?: string
   image_fit?: string
 }

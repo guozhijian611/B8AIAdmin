@@ -138,7 +138,7 @@ saiadmin-artd/src/views/plugin/saiboard/
 | `code` | varchar(32) | 对外访问编码，唯一索引；留空自动生成，手动填写仅允许字母、数字、下划线和短横线。 |
 | `name` | varchar(60) | 大屏名称。 |
 | `width` / `height` | int | 画布设计尺寸，如 1920×1080。 |
-| `bg_config` | json | 背景、主题与运行时适配：`color`、`theme`、`fit_mode`、`image`、`image_fit` 等。 |
+| `bg_config` | json | 背景、主题与运行时适配：`color`、`theme`、`fit_mode`、`fit_align`、`image`、`image_fit` 等。 |
 | `is_public` | tinyint unsigned | 1对外公开 2需鉴权。 |
 | `access_token` | varchar(64) NULL | 旧单令牌历史入口；后台表单不再新增或编辑，仅在未配置启用且未过期的子令牌时作为历史兼容兜底，空则要求后台登录态。 |
 | `draft_layout` | json | **编辑中的**画布尺寸、背景配置与组件树，`saveLayout` 只写这里。 |
@@ -212,7 +212,7 @@ saiadmin-artd/src/views/plugin/saiboard/
 ```json
 {
   "canvas": { "width": 1920, "height": 1080 },
-  "bg_config": { "color": "#07111f", "theme": "midnight", "fit_mode": "contain" },
+  "bg_config": { "color": "#07111f", "theme": "midnight", "fit_mode": "contain", "fit_align": "top" },
   "components": [
     {
       "id": "w_1",
@@ -332,7 +332,7 @@ getScreen / data 接口入口：
 - 在 `staticRoutes.ts` 显式注册，不进后台布局、不依赖动态菜单；页面级是否放行交给后端 `getScreen` / `data` 接口按大屏配置判定。
 - 管理端当前使用 `createWebHashHistory()`；对外裸入口 `/screen/:code` 会在前端启动时归一化为 `/#/screen/:code`，后台列表和编辑器预览也使用 hash 入口打开，避免未登录用户被后台首页守卫误导到登录页。
 - 复用 `widgets/` 同一套组件，外层只读容器；按 `screen.width/height` 设计稿做运行时适配（监听 resize）。
-- `bg_config.fit_mode` 支持 `contain` / `cover` / `stretch`：`contain` 完整显示设计稿并居中留边，`cover` 等比铺满视口并允许边缘裁切，`stretch` 按视口宽高分别拉伸，适合固定比例投屏。
+- `bg_config.fit_mode` 支持 `contain` / `cover` / `stretch`：`contain` 完整显示设计稿并留边，`cover` 等比铺满视口并允许边缘裁切，`stretch` 按视口宽高分别拉伸，适合固定比例投屏。`bg_config.fit_align` 支持 `top` / `center` / `bottom`，默认 `top`，避免 `cover` 在宽屏或 `contain` 在竖屏时把顶部指标卡裁掉或挤到屏幕中间；需要传统居中留边时可改为 `center`。
 - `bg_config` 支持 `theme` 主题预设、背景色、背景图 URL 和 `image_fit`（铺满裁切 / 完整显示 / 拉伸 / 平铺）；编辑器和运行时复用同一套样式生成逻辑。
 - 按各数据组件 `dataset.refresh` 轮询 `/data`，公开运行时最小 10 秒；运行时默认用 POST 传递组件级复杂参数，后端保留 GET 兼容；纯装饰组件不绑定查询模板、不触发运行时取数。
 - `draft=1` 只作为后台草稿预览开关使用，运行时和后端都会把它作为系统参数过滤，避免误传给查询模板。
@@ -628,8 +628,9 @@ HTTP 模板不自动透传所有 URL 参数，只替换配置里明确写出的 
 - 统一缩放公式在 `widgets/fit.ts`。编辑器和运行页都通过 `resolveBoardFit()` 计算设计稿与容器之间的 scale、偏移和缩放后尺寸。
 - 编辑器「适应窗口」固定使用 `contain`，按容器宽高和 32px 操作留边等比缩放，最大不超过 100%。画布内部仍保留设计稿坐标，例如 1920 × 1080；外层使用缩放后的宽高占位，避免缩小后滚动区域仍按原尺寸计算。
 - 编辑器画布用了 CSS `transform: scale(...)`，`DraggableItem.vue` 和多选框会把拖拽 / 缩放事件的屏幕像素差值除以 `effectiveZoom`，再写回设计稿坐标，保证在 auto / 50% / 75% 下编辑后发布不发生坐标漂移。
-- 运行页使用大屏背景配置里的 `fit_mode`：`contain` 完整显示设计稿并居中留边，`cover` 等比铺满视口并允许上下或左右裁切，`stretch` 按视口宽高分别拉伸。
-- 编辑器是设计态，需要保留滚动和操作空间；运行页是展示态，会把画布绝对定位到窗口中。若顶部或底部被裁掉，优先检查该大屏是否设置了 `cover`。
+- 运行页使用大屏背景配置里的 `fit_mode`：`contain` 完整显示设计稿并留边，`cover` 等比铺满视口并允许上下或左右裁切，`stretch` 按视口宽高分别拉伸。
+- 运行页额外使用 `fit_align` 控制垂直对齐，默认 `top`。这能让 1920 × 1080 大屏在 2048 × 990 一类宽屏 `cover` 场景下保留顶部指标卡，只裁底部；在手机竖屏 `contain` 场景下也会贴近顶部展示，而不是居中成一条很小的横屏。确实需要上下居中留边时，把显示对齐改成 `center`。
+- 编辑器是设计态，需要保留滚动和操作空间；运行页是展示态，会把画布绝对定位到窗口中。若顶部或底部被裁掉，优先检查该大屏是否设置了 `cover` 以及显示对齐是否符合预期。
 - 修改 `widgets/fit.ts` 后需在 `saiadmin-artd/` 执行 `pnpm verify:saiboard-fit`，覆盖 `contain` / `cover` / `stretch` / `maxScale` / `padding` / 异常尺寸的数值回归。
 
 ## 安装和迁移（已落地）
@@ -675,7 +676,7 @@ php webman b8:migrate
 5. 为每个 MySQL 数据源创建只读账号，并用数据源管理页「测试」确认连接成功；失败时确认数据库名、账号密码、网络和授权范围。
 6. 新建或选择一个查询模板，先在查询模板页预览，再在大屏编辑器绑定组件预览，确认返回结构符合组件字段映射。
 7. 通过「从数据表生成大屏」生成草稿，进入编辑器检查指标卡、趋势、排行、分布、状态矩阵和明细表；保存草稿后使用「预览草稿」查看 `/screen/:code?admin_preview=1&draft=1`。
-8. 发布大屏后打开发布预览，确认运行页适配模式符合预期：`contain` 完整显示、`cover` 允许裁切、`stretch` 拉伸铺满。
+8. 发布大屏后打开发布预览，确认运行页适配模式和显示对齐符合预期：`contain` 完整显示、`cover` 允许裁切、`stretch` 拉伸铺满；默认顶部对齐，若需要上下居中留边可切换为 `center`。
 9. 若对外私有访问，创建子令牌并只保存创建 / 重置时返回的明文；用 `/screen/:code?token=...` 或 `X-Saiboard-Token` 验证可访问，再停用令牌验证访问被拒绝。
 10. 使用普通角色账号验证菜单、按钮权限和数据权限：只能看到自己数据范围内的大屏、数据源和查询模板，不能读取或绑定其他归属的查询模板。
 11. 打开大屏列表的运行统计，确认缓存命中、回源、限流、Redis 锁或文件锁指标有记录；压测或投屏前确认没有持续 `source_fail` 或频繁锁等待。

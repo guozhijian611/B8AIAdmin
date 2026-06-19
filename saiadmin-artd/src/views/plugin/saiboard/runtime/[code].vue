@@ -33,7 +33,12 @@
   import WidgetRenderer from '../widgets/WidgetRenderer.vue'
   import { resolveBoardFit } from '../widgets/fit'
   import { decorWidgetTypes } from '../widgets/registry'
-  import { boardCanvasStyle, normalizeBgConfig, normalizeFitMode } from '../widgets/theme'
+  import {
+    boardCanvasStyle,
+    normalizeBgConfig,
+    normalizeFitAlign,
+    normalizeFitMode
+  } from '../widgets/theme'
   import type { BoardComponent, BoardLayout } from '../widgets/types'
 
   const route = useRoute()
@@ -64,6 +69,7 @@
   })
   const bgColor = computed(() => screen.bg_config?.color || '#07111f')
   const fitMode = computed(() => normalizeFitMode(screen.bg_config?.fit_mode))
+  const fitAlign = computed(() => normalizeFitAlign(screen.bg_config?.fit_align))
   const canvasStyle = computed(() => ({
     ...boardCanvasStyle(screen.bg_config),
     width: layout.canvas.width + 'px',
@@ -162,7 +168,8 @@
       viewportHeight: el.clientHeight,
       canvasWidth,
       canvasHeight,
-      mode: fitMode.value
+      mode: fitMode.value,
+      alignY: fitAlign.value
     })
     Object.assign(fit, nextFit)
   }
@@ -192,6 +199,10 @@
   })
 
   watch(fitMode, () => {
+    nextTick(updateScale)
+  })
+
+  watch(fitAlign, () => {
     nextTick(updateScale)
   })
 

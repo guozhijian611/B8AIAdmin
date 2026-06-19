@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'vue'
-import { normalizeBoardFitMode } from './fit'
+import { normalizeBoardFitAlignY, normalizeBoardFitMode } from './fit'
 import type { BoardBgConfig } from './types'
 
 export const boardThemeOptions = [
@@ -13,6 +13,12 @@ export const backgroundFitOptions = [
   { label: '完整显示', value: 'contain' },
   { label: '拉伸', value: 'stretch' },
   { label: '平铺', value: 'repeat' }
+]
+
+export const boardFitAlignOptions = [
+  { label: '顶部对齐', value: 'top' },
+  { label: '居中对齐', value: 'center' },
+  { label: '底部对齐', value: 'bottom' }
 ]
 
 const themes: Record<string, Record<string, string>> = {
@@ -52,12 +58,17 @@ export const normalizeBgConfig = (config: BoardBgConfig = {}) =>
     color: config?.color || '#07111f',
     theme: normalizeBoardTheme(config?.theme),
     fit_mode: normalizeFitMode(config?.fit_mode),
+    fit_align: normalizeFitAlign(config?.fit_align),
     image: String(config?.image || '').trim(),
     image_fit: normalizeBackgroundFit(config?.image_fit)
   }) satisfies BoardBgConfig
 
 export const normalizeFitMode = (mode: unknown) => {
   return normalizeBoardFitMode(mode)
+}
+
+export const normalizeFitAlign = (align: unknown) => {
+  return normalizeBoardFitAlignY(align)
 }
 
 export const boardCanvasStyle = (config: BoardBgConfig = {}) => {

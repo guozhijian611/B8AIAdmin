@@ -166,6 +166,9 @@
         <ElFormItem label="适配模式">
           <ElSegmented v-model="form.fitMode" :options="fitModeOptions" />
         </ElFormItem>
+        <ElFormItem label="显示对齐">
+          <ElSegmented v-model="form.fitAlign" :options="boardFitAlignOptions" />
+        </ElFormItem>
         <ElFormItem label="访问方式" prop="is_public">
           <ElRadioGroup v-model="form.is_public">
             <ElRadioButton :label="1">公开</ElRadioButton>
@@ -550,8 +553,10 @@
   import datasourceApi from '../api/datasource'
   import {
     backgroundFitOptions,
+    boardFitAlignOptions,
     boardThemeOptions,
     normalizeBgConfig,
+    normalizeFitAlign,
     normalizeFitMode
   } from '../widgets/theme'
 
@@ -613,6 +618,7 @@
     bgImage: '',
     bgImageFit: 'cover',
     fitMode: 'contain',
+    fitAlign: 'top',
     bg_config: {} as Record<string, any>,
     is_public: 1,
     status: 2
@@ -896,6 +902,7 @@
       bgImage: defaultBg.image,
       bgImageFit: defaultBg.image_fit,
       fitMode: 'contain',
+      fitAlign: defaultBg.fit_align,
       bg_config: defaultBg,
       is_public: 1,
       status: 2
@@ -908,6 +915,7 @@
         bgImage: bg.image,
         bgImageFit: bg.image_fit,
         fitMode: normalizeFitMode(bg.fit_mode),
+        fitAlign: normalizeFitAlign(bg.fit_align),
         bg_config: bg
       })
     }
@@ -1012,7 +1020,8 @@
         theme: form.theme,
         image: form.bgImage,
         image_fit: form.bgImageFit,
-        fit_mode: normalizeFitMode(form.fitMode)
+        fit_mode: normalizeFitMode(form.fitMode),
+        fit_align: normalizeFitAlign(form.fitAlign)
       })
     }
     delete payload.status

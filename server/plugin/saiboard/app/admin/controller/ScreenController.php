@@ -61,7 +61,7 @@ class ScreenController extends AbstractCrudController
     #[Apidoc\Url('/app/saiboard/admin/Screen/save')]
     #[Apidoc\Method('POST')]
     #[Apidoc\Param('name', type: 'string', require: true, desc: '大屏名称')]
-    #[Apidoc\Param('bg_config', type: 'object', require: false, desc: '背景配置：color/theme/fit_mode/image/image_fit')]
+    #[Apidoc\Param('bg_config', type: 'object', require: false, desc: '背景配置：color/theme/fit_mode/fit_align/image/image_fit')]
     #[Permission('大屏添加', 'saiboard:screen:save')]
     public function save(Request $request): Response
     {
@@ -72,7 +72,7 @@ class ScreenController extends AbstractCrudController
     #[Apidoc\Url('/app/saiboard/admin/Screen/update')]
     #[Apidoc\Method('PUT')]
     #[Apidoc\Param('id', type: 'int', require: true, desc: '大屏ID')]
-    #[Apidoc\Param('bg_config', type: 'object', require: false, desc: '背景配置：color/theme/fit_mode/image/image_fit')]
+    #[Apidoc\Param('bg_config', type: 'object', require: false, desc: '背景配置：color/theme/fit_mode/fit_align/image/image_fit')]
     #[Permission('大屏修改', 'saiboard:screen:update')]
     public function update(Request $request): Response
     {

@@ -1457,6 +1457,9 @@
             <ElFormItem label="适配模式">
               <ElSegmented v-model="screen.bg_config.fit_mode" :options="fitModeOptions" />
             </ElFormItem>
+            <ElFormItem label="显示对齐">
+              <ElSegmented v-model="screen.bg_config.fit_align" :options="boardFitAlignOptions" />
+            </ElFormItem>
           </ElForm>
         </template>
       </aside>
@@ -1566,6 +1569,7 @@
   } from '../widgets/registry'
   import {
     backgroundFitOptions,
+    boardFitAlignOptions,
     boardCanvasStyle,
     boardThemeOptions,
     normalizeBgConfig

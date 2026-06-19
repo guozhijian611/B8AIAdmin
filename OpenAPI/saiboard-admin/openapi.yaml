@@ -170,7 +170,7 @@
                                     },
                                     "bg_config": {
                                         "type": "object",
-                                        "description": "背景配置：color/theme/fit_mode/image/image_fit"
+                                        "description": "背景配置：color/theme/fit_mode/fit_align/image/image_fit"
                                     }
                                 },
                                 "required": [
@@ -229,7 +229,7 @@
                                     },
                                     "bg_config": {
                                         "type": "object",
-                                        "description": "背景配置：color/theme/fit_mode/image/image_fit"
+                                        "description": "背景配置：color/theme/fit_mode/fit_align/image/image_fit"
                                     }
                                 },
                                 "required": [

@@ -1,4 +1,6 @@
 export type BoardFitMode = 'contain' | 'cover' | 'stretch'
+export type BoardFitAlignX = 'left' | 'center' | 'right'
+export type BoardFitAlignY = 'top' | 'center' | 'bottom'
 
 export interface BoardFitOptions {
   viewportWidth: number
@@ -6,6 +8,8 @@ export interface BoardFitOptions {
   canvasWidth: number
   canvasHeight: number
   mode?: unknown
+  alignX?: unknown
+  alignY?: unknown
   padding?: number
   maxScale?: number
 }
@@ -29,6 +33,16 @@ export const normalizeBoardScale = (value: unknown, fallback = 1) => {
   return Number.isFinite(scale) && scale > 0 ? scale : fallback
 }
 
+export const normalizeBoardFitAlignX = (align: unknown): BoardFitAlignX => {
+  const value = String(align || '')
+  return value === 'left' || value === 'right' ? value : 'center'
+}
+
+export const normalizeBoardFitAlignY = (align: unknown): BoardFitAlignY => {
+  const value = String(align || '')
+  return value === 'center' || value === 'bottom' ? value : 'top'
+}
+
 export const resolveBoardFit = (options: BoardFitOptions): BoardFitResult => {
   const viewportWidth = normalizeSize(options.viewportWidth)
   const viewportHeight = normalizeSize(options.viewportHeight)
@@ -41,6 +55,8 @@ export const resolveBoardFit = (options: BoardFitOptions): BoardFitResult => {
   const scaleY = normalizeBoardScale(availableHeight / canvasHeight)
   const maxScale = normalizeMaxScale(options.maxScale)
   const mode = normalizeBoardFitMode(options.mode)
+  const alignX = normalizeBoardFitAlignX(options.alignX)
+  const alignY = normalizeBoardFitAlignY(options.alignY)
 
   if (mode === 'stretch') {
     const nextScaleX = Math.min(maxScale, scaleX)
@@ -51,13 +67,26 @@ export const resolveBoardFit = (options: BoardFitOptions): BoardFitResult => {
       canvasWidth,
       canvasHeight,
       nextScaleX,
-      nextScaleY
+      nextScaleY,
+      alignX,
+      alignY,
+      padding
     )
   }
 
   const rawScale = mode === 'cover' ? Math.max(scaleX, scaleY) : Math.min(scaleX, scaleY)
   const scale = Math.min(maxScale, normalizeBoardScale(rawScale))
-  return buildFitResult(viewportWidth, viewportHeight, canvasWidth, canvasHeight, scale, scale)
+  return buildFitResult(
+    viewportWidth,
+    viewportHeight,
+    canvasWidth,
+    canvasHeight,
+    scale,
+    scale,
+    alignX,
+    alignY,
+    padding
+  )
 }
 
 const normalizeSize = (value: unknown) => {
@@ -77,17 +106,32 @@ const buildFitResult = (
   canvasWidth: number,
   canvasHeight: number,
   scaleX: number,
-  scaleY: number
+  scaleY: number,
+  alignX: BoardFitAlignX,
+  alignY: BoardFitAlignY,
+  padding: number
 ): BoardFitResult => {
   const scaledWidth = canvasWidth * scaleX
   const scaledHeight = canvasHeight * scaleY
+  const availableWidth = Math.max(1, viewportWidth - padding * 2)
+  const availableHeight = Math.max(1, viewportHeight - padding * 2)
 
   return {
     scaleX,
     scaleY,
-    x: (viewportWidth - scaledWidth) / 2,
-    y: (viewportHeight - scaledHeight) / 2,
+    x: padding + resolveOffset(availableWidth, scaledWidth, alignX),
+    y: padding + resolveOffset(availableHeight, scaledHeight, alignY),
     scaledWidth,
     scaledHeight
   }
+}
+
+const resolveOffset = (
+  viewportSize: number,
+  scaledSize: number,
+  align: BoardFitAlignX | BoardFitAlignY
+) => {
+  if (align === 'left' || align === 'top') return 0
+  if (align === 'right' || align === 'bottom') return viewportSize - scaledSize
+  return (viewportSize - scaledSize) / 2
 }

@@ -137,6 +137,7 @@ class ScreenLogic extends BaseLogic
                     'color' => '#07111f',
                     'theme' => 'midnight',
                     'fit_mode' => 'contain',
+                    'fit_align' => 'top',
                 ],
                 'draft_layout' => $layout,
                 'layout' => $this->defaultLayout($width, $height),
@@ -716,6 +717,7 @@ class ScreenLogic extends BaseLogic
                 'color' => '#07111f',
                 'theme' => 'midnight',
                 'fit_mode' => 'contain',
+                'fit_align' => 'top',
             ],
             'components' => $components,
         ];
@@ -1102,12 +1104,14 @@ class ScreenLogic extends BaseLogic
         $config = is_array($config) ? $config : [];
         $theme = (string) ($config['theme'] ?? 'midnight');
         $fitMode = (string) ($config['fit_mode'] ?? 'contain');
+        $fitAlign = (string) ($config['fit_align'] ?? 'top');
         $imageFit = (string) ($config['image_fit'] ?? 'cover');
 
         return array_merge($config, [
             'color' => trim((string) ($config['color'] ?? '')) ?: '#07111f',
             'theme' => in_array($theme, ['midnight', 'teal', 'amber'], true) ? $theme : 'midnight',
             'fit_mode' => in_array($fitMode, ['contain', 'cover', 'stretch'], true) ? $fitMode : 'contain',
+            'fit_align' => in_array($fitAlign, ['top', 'center', 'bottom'], true) ? $fitAlign : 'top',
             'image' => trim((string) ($config['image'] ?? '')),
             'image_fit' => in_array($imageFit, ['cover', 'contain', 'stretch', 'repeat'], true)
                 ? $imageFit
