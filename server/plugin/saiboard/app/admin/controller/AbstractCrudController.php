@@ -58,11 +58,11 @@ abstract class AbstractCrudController extends BaseController
     {
         $id = (int) $request->post('id', 0);
         $status = (int) $request->post('status', 1);
-        $model = $this->logic->findOrEmpty($id);
-        if ($model->isEmpty()) {
+        if ($id <= 0) {
             return $this->fail('未查找到信息');
         }
 
+        $model = $this->logic->read($id);
         $result = $model->save(['status' => $status]);
         return $result ? $this->success('操作成功') : $this->fail('操作失败');
     }

@@ -43,11 +43,14 @@ class RuntimeMetrics
         }
     }
 
-    public function snapshot(int $screenId = 0): array
+    public function snapshot(int $screenId = 0, ?array $screenIds = null): array
     {
         $window = $this->window();
         $bucket = $this->bucket();
         $buckets = [$bucket, $bucket - $window];
+        $screenIds = $screenIds === null
+            ? null
+            : array_values(array_unique(array_filter(array_map('intval', $screenIds), static fn (int $id) => $id > 0)));
         $result = [
             'enabled' => $this->enabled(),
             'window' => $window * 2,
@@ -58,7 +61,9 @@ class RuntimeMetrics
         ];
 
         foreach (self::EVENTS as $event) {
-            $result['totals'][$event] = $this->sumEvent($event, [], $buckets);
+            $result['totals'][$event] = $screenId <= 0 && $screenIds !== null
+                ? $this->sumEventForScreens($event, $screenIds, $buckets)
+                : $this->sumEvent($event, [], $buckets);
             if ($screenId > 0) {
                 $result['screen'][$event] = $this->sumEvent($event, ['screen' => (string) $screenId], $buckets);
             }
@@ -75,6 +80,16 @@ class RuntimeMetrics
             : 0.0;
 
         return $result;
+    }
+
+    private function sumEventForScreens(string $event, array $screenIds, array $buckets): int
+    {
+        $total = 0;
+        foreach ($screenIds as $screenId) {
+            $total += $this->sumEvent($event, ['screen' => (string) $screenId], $buckets);
+        }
+
+        return $total;
     }
 
     private function tagDimensions(array $tags): array

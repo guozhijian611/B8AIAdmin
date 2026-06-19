@@ -9,6 +9,8 @@ use plugin\saiboard\app\model\ScreenVersion;
 
 class ScreenLogic extends BaseLogic
 {
+    protected bool $scope = true;
+
     public function __construct()
     {
         $this->model = new Screen();
@@ -33,6 +35,7 @@ class ScreenLogic extends BaseLogic
         return (bool) $this->transaction(function () use ($id, $layout) {
             $screen = $this->read($id);
             $layout = $this->normalizeLayout($layout, (int) $screen->width, (int) $screen->height);
+            $this->assertLayoutTemplates($layout, (int) ($screen->created_by ?? 0));
             $result = (bool) $screen->save([
                 'draft_layout' => $layout,
             ]);
@@ -50,6 +53,7 @@ class ScreenLogic extends BaseLogic
             $screen = $this->read($id);
             $layout = $screen->draft_layout ?: $this->defaultLayout((int) $screen->width, (int) $screen->height);
             $layout = $this->normalizeLayout($layout, (int) $screen->width, (int) $screen->height);
+            $this->assertLayoutTemplates($layout, (int) ($screen->created_by ?? 0));
             $width = (int) $layout['canvas']['width'];
             $height = (int) $layout['canvas']['height'];
             $bgConfig = $this->normalizeBgConfig($layout['bg_config'] ?? $screen->bg_config);
@@ -76,6 +80,12 @@ class ScreenLogic extends BaseLogic
         $height = (int) $data['height'];
         $draftLayout = $screen->draft_layout ?: $this->defaultLayout($width, $height);
         $publishedLayout = $screen->layout ?: $draftLayout;
+        $owner = (int) ($screen->created_by ?? 0);
+        $currentOwner = (int) (getCurrentInfo()['id'] ?? 0);
+        if ($owner !== $currentOwner) {
+            $draftLayout = $this->detachLayoutTemplates($draftLayout);
+            $publishedLayout = $this->detachLayoutTemplates($publishedLayout);
+        }
         unset($data['id'], $data['create_time'], $data['update_time'], $data['delete_time']);
         $data['name'] = $data['name'] . ' 副本';
         $data['code'] = $this->generateCode();
@@ -120,6 +130,7 @@ class ScreenLogic extends BaseLogic
             $height = (int) $version->height;
             $layout = $this->normalizeLayout($version->layout, $width, $height);
             $layout['bg_config'] = $this->normalizeBgConfig($version->bg_config);
+            $this->assertLayoutTemplates($layout, (int) ($screen->created_by ?? 0));
 
             return (bool) $screen->save([
                 'draft_layout' => $layout,
@@ -141,8 +152,23 @@ class ScreenLogic extends BaseLogic
         return (bool) $version->delete();
     }
 
+    public function visibleIds(): array
+    {
+        $query = Screen::field('id');
+        if ($this->scope) {
+            $query = $this->userDataScope($query);
+        }
+
+        return array_map('intval', $query->column('id'));
+    }
+
     private function normalizePayload(array $data, int $ignoreId = 0): array
     {
+        unset($data['created_by'], $data['updated_by'], $data['create_time'], $data['update_time'], $data['delete_time']);
+        if ($ignoreId > 0) {
+            unset($data['layout'], $data['draft_layout']);
+        }
+
         $width = max(320, (int) ($data['width'] ?? 1920));
         $height = max(240, (int) ($data['height'] ?? 1080));
         $data['width'] = $width;
@@ -152,8 +178,19 @@ class ScreenLogic extends BaseLogic
         $data['status'] = (int) ($data['status'] ?? 2);
         $data['bg_config'] = $this->normalizeBgConfig($data['bg_config'] ?? []);
         if ($ignoreId <= 0) {
-            $data['draft_layout'] = $data['draft_layout'] ?? $this->defaultLayout($width, $height);
-            $data['layout'] = $data['layout'] ?? $this->defaultLayout($width, $height);
+            $owner = (int) (getCurrentInfo()['id'] ?? 0);
+            $data['draft_layout'] = $this->normalizeLayout(
+                is_array($data['draft_layout'] ?? null) ? $data['draft_layout'] : $this->defaultLayout($width, $height),
+                $width,
+                $height
+            );
+            $data['layout'] = $this->normalizeLayout(
+                is_array($data['layout'] ?? null) ? $data['layout'] : $this->defaultLayout($width, $height),
+                $width,
+                $height
+            );
+            $this->assertLayoutTemplates($data['draft_layout'], $owner);
+            $this->assertLayoutTemplates($data['layout'], $owner);
         }
 
         $query = Screen::where('code', $data['code']);
@@ -191,6 +228,43 @@ class ScreenLogic extends BaseLogic
             'canvas' => ['width' => $width, 'height' => $height],
             'components' => [],
         ];
+    }
+
+    private function assertLayoutTemplates(array $layout, int $owner): void
+    {
+        (new QueryTemplateLogic())->assertOwnedIds($this->layoutTemplateIds($layout), $owner);
+    }
+
+    private function layoutTemplateIds(array $layout): array
+    {
+        $ids = [];
+        $components = is_array($layout['components'] ?? null) ? $layout['components'] : [];
+        foreach ($components as $component) {
+            if (!is_array($component)) {
+                continue;
+            }
+            $dataset = is_array($component['dataset'] ?? null) ? $component['dataset'] : [];
+            $ids[] = $dataset['queryTemplateId'] ?? $dataset['query_template_id'] ?? 0;
+        }
+
+        return $ids;
+    }
+
+    private function detachLayoutTemplates(array $layout): array
+    {
+        $components = is_array($layout['components'] ?? null) ? $layout['components'] : [];
+        foreach ($components as $index => $component) {
+            if (!is_array($component)) {
+                continue;
+            }
+            $dataset = is_array($component['dataset'] ?? null) ? $component['dataset'] : [];
+            unset($dataset['queryTemplateId'], $dataset['query_template_id']);
+            $component['dataset'] = $dataset;
+            $components[$index] = $component;
+        }
+        $layout['components'] = $components;
+
+        return $layout;
     }
 
     private function createVersion(Screen $screen, string $source, array $layout): void

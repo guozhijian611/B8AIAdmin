@@ -94,9 +94,13 @@ class QueryTemplateController extends AbstractCrudController
     public function preview(Request $request): Response
     {
         $id = (int) $request->post('id', 0);
-        $template = $id > 0 ? QueryTemplate::findOrEmpty($id) : new QueryTemplate($request->post());
-        if ($id > 0 && $template->isEmpty()) {
-            return $this->fail('查询模板不存在');
+        if ($id > 0) {
+            $template = $this->logic->read($id);
+            $this->logic->assertDatasourceOwned((int) $template->datasource_id, (int) ($template->created_by ?? 0));
+        } else {
+            $data = $request->post();
+            $this->logic->assertDatasourceOwned((int) ($data['datasource_id'] ?? 0), (int) (getCurrentInfo()['id'] ?? 0));
+            $template = new QueryTemplate($data);
         }
 
         $runtimeParams = $request->post('params', []);

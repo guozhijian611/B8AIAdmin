@@ -201,6 +201,11 @@ class ScreenController extends AbstractCrudController
     #[Permission('大屏运行统计', 'saiboard:screen:index')]
     public function runtimeMetrics(Request $request): Response
     {
-        return $this->success($this->runtimeMetrics->snapshot((int) $request->input('id', 0)));
+        $id = (int) $request->input('id', 0);
+        if ($id > 0) {
+            $this->logic->read($id);
+        }
+
+        return $this->success($this->runtimeMetrics->snapshot($id, $id > 0 ? null : $this->logic->visibleIds()));
     }
 }

@@ -4,6 +4,7 @@ namespace plugin\saiboard\app\api\controller;
 
 use hg\apidoc\annotation as Apidoc;
 use InvalidArgumentException;
+use plugin\saiboard\app\model\Datasource;
 use plugin\saiboard\app\model\QueryTemplate;
 use plugin\saiboard\app\model\Screen;
 use plugin\saiboard\app\service\DataSourceExecutor;
@@ -96,6 +97,9 @@ class BoardController
         if ($template->isEmpty()) {
             return fail('查询模板不存在或已停用');
         }
+        if (!$this->ownedTemplate($screen, $template)) {
+            return fail('查询模板不存在或已停用');
+        }
 
         try {
             return ok($this->executor->execute($template, false, $this->runtimeParams($request), [
@@ -181,6 +185,20 @@ class BoardController
         }
 
         return [];
+    }
+
+    private function ownedTemplate(Screen $screen, QueryTemplate $template): bool
+    {
+        $owner = (int) ($screen->created_by ?? 0);
+        if ($owner <= 0 || (int) ($template->created_by ?? 0) !== $owner) {
+            return false;
+        }
+
+        $datasourceOwner = Datasource::where('id', (int) $template->datasource_id)
+            ->where('status', 1)
+            ->value('created_by');
+
+        return (int) $datasourceOwner === $owner;
     }
 
     private function normalizeRefresh(mixed $refresh): int

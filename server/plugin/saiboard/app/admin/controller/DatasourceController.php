@@ -96,10 +96,7 @@ class DatasourceController extends AbstractCrudController
         $id = (int) $request->post('id', 0);
         $datasource = null;
         try {
-            $datasource = $id > 0 ? Datasource::findOrEmpty($id) : $this->makeTestingDatasource($request->post());
-            if ($id > 0 && $datasource->isEmpty()) {
-                return $this->fail('数据源不存在');
-            }
+            $datasource = $id > 0 ? $this->logic->read($id) : $this->makeTestingDatasource($request->post());
 
             $result = $this->executor->testDatasource($datasource);
             if ($id > 0 && (string) $datasource->last_error !== '') {
@@ -132,14 +129,12 @@ class DatasourceController extends AbstractCrudController
     #[Permission('数据源表结构', 'saiboard:datasource:index')]
     public function schema(Request $request): Response
     {
-        $datasource = Datasource::where('id', (int) $request->input('id', 0))
-            ->where('status', 1)
-            ->findOrEmpty();
-        if ($datasource->isEmpty()) {
-            return $this->fail('数据源不存在或已停用');
-        }
-
-        return $this->success($this->executor->schema($datasource, (string) $request->input('table', '')));
+        return $this->success(
+            $this->executor->schema(
+                $this->logic->enabled((int) $request->input('id', 0)),
+                (string) $request->input('table', '')
+            )
+        );
     }
 
     private function makeTestingDatasource(array $data): Datasource
