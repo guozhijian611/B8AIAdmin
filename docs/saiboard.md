@@ -1,6 +1,6 @@
 # SAI Board 大屏可视化插件说明（P0 已落地）
 
-本文档说明 `saiboard` 插件在 B8AIadmin 中的功能边界、技术选型、数据库设计、后端分层、前端集成、鉴权模型和后续计划。当前已完成 P0 最小可用版本和部分 P1/P2 能力，实际入口以 `server/plugin/saiboard`、`saiadmin-artd/src/views/plugin/saiboard`、`Database/migrations/20260619000100_add_saiboard_plugin.php`、`Database/migrations/20260619000200_add_saiboard_screen_version.php`、`Database/migrations/20260619000300_add_saiboard_screen_token.php` 和 `Database/migrations/20260619000400_add_saiboard_market_item.php` 为准。
+本文档说明 `saiboard` 插件在 B8AIadmin 中的功能边界、技术选型、数据库设计、后端分层、前端集成、鉴权模型和后续计划。当前已完成 P0 最小可用版本和部分 P1/P2 能力，实际入口以 `server/plugin/saiboard`、`saiadmin-artd/src/views/plugin/saiboard`、`Database/migrations/20260619000100_add_saiboard_plugin.php`、`Database/migrations/20260619000200_add_saiboard_screen_version.php`、`Database/migrations/20260619000300_add_saiboard_screen_token.php`、`Database/migrations/20260619000400_add_saiboard_market_item.php` 和 `Database/migrations/20260619000500_add_saiboard_generate_from_table_permission.php` 为准。
 
 > 设计第一原则：**尽可能简单**。只用项目已有依赖（Vue 3 + Element Plus + echarts 6），不引入 go-view、naive-ui、DataV 等需要长期 fork 维护的重型前端工程；**编辑器与对外运行时共用同一套图表渲染组件**，保证「编辑所见 = 运行所得」，避免双引擎割裂。
 
@@ -17,6 +17,7 @@
 | 拖拽编辑器 | `saiadmin-artd/src/views/plugin/saiboard/editor/` | Element Plus 外壳 + 薄拖拽层，组件拖拽布局、绑定查询模板，画布直接渲染真实图表组件。 |
 | 对外运行时 | `saiadmin-artd/src/views/plugin/saiboard/runtime/` | 前端静态公开路由 `/screen/:code`，复用**同一套** `art-*` 图表组件，全屏等比缩放渲染。 |
 | 对外取数 | `server/plugin/saiboard/app/api/controller/BoardController.php` | 按组件绑定的查询模板执行数据源，返回脱敏结果。 |
+| 快速生成 | `ScreenController::generateFromTable` | 选择已有 MySQL 数据源和数据表，自动创建查询模板与鉴权草稿大屏，生成后进入编辑器微调。 |
 
 后台编辑器与数据源管理都在 `saiadmin-artd/src/views/plugin/saiboard/`（Element Plus，主应用内），对外运行时也在该目录下的 `runtime/`，通过 `staticRoutes.ts` 暴露 `/screen/:code` 静态路由，后端插件位于 `server/plugin/saiboard`。
 
@@ -249,7 +250,7 @@ saiadmin-artd/src/views/plugin/saiboard/
 
 | 控制器 | 方法 | 权限 slug |
 | --- | --- | --- |
-| `ScreenController` | index / read / save / update / destroy / changeStatus / saveLayout / publish / copy | `saiboard:screen:*` |
+| `ScreenController` | index / read / save / update / destroy / changeStatus / saveLayout / publish / copy / generateFromTable | `saiboard:screen:*` |
 | `DatasourceController` | 标准 CRUD + `test`（测连接 / 请求）+ `options` / `schema`（模板配置读取） | `saiboard:datasource:*`，`options` / `schema` 复用 `saiboard:datasource:index` |
 | `QueryTemplateController` | 标准 CRUD + `preview`（执行预览） | `saiboard:query_template:*` |
 | `MarketItemController` | 标准 CRUD + `options`（编辑器读取可用模板摘要） | `saiboard:market_item:*` |
@@ -334,6 +335,13 @@ getScreen / data 接口入口：
 ### 数据源管理页 `/plugin/saiboard/datasource`
 
 - 标准 CRUD（Element Plus）+ 测试连接按钮；查询模板在独立页面 `/plugin/saiboard/query-template` 维护。
+
+### 从数据表生成大屏
+
+- 大屏管理页提供「从数据表生成」入口，复用已启用的 MySQL 数据源和 `Datasource/schema` 表结构读取能力。
+- 后端会在同一事务中自动创建 `table_count`、`table_raw`，并按字段情况补充 `table_aggregate` 趋势 / 排行 / 分布查询模板；随后创建一个 `status=2`、`is_public=2` 的鉴权草稿大屏。
+- 自动生成布局会优先识别时间字段、数值字段、名称 / 分类字段，生成指标卡、折线趋势、横向排行、环形分布和明细表；识别不到时降级为总数指标和明细表。
+- 生成结果只是草稿，不会自动发布；生成后进入编辑器继续调整字段映射、组件位置、标题、访问方式和发布状态。
 
 ### 查询模板页 `/plugin/saiboard/query-template`
 
@@ -580,6 +588,7 @@ php webman b8:migrate
 - `20260619000200_add_saiboard_screen_version.php`：建表 `saiboard_screen_version`，增加版本权限。
 - `20260619000300_add_saiboard_screen_token.php`：建表 `saiboard_screen_token`，增加访问令牌权限。
 - `20260619000400_add_saiboard_market_item.php`：建表 `saiboard_market_item`，增加模板市场菜单和权限；回滚只会删除带本迁移标记且无模板数据的表，避免误删已有模板。
+- `20260619000500_add_saiboard_generate_from_table_permission.php`：增加「从数据表生成大屏」按钮权限。
 - 后台菜单「大屏管理 / 数据源管理 / 查询模板 / 模板市场 / 大屏编辑器」，权限 slug 见后端分层表。
 - 初始化只读账号使用说明（文档，不写入迁移）。
 
@@ -597,6 +606,7 @@ php webman b8:migrate
 | 后端 | `table_raw.computed_fields` 支持 `round` / `abs` / `ceil` / `floor` 安全函数白名单，仍禁止裸 SQL、任意函数、子查询和条件表达式。 |
 | 后端/前端 | MySQL 查询模板支持 `params[]` 参数白名单、`:param_name` 条件占位符、条件分组和组内 `AND / OR`；预览与公开运行时按白名单参数清洗后执行。 |
 | 后端/前端 | HTTP 查询模板支持路径、请求参数和 JSON Body 中的 `:param_name` 运行时占位符替换，缓存键只包含被模板实际引用的参数。 |
+| 后端/前端 | 大屏管理支持从已有 MySQL 数据源和数据表自动生成查询模板与鉴权草稿大屏，生成后直接进入编辑器继续调整。 |
 | 前端 | `DraggableItem.vue`（封装 `vue3-draggable-resizable`）+ `widgets/` 注册表，复用 `art-*` 图表（柱/折线/横向柱/K线/仪表盘/漏斗/热力图/环形/雷达/散点 + 单值指标 / 表格 / 时间轴 / 点位地图）并提供 CSS 装饰边框 / 扫描线 / 标题装饰 / 分割线。 |
 | 前端 | 拖拽编辑器 + 编辑态真实数据预览 / 字段映射 / 组件级运行参数 + 查询模板表单化配置 + 对外运行时页（静态 `/screen/:code`、适配模式、is_public / token 鉴权）。 |
 | 前端 | 数据源新增/编辑态测试前先做表单校验；查询模板支持多指标聚合配置、HTTP GET / POST JSON 配置和取值类型说明；指标组件支持前缀 / 小数位 / 单位，表格支持最大行数 / 序号列 / 斑马纹，图表组件缩放后自动触发 resize。 |

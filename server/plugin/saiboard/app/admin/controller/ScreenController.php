@@ -141,6 +141,20 @@ class ScreenController extends AbstractCrudController
         return $this->success(['id' => $this->logic->copy($id)], '复制成功');
     }
 
+    #[Apidoc\Title('从数据表生成大屏')]
+    #[Apidoc\Url('/app/saiboard/admin/Screen/generateFromTable')]
+    #[Apidoc\Method('POST')]
+    #[Apidoc\Param('datasource_id', type: 'int', require: true, desc: 'MySQL 数据源ID')]
+    #[Apidoc\Param('table', type: 'string', require: true, desc: '数据表名')]
+    #[Apidoc\Param('name', type: 'string', require: false, desc: '大屏名称')]
+    #[Apidoc\Param('width', type: 'int', require: false, desc: '设计宽度')]
+    #[Apidoc\Param('height', type: 'int', require: false, desc: '设计高度')]
+    #[Permission('从数据表生成大屏', 'saiboard:screen:generateFromTable')]
+    public function generateFromTable(Request $request): Response
+    {
+        return $this->success($this->logic->generateFromTable($request->post()), '生成成功');
+    }
+
     #[Apidoc\Title('大屏版本列表')]
     #[Apidoc\Url('/app/saiboard/admin/Screen/versions')]
     #[Apidoc\Method('GET')]

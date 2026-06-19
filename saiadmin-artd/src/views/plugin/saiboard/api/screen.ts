@@ -28,6 +28,9 @@ export default {
   copy(data: Record<string, any>) {
     return request.post<any>({ url: '/app/saiboard/admin/Screen/copy', data })
   },
+  generateFromTable(data: Record<string, any>) {
+    return request.post<any>({ url: '/app/saiboard/admin/Screen/generateFromTable', data })
+  },
   versions(params: Record<string, any>) {
     return request.get<any>({ url: '/app/saiboard/admin/Screen/versions', params })
   },

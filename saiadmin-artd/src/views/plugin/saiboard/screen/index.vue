@@ -22,10 +22,20 @@
 
       <ArtTableHeader :loading="loading" @refresh="loadData">
         <template #left>
-          <ElButton v-permission="'saiboard:screen:save'" @click="openDialog()">
-            <template #icon><ArtSvgIcon icon="ri:add-fill" /></template>
-            新增大屏
-          </ElButton>
+          <ElSpace wrap>
+            <ElButton v-permission="'saiboard:screen:save'" @click="openDialog()">
+              <template #icon><ArtSvgIcon icon="ri:add-fill" /></template>
+              新增大屏
+            </ElButton>
+            <ElButton
+              v-permission="'saiboard:screen:generateFromTable'"
+              type="primary"
+              @click="openAutoDialog"
+            >
+              <template #icon><ArtSvgIcon icon="ri:magic-line" /></template>
+              从数据表生成
+            </ElButton>
+          </ElSpace>
         </template>
       </ArtTableHeader>
 
@@ -180,6 +190,65 @@
           @click="submit"
         >
           提交
+        </ElButton>
+      </template>
+    </ElDialog>
+
+    <ElDialog v-model="autoDialogVisible" title="从数据表生成大屏" width="620px">
+      <ElForm ref="autoFormRef" :model="autoForm" :rules="autoRules" label-width="110px">
+        <ElFormItem label="MySQL 数据源" prop="datasource_id">
+          <ElSelect
+            v-model="autoForm.datasource_id"
+            filterable
+            placeholder="请选择已启用的 MySQL 数据源"
+            style="width: 100%"
+            @change="onAutoDatasourceChange"
+          >
+            <ElOption
+              v-for="item in mysqlDatasourceOptions"
+              :key="item.id"
+              :label="item.name"
+              :value="item.id"
+            />
+          </ElSelect>
+        </ElFormItem>
+        <ElFormItem label="数据表" prop="table">
+          <ElSelect
+            v-model="autoForm.table"
+            v-loading="autoSchemaLoading"
+            filterable
+            placeholder="请选择数据表"
+            style="width: 100%"
+            @change="onAutoTableChange"
+          >
+            <ElOption
+              v-for="item in autoTableOptions"
+              :key="item.name"
+              :label="item.name"
+              :value="item.name"
+            />
+          </ElSelect>
+        </ElFormItem>
+        <ElFormItem label="大屏名称" prop="name">
+          <ElInput v-model="autoForm.name" maxlength="60" placeholder="留空按表名生成" />
+        </ElFormItem>
+        <ElFormItem label="设计尺寸" required>
+          <ElSpace>
+            <ElInputNumber v-model="autoForm.width" :min="320" :max="7680" />
+            <span>x</span>
+            <ElInputNumber v-model="autoForm.height" :min="240" :max="4320" />
+          </ElSpace>
+        </ElFormItem>
+      </ElForm>
+      <template #footer>
+        <ElButton @click="autoDialogVisible = false">取消</ElButton>
+        <ElButton
+          v-permission="'saiboard:screen:generateFromTable'"
+          type="primary"
+          :loading="autoSubmitting"
+          @click="generateFromTable"
+        >
+          生成并编辑
         </ElButton>
       </template>
     </ElDialog>
@@ -370,6 +439,7 @@
   import { ElMessage, ElMessageBox } from 'element-plus'
   import type { FormInstance, FormRules } from 'element-plus'
   import api from '../api/screen'
+  import datasourceApi from '../api/datasource'
   import {
     backgroundFitOptions,
     boardThemeOptions,
@@ -393,9 +463,22 @@
   const tokenCreating = ref(false)
   const tokenRows = ref<any[]>([])
   const tokenTarget = ref<any>(null)
+  const autoDialogVisible = ref(false)
+  const autoSchemaLoading = ref(false)
+  const autoSubmitting = ref(false)
+  const datasourceOptions = ref<any[]>([])
+  const autoTableOptions = ref<any[]>([])
   const formRef = ref<FormInstance>()
+  const autoFormRef = ref<FormInstance>()
   const search = reactive({ name: '', code: '', status: undefined as number | undefined })
   const tokenForm = reactive({ name: '', expire_time: '' })
+  const autoForm = reactive({
+    datasource_id: undefined as number | undefined,
+    table: '',
+    name: '',
+    width: 1920,
+    height: 1080
+  })
   const form = reactive({
     id: undefined as number | undefined,
     name: '',
@@ -429,8 +512,15 @@
     width: [{ required: true, message: '设计宽度必填', trigger: 'blur' }],
     height: [{ required: true, message: '设计高度必填', trigger: 'blur' }]
   }
+  const autoRules: FormRules = {
+    datasource_id: [{ required: true, message: '请选择 MySQL 数据源', trigger: 'change' }],
+    table: [{ required: true, message: '请选择数据表', trigger: 'change' }]
+  }
 
   const currentMetrics = computed(() => metrics.value?.screen || metrics.value?.totals || {})
+  const mysqlDatasourceOptions = computed(() =>
+    datasourceOptions.value.filter((item) => item.type === 'mysql')
+  )
   const currentHitRate = computed(() => {
     const hit = Number(currentMetrics.value.cache_hit || 0)
     const miss = Number(currentMetrics.value.cache_miss || 0)
@@ -450,6 +540,10 @@
   const resetSearch = () => {
     Object.assign(search, { name: '', code: '', status: undefined })
     loadData()
+  }
+
+  const loadDatasourceOptions = async () => {
+    datasourceOptions.value = await datasourceApi.options()
   }
 
   const openDialog = (row?: any) => {
@@ -482,6 +576,70 @@
       })
     }
     dialogVisible.value = true
+  }
+
+  const openAutoDialog = async () => {
+    Object.assign(autoForm, {
+      datasource_id: undefined,
+      table: '',
+      name: '',
+      width: 1920,
+      height: 1080
+    })
+    autoTableOptions.value = []
+    autoDialogVisible.value = true
+    if (!datasourceOptions.value.length) {
+      await loadDatasourceOptions()
+    }
+    const firstMysql = mysqlDatasourceOptions.value[0]
+    if (!firstMysql) {
+      ElMessage.warning('请先新增并启用 MySQL 数据源')
+      return
+    }
+    autoForm.datasource_id = firstMysql.id
+    await loadAutoTables()
+  }
+
+  const loadAutoTables = async () => {
+    if (!autoForm.datasource_id) {
+      autoTableOptions.value = []
+      return
+    }
+    autoSchemaLoading.value = true
+    try {
+      const result = await datasourceApi.schema({ id: autoForm.datasource_id })
+      autoTableOptions.value = result.tables || []
+    } finally {
+      autoSchemaLoading.value = false
+    }
+  }
+
+  const onAutoDatasourceChange = async () => {
+    autoForm.table = ''
+    autoForm.name = ''
+    await loadAutoTables()
+  }
+
+  const onAutoTableChange = () => {
+    if (!autoForm.name && autoForm.table) {
+      autoForm.name = `${autoForm.table.replace(/_/g, ' ')} 数据大屏`
+    }
+  }
+
+  const generateFromTable = async () => {
+    await autoFormRef.value?.validate()
+    autoSubmitting.value = true
+    try {
+      const result = await api.generateFromTable({ ...autoForm })
+      ElMessage.success('大屏草稿已生成')
+      autoDialogVisible.value = false
+      await loadData()
+      if (result?.id) {
+        goEditor({ id: result.id })
+      }
+    } finally {
+      autoSubmitting.value = false
+    }
   }
 
   const submit = async () => {
@@ -700,7 +858,9 @@
     )
   }
 
-  onMounted(loadData)
+  onMounted(async () => {
+    await Promise.all([loadData(), loadDatasourceOptions()])
+  })
 </script>
 
 <style scoped lang="scss">

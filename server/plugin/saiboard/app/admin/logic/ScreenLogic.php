@@ -4,9 +4,11 @@ namespace plugin\saiboard\app\admin\logic;
 
 use plugin\saiadmin\basic\think\BaseLogic;
 use plugin\saiadmin\exception\ApiException;
+use plugin\saiboard\app\model\Datasource;
 use plugin\saiboard\app\model\Screen;
 use plugin\saiboard\app\model\ScreenToken;
 use plugin\saiboard\app\model\ScreenVersion;
+use plugin\saiboard\app\service\DataSourceExecutor;
 
 class ScreenLogic extends BaseLogic
 {
@@ -96,6 +98,58 @@ class ScreenLogic extends BaseLogic
         $data['layout'] = $this->normalizeLayout($publishedLayout, $width, $height);
 
         return (int) parent::add($data);
+    }
+
+    public function generateFromTable(array $data): array
+    {
+        return $this->transaction(function () use ($data) {
+            $datasourceId = (int) ($data['datasource_id'] ?? 0);
+            $table = $this->normalizeAutoTable($data['table'] ?? '');
+            $width = max(320, (int) ($data['width'] ?? 1920));
+            $height = max(240, (int) ($data['height'] ?? 1080));
+            (new QueryTemplateLogic())->assertDatasourceOwned(
+                $datasourceId,
+                (int) (getCurrentInfo()['id'] ?? 0)
+            );
+            $datasource = (new DatasourceLogic())->enabled($datasourceId);
+            if ((string) $datasource->type !== 'mysql') {
+                throw new ApiException('只支持从 MySQL 数据源生成大屏');
+            }
+
+            $schema = (new DataSourceExecutor())->schema($datasource, $table);
+            $columns = is_array($schema['columns'] ?? null) ? $schema['columns'] : [];
+            if ($columns === []) {
+                throw new ApiException('数据表没有可用字段');
+            }
+
+            $analysis = $this->analyzeAutoColumns($columns);
+            $name = trim((string) ($data['name'] ?? ''));
+            $name = $name !== '' ? mb_substr($name, 0, 60) : $this->humanizeAutoName($table) . ' 数据大屏';
+            $templates = $this->createAutoQueryTemplates($datasource, $table, $name, $analysis);
+            $layout = $this->buildAutoLayout($width, $height, $table, $name, $analysis, $templates);
+            $screenId = (int) $this->add([
+                'name' => $name,
+                'width' => $width,
+                'height' => $height,
+                'is_public' => 2,
+                'status' => 2,
+                'bg_config' => [
+                    'color' => '#07111f',
+                    'theme' => 'midnight',
+                    'fit_mode' => 'contain',
+                ],
+                'draft_layout' => $layout,
+                'layout' => $this->defaultLayout($width, $height),
+            ]);
+
+            return [
+                'id' => $screenId,
+                'name' => $name,
+                'table' => $table,
+                'template_ids' => array_column($templates, 'id'),
+                'component_count' => count($layout['components'] ?? []),
+            ];
+        });
     }
 
     public function versions(int $screenId): array
@@ -228,6 +282,381 @@ class ScreenLogic extends BaseLogic
         }
 
         return array_map('intval', $query->column('id'));
+    }
+
+    private function normalizeAutoTable(mixed $table): string
+    {
+        $table = trim((string) $table);
+        if ($table === '' || !preg_match('/^[A-Za-z0-9_]+$/', $table)) {
+            throw new ApiException('数据表名称不正确');
+        }
+
+        return $table;
+    }
+
+    private function analyzeAutoColumns(array $columns): array
+    {
+        $normalized = [];
+        foreach ($columns as $column) {
+            if (!is_array($column)) {
+                continue;
+            }
+            $name = trim((string) ($column['name'] ?? ''));
+            if ($name === '') {
+                continue;
+            }
+            $normalized[] = [
+                'name' => $name,
+                'type' => strtolower((string) ($column['type'] ?? '')),
+                'kind' => strtolower((string) ($column['kind'] ?? 'string')),
+            ];
+        }
+        if ($normalized === []) {
+            throw new ApiException('数据表没有可用字段');
+        }
+
+        $dateColumns = array_values(array_filter(
+            $normalized,
+            static fn (array $column) => $column['kind'] === 'date'
+        ));
+        $numberColumns = array_values(array_filter(
+            $normalized,
+            fn (array $column) => $column['kind'] === 'number' && !$this->isAutoMetricExcludedNumber($column['name'])
+        ));
+        $stringColumns = array_values(array_filter(
+            $normalized,
+            static fn (array $column) => $column['kind'] === 'string'
+        ));
+        $dimensionColumns = array_values(array_filter(
+            $normalized,
+            fn (array $column) => $column['kind'] === 'string' || $this->isAutoDimensionOnlyNumber($column['name'])
+        ));
+
+        $dateField = $this->preferredAutoField($dateColumns, [
+            '/create|created|order|pay|paid|time|date|day|month|update/i',
+        ]);
+        $metricField = $this->preferredAutoField($numberColumns, [
+            '/amount|price|money|total|fee|cost|revenue|income|sales|stock|qty|quantity|num|count|view|click|score|value/i',
+        ]);
+        $labelField = $this->preferredAutoField($stringColumns, [
+            '/name|title|subject|label|category|type|method|source|channel|city|province|platform|lang|code/i',
+        ]);
+        $categoryField = $this->preferredAutoField($dimensionColumns, [
+            '/status|type|category|method|source|channel|platform|lang|level|city|province/i',
+        ]);
+        if ($categoryField === $labelField) {
+            $categoryField = $this->preferredAutoField($dimensionColumns, [
+                '/status|type|category|method|source|channel|platform|lang|level|city|province/i',
+            ], [$labelField]);
+        }
+
+        return [
+            'columns' => $normalized,
+            'date_field' => $dateField,
+            'metric_field' => $metricField,
+            'label_field' => $labelField,
+            'category_field' => $categoryField ?: $labelField,
+            'raw_fields' => $this->autoRawFields($normalized),
+            'order_field' => $dateField ?: $this->preferredAutoField($normalized, ['/^id$/i', '/_id$/i']),
+        ];
+    }
+
+    private function createAutoQueryTemplates(Datasource $datasource, string $table, string $screenName, array $analysis): array
+    {
+        $templateLogic = new QueryTemplateLogic();
+        $items = [
+            'count' => [
+                'name' => "{$screenName} 总记录数",
+                'dataset_type' => 'table_count',
+                'config' => [
+                    'table' => $table,
+                    'conditions' => [],
+                ],
+            ],
+            'raw' => [
+                'name' => "{$screenName} 最新明细",
+                'dataset_type' => 'table_raw',
+                'config' => [
+                    'table' => $table,
+                    'fields' => $analysis['raw_fields'],
+                    'field_aliases' => [],
+                    'computed_fields' => [],
+                    'conditions' => [],
+                    'order' => $analysis['order_field']
+                        ? [['field' => $analysis['order_field'], 'direction' => 'desc']]
+                        : [],
+                    'limit' => 8,
+                ],
+            ],
+        ];
+
+        if ($analysis['date_field']) {
+            $items['trend'] = [
+                'name' => "{$screenName} 趋势",
+                'dataset_type' => 'table_aggregate',
+                'config' => [
+                    'table' => $table,
+                    'dimension' => $analysis['date_field'],
+                    'dimension_type' => 'day',
+                    'metrics' => [$this->autoMetricConfig($analysis['metric_field'])],
+                    'conditions' => [],
+                    'order_by' => 'label',
+                    'order_type' => 'asc',
+                    'limit' => 30,
+                ],
+            ];
+        }
+
+        if ($analysis['label_field']) {
+            $items['rank'] = [
+                'name' => "{$screenName} 排行",
+                'dataset_type' => 'table_aggregate',
+                'config' => [
+                    'table' => $table,
+                    'dimension' => $analysis['label_field'],
+                    'dimension_type' => 'raw',
+                    'metrics' => [$this->autoMetricConfig($analysis['metric_field'])],
+                    'conditions' => [],
+                    'order_by' => 'value',
+                    'order_type' => 'desc',
+                    'limit' => 10,
+                ],
+            ];
+        }
+
+        if ($analysis['category_field'] && $analysis['category_field'] !== $analysis['label_field']) {
+            $items['distribution'] = [
+                'name' => "{$screenName} 分布",
+                'dataset_type' => 'table_aggregate',
+                'config' => [
+                    'table' => $table,
+                    'dimension' => $analysis['category_field'],
+                    'dimension_type' => 'raw',
+                    'metrics' => [$this->autoMetricConfig('')],
+                    'conditions' => [],
+                    'order_by' => 'value',
+                    'order_type' => 'desc',
+                    'limit' => 8,
+                ],
+            ];
+        }
+
+        $templates = [];
+        foreach ($items as $key => $item) {
+            $id = (int) $templateLogic->add([
+                'datasource_id' => (int) $datasource->id,
+                'name' => mb_substr((string) $item['name'], 0, 60),
+                'dataset_type' => $item['dataset_type'],
+                'config' => $item['config'],
+                'status' => 1,
+            ]);
+            $templates[$key] = $item + ['id' => $id];
+        }
+
+        return $templates;
+    }
+
+    private function buildAutoLayout(
+        int $width,
+        int $height,
+        string $table,
+        string $name,
+        array $analysis,
+        array $templates
+    ): array {
+        $components = [
+            $this->autoDecorTitle($name, $table),
+            $this->autoDataComponent(
+                'auto_total',
+                'stat-number',
+                '记录总数',
+                ['x' => 40, 'y' => 112, 'w' => 360, 'h' => 150, 'z' => 2],
+                $templates['count']['id'],
+                ['valueField' => 'total'],
+                ['unit' => '条', 'decimals' => 0]
+            ),
+        ];
+
+        if (isset($templates['trend'])) {
+            $components[] = $this->autoDataComponent(
+                'auto_trend',
+                'art-line-chart',
+                $analysis['metric_field'] ? '趋势汇总' : '数量趋势',
+                ['x' => 440, 'y' => 112, 'w' => 860, 'h' => 360, 'z' => 2],
+                $templates['trend']['id'],
+                ['labelField' => 'label', 'valueField' => 'value'],
+                ['showAreaColor' => true, 'showLegend' => false]
+            );
+        }
+
+        if (isset($templates['distribution'])) {
+            $components[] = $this->autoDataComponent(
+                'auto_distribution',
+                'art-ring-chart',
+                '分类分布',
+                ['x' => 1340, 'y' => 112, 'w' => 540, 'h' => 360, 'z' => 2],
+                $templates['distribution']['id'],
+                ['labelField' => 'label', 'valueField' => 'value'],
+                ['showLegend' => true, 'legendPosition' => 'right']
+            );
+        }
+
+        if (isset($templates['rank'])) {
+            $components[] = $this->autoDataComponent(
+                'auto_rank',
+                'art-h-bar-chart',
+                '数据排行',
+                ['x' => 40, 'y' => 512, 'w' => 720, 'h' => 500, 'z' => 2],
+                $templates['rank']['id'],
+                ['labelField' => 'label', 'valueField' => 'value'],
+                ['showLegend' => false]
+            );
+        }
+
+        $components[] = $this->autoDataComponent(
+            'auto_table',
+            'data-table',
+            '最新明细',
+            ['x' => isset($templates['rank']) ? 800 : 40, 'y' => 512, 'w' => isset($templates['rank']) ? 1080 : 1840, 'h' => 500, 'z' => 2],
+            $templates['raw']['id'],
+            [
+                'tableFields' => $analysis['raw_fields'],
+                'tableColumns' => array_map(
+                    fn (string $field) => ['field' => $field, 'label' => $this->humanizeAutoName($field), 'align' => 'left'],
+                    $analysis['raw_fields']
+                ),
+            ],
+            ['showIndex' => true, 'rowStripe' => true, 'maxRows' => 8]
+        );
+
+        return [
+            'canvas' => ['width' => $width, 'height' => $height],
+            'bg_config' => [
+                'color' => '#07111f',
+                'theme' => 'midnight',
+                'fit_mode' => 'contain',
+            ],
+            'components' => $components,
+        ];
+    }
+
+    private function autoDecorTitle(string $name, string $table): array
+    {
+        return [
+            'id' => 'auto_title',
+            'type' => 'decor-title',
+            'title' => '',
+            'rect' => ['x' => 40, 'y' => 24, 'w' => 1840, 'h' => 72, 'z' => 1],
+            'dataset' => [],
+            'option' => [
+                'text' => $name,
+                'subtitle' => "由 {$table} 自动生成",
+                'variant' => 'bar',
+                'align' => 'center',
+                'accent' => '#69b7ff',
+            ],
+        ];
+    }
+
+    private function autoDataComponent(
+        string $id,
+        string $type,
+        string $title,
+        array $rect,
+        int $templateId,
+        array $mapping,
+        array $option = []
+    ): array {
+        return [
+            'id' => $id,
+            'type' => $type,
+            'title' => $title,
+            'rect' => $rect,
+            'dataset' => [
+                'queryTemplateId' => $templateId,
+                'refresh' => 30,
+                'mapping' => $mapping,
+            ],
+            'option' => $option,
+        ];
+    }
+
+    private function autoMetricConfig(string $metricField): array
+    {
+        if ($metricField === '') {
+            return ['aggregate' => 'count', 'field' => '', 'alias' => 'value'];
+        }
+
+        return ['aggregate' => 'sum', 'field' => $metricField, 'alias' => 'value'];
+    }
+
+    private function preferredAutoField(array $columns, array $patterns, array $excluded = []): string
+    {
+        foreach ($patterns as $pattern) {
+            foreach ($columns as $column) {
+                $name = (string) ($column['name'] ?? '');
+                if ($name !== '' && !in_array($name, $excluded, true) && preg_match($pattern, $name)) {
+                    return $name;
+                }
+            }
+        }
+
+        foreach ($columns as $column) {
+            $name = (string) ($column['name'] ?? '');
+            if ($name !== '' && !in_array($name, $excluded, true)) {
+                return $name;
+            }
+        }
+
+        return '';
+    }
+
+    private function autoRawFields(array $columns): array
+    {
+        $fields = [];
+        foreach (['id', 'order_no', 'code', 'title', 'name', 'category', 'type', 'status', 'price', 'amount', 'total', 'create_time', 'created_at', 'update_time'] as $preferred) {
+            foreach ($columns as $column) {
+                $name = (string) $column['name'];
+                if ($name === $preferred && !in_array($name, $fields, true)) {
+                    $fields[] = $name;
+                }
+            }
+        }
+        foreach ($columns as $column) {
+            $name = (string) $column['name'];
+            if (!in_array($name, $fields, true)) {
+                $fields[] = $name;
+            }
+            if (count($fields) >= 8) {
+                break;
+            }
+        }
+
+        return array_slice($fields, 0, 8);
+    }
+
+    private function isAutoDimensionOnlyNumber(string $name): bool
+    {
+        return $name === 'status'
+            || str_starts_with($name, 'is_')
+            || str_ends_with($name, '_status')
+            || str_ends_with($name, '_type')
+            || str_ends_with($name, '_level');
+    }
+
+    private function isAutoMetricExcludedNumber(string $name): bool
+    {
+        return $name === 'id'
+            || $name === 'created_by'
+            || $name === 'updated_by'
+            || $name === 'sort'
+            || str_ends_with($name, '_id')
+            || $this->isAutoDimensionOnlyNumber($name);
+    }
+
+    private function humanizeAutoName(string $name): string
+    {
+        return trim(str_replace('_', ' ', $name)) ?: $name;
     }
 
     private function normalizePayload(array $data, int $ignoreId = 0): array
