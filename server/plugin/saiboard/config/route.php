@@ -1,6 +1,7 @@
 <?php
 
 use plugin\saiboard\app\admin\controller\DatasourceController;
+use plugin\saiboard\app\admin\controller\MarketItemController;
 use plugin\saiboard\app\admin\controller\QueryTemplateController;
 use plugin\saiboard\app\admin\controller\ScreenController;
 use plugin\saiboard\app\api\controller\BoardController;
@@ -32,6 +33,10 @@ Route::group('/app/saiboard/admin', function () {
     Route::post('/QueryTemplate/changeStatus', [QueryTemplateController::class, 'changeStatus']);
     Route::post('/QueryTemplate/preview', [QueryTemplateController::class, 'preview']);
     Route::get('/QueryTemplate/options', [QueryTemplateController::class, 'options']);
+
+    fastRoute('MarketItem', MarketItemController::class);
+    Route::post('/MarketItem/changeStatus', [MarketItemController::class, 'changeStatus']);
+    Route::get('/MarketItem/options', [MarketItemController::class, 'options']);
 });
 
 Route::group('/app/saiboard/api', function () {

@@ -22,6 +22,12 @@
         <ElButton :disabled="!canPaste" @click="pasteCopied">粘贴</ElButton>
         <ElButton :disabled="!canGroup" @click="groupSelected">组合</ElButton>
         <ElButton :disabled="!canUngroup" @click="ungroupSelected">取消组合</ElButton>
+        <ElButton v-permission="'saiboard:market_item:index'" @click="openMarket('screen')">
+          模板市场
+        </ElButton>
+        <ElButton v-permission="'saiboard:market_item:save'" @click="openSaveTemplate('screen')">
+          保存为模板
+        </ElButton>
         <ElButton v-permission="'saiboard:screen:saveLayout'" type="primary" @click="saveLayout">
           保存
         </ElButton>
@@ -34,6 +40,15 @@
     <div class="editor-main">
       <aside class="widget-panel">
         <div class="panel-title">组件</div>
+        <button
+          v-permission="'saiboard:market_item:index'"
+          class="widget-button widget-button--market"
+          type="button"
+          @click="openMarket('component')"
+        >
+          <ArtSvgIcon icon="ri:store-2-line" />
+          <span>组件市场</span>
+        </button>
         <button
           v-for="widget in widgetRegistry"
           :key="widget.type"
@@ -581,6 +596,12 @@
               <ElSpace>
                 <ElButton @click="bringToFront">置顶</ElButton>
                 <ElButton @click="sendSelectedToBottom">置底</ElButton>
+                <ElButton
+                  v-permission="'saiboard:market_item:save'"
+                  @click="openSaveTemplate('component')"
+                >
+                  存为组件
+                </ElButton>
                 <ElButton type="danger" @click="removeSelected">删除</ElButton>
               </ElSpace>
             </ElFormItem>
@@ -631,6 +652,12 @@
             </div>
             <ElButton @click="bringToFront">批量置顶</ElButton>
             <ElButton @click="sendSelectedToBottom">批量置底</ElButton>
+            <ElButton
+              v-permission="'saiboard:market_item:save'"
+              @click="openSaveTemplate('component')"
+            >
+              存为组件模板
+            </ElButton>
             <ElButton type="danger" @click="removeSelected">批量删除</ElButton>
           </ElSpace>
         </template>
@@ -669,12 +696,99 @@
         </template>
       </aside>
     </div>
+
+    <ElDialog
+      v-model="marketVisible"
+      :title="marketSearch.type === 'screen' ? '大屏模板市场' : '组件模板市场'"
+      width="920px"
+    >
+      <div class="market-search">
+        <ElSegmented
+          v-model="marketSearch.type"
+          :options="marketTypeOptions"
+          @change="loadMarketItems"
+        />
+        <ElInput v-model="marketSearch.name" clearable placeholder="模板名称" />
+        <ElInput v-model="marketSearch.category" clearable placeholder="分类" />
+        <ElButton type="primary" @click="loadMarketItems">搜索</ElButton>
+      </div>
+      <ElTable v-loading="marketLoading" :data="marketRows" row-key="id" max-height="460">
+        <ElTableColumn prop="name" label="名称" min-width="180" show-overflow-tooltip />
+        <ElTableColumn prop="category" label="分类" width="140" show-overflow-tooltip />
+        <ElTableColumn prop="component_count" label="组件数" width="90" />
+        <ElTableColumn label="来源" width="90">
+          <template #default="{ row }">
+            <ElTag :type="row.is_public === 1 ? 'success' : 'info'">
+              {{ row.is_public === 1 ? '公开' : '私有' }}
+            </ElTag>
+          </template>
+        </ElTableColumn>
+        <ElTableColumn prop="description" label="说明" min-width="220" show-overflow-tooltip />
+        <ElTableColumn label="操作" width="120" fixed="right">
+          <template #default="{ row }">
+            <ElButton
+              v-permission="'saiboard:market_item:read'"
+              type="primary"
+              size="small"
+              @click="useMarketItem(row)"
+            >
+              {{ row.type === 'screen' ? '套用' : '插入' }}
+            </ElButton>
+          </template>
+        </ElTableColumn>
+      </ElTable>
+      <template #footer>
+        <ElButton @click="marketVisible = false">关闭</ElButton>
+        <ElButton type="primary" @click="loadMarketItems">刷新</ElButton>
+      </template>
+    </ElDialog>
+
+    <ElDialog
+      v-model="saveTemplateVisible"
+      :title="saveTemplateForm.type === 'screen' ? '保存大屏模板' : '保存组件模板'"
+      width="560px"
+    >
+      <ElForm label-width="88px">
+        <ElFormItem label="名称" required>
+          <ElInput v-model="saveTemplateForm.name" maxlength="80" />
+        </ElFormItem>
+        <ElFormItem label="分类">
+          <ElInput v-model="saveTemplateForm.category" maxlength="60" />
+        </ElFormItem>
+        <ElFormItem label="说明">
+          <ElInput
+            v-model="saveTemplateForm.description"
+            type="textarea"
+            :rows="2"
+            maxlength="255"
+          />
+        </ElFormItem>
+        <ElFormItem label="公开">
+          <ElRadioGroup v-model="saveTemplateForm.is_public">
+            <ElRadioButton :label="2">私有</ElRadioButton>
+            <ElRadioButton :label="1">公开</ElRadioButton>
+          </ElRadioGroup>
+        </ElFormItem>
+      </ElForm>
+      <template #footer>
+        <ElButton @click="saveTemplateVisible = false">取消</ElButton>
+        <ElButton
+          v-permission="'saiboard:market_item:save'"
+          type="primary"
+          :loading="saveTemplateSubmitting"
+          @click="saveMarketTemplate"
+        >
+          保存
+        </ElButton>
+      </template>
+    </ElDialog>
   </div>
 </template>
 
 <script setup lang="ts">
-  import { ElMessage } from 'element-plus'
+  import { ElMessage, ElMessageBox } from 'element-plus'
   import Vue3DraggableResizable from 'vue3-draggable-resizable'
+  import marketApi, { type MarketItem } from '../api/market'
   import api from '../api/screen'
   import templateApi from '../api/query-template'
   import DraggableItem from '../widgets/DraggableItem.vue'
@@ -730,6 +844,7 @@
 
   type AlignMode = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom'
   type DistributeAxis = 'horizontal' | 'vertical'
+  type MarketType = 'screen' | 'component'
 
   const route = useRoute()
   const zoom = ref<'auto' | number>('auto')
@@ -738,6 +853,11 @@
   const selectedId = ref('')
   const selectedIds = ref<string[]>([])
   const copiedComponents = ref<BoardComponent[]>([])
+  const marketVisible = ref(false)
+  const marketLoading = ref(false)
+  const marketRows = ref<MarketItem[]>([])
+  const saveTemplateVisible = ref(false)
+  const saveTemplateSubmitting = ref(false)
   const templateOptions = ref<any[]>([])
   const previewMap = reactive<Record<string, PreviewState>>({})
   const layoutHistory = reactive<LayoutHistoryState>({
@@ -787,6 +907,22 @@
       { label: '居中', value: 'center' },
       { label: '右对齐', value: 'right' }
     ]
+  const marketTypeOptions = [
+    { label: '大屏模板', value: 'screen' },
+    { label: '组件模板', value: 'component' }
+  ]
+  const marketSearch = reactive({
+    type: 'screen' as MarketType,
+    name: '',
+    category: ''
+  })
+  const saveTemplateForm = reactive({
+    type: 'screen' as MarketType,
+    name: '',
+    category: '',
+    description: '',
+    is_public: 2 as 1 | 2
+  })
   const minComponentWidth = 120
   const minComponentHeight = 80
   const minRefreshSeconds = 10
@@ -1207,6 +1343,7 @@
   const serializeLayout = () =>
     JSON.stringify({
       canvas: clonePlain(layout.canvas),
+      bg_config: clonePlain(screen.bg_config),
       components: clonePlain(layout.components)
     })
 
@@ -1257,6 +1394,7 @@
     suppressHistory = true
     const nextLayout = normalizeLayout(JSON.parse(snapshot))
     Object.assign(layout.canvas, nextLayout.canvas)
+    screen.bg_config = normalizeBgConfig(nextLayout.bg_config || screen.bg_config)
     layout.components.splice(0, layout.components.length, ...nextLayout.components)
     pruneSelection()
     nextTick(async () => {
@@ -1416,6 +1554,178 @@
         .filter((component) => componentNeedsData(component) && component.dataset.queryTemplateId)
         .map((component) => refreshComponentData(component))
     )
+  }
+
+  const openMarket = async (type: MarketType) => {
+    marketSearch.type = type
+    marketVisible.value = true
+    await loadMarketItems()
+  }
+
+  const loadMarketItems = async () => {
+    marketLoading.value = true
+    try {
+      marketRows.value = await marketApi.options({ ...marketSearch })
+    } finally {
+      marketLoading.value = false
+    }
+  }
+
+  const useMarketItem = async (row: MarketItem) => {
+    const item = await marketApi.read(row.id || 0)
+    if (item.type === 'component') {
+      await insertComponentTemplate(item)
+      marketVisible.value = false
+      return
+    }
+
+    await ElMessageBox.confirm(
+      '套用大屏模板会替换当前草稿画布和组件，可通过撤销恢复。',
+      '套用模板',
+      {
+        type: 'warning'
+      }
+    )
+    await applyScreenTemplate(item)
+    marketVisible.value = false
+  }
+
+  const openSaveTemplate = (type: MarketType) => {
+    if (type === 'component' && !selectedComponents.value.length) {
+      ElMessage.warning('请先选择组件')
+      return
+    }
+    Object.assign(saveTemplateForm, {
+      type,
+      name: type === 'screen' ? screen.name || '未命名大屏模板' : selectedTemplateName(),
+      category: '',
+      description: '',
+      is_public: 2
+    })
+    saveTemplateVisible.value = true
+  }
+
+  const saveMarketTemplate = async () => {
+    if (!saveTemplateForm.name.trim()) {
+      ElMessage.warning('请填写模板名称')
+      return
+    }
+    saveTemplateSubmitting.value = true
+    try {
+      await marketApi.save({
+        ...saveTemplateForm,
+        name: saveTemplateForm.name.trim(),
+        category: saveTemplateForm.category.trim(),
+        description: saveTemplateForm.description.trim(),
+        content:
+          saveTemplateForm.type === 'screen'
+            ? { layout: normalizedLayoutForSave() }
+            : { components: templateComponentsForSave() },
+        status: 1
+      })
+      ElMessage.success('模板已保存')
+      saveTemplateVisible.value = false
+      if (marketVisible.value) await loadMarketItems()
+    } finally {
+      saveTemplateSubmitting.value = false
+    }
+  }
+
+  const selectedTemplateName = () => {
+    if (selectedComponents.value.length === 1) {
+      const component = selectedComponents.value[0]
+      return component.title || componentName(component)
+    }
+
+    return `组件组 ${selectedComponents.value.length} 个`
+  }
+
+  const templateComponentsForSave = () =>
+    normalizeLayout({
+      canvas: layout.canvas,
+      components: clonePlain(selectedComponents.value)
+    }).components
+
+  const insertComponentTemplate = async (item: MarketItem) => {
+    const components = marketComponents(item)
+    if (!components.length) {
+      ElMessage.warning('模板没有可插入组件')
+      return
+    }
+    flushLayoutHistory()
+    suppressHistory = true
+    const groupIdMap = new Map<string, string>()
+    const nextComponents = components.map((component, index) =>
+      createTemplateComponent(component, index, groupIdMap, true)
+    )
+    layout.components.push(...nextComponents)
+    selectedIds.value = nextComponents.map((component) => component.id)
+    selectedId.value = nextComponents[nextComponents.length - 1]?.id || ''
+    suppressHistory = false
+    recordLayoutHistory()
+    await Promise.all(nextComponents.map((component) => refreshComponentData(component)))
+    ElMessage.success('组件已插入')
+  }
+
+  const applyScreenTemplate = async (item: MarketItem) => {
+    const nextLayout = normalizeLayout(item.content?.layout || item.content)
+    flushLayoutHistory()
+    suppressHistory = true
+    Object.assign(layout.canvas, nextLayout.canvas)
+    screen.bg_config = normalizeBgConfig(nextLayout.bg_config || screen.bg_config)
+    const groupIdMap = new Map<string, string>()
+    const components = nextLayout.components.map((component, index) =>
+      createTemplateComponent(component, index, groupIdMap, false)
+    )
+    layout.components.splice(0, layout.components.length, ...components)
+    clearSelection()
+    suppressHistory = false
+    recordLayoutHistory()
+    await nextTick()
+    updateAutoZoom()
+    await refreshAllComponentData()
+    ElMessage.success('模板已套用')
+  }
+
+  const marketComponents = (item: MarketItem): BoardComponent[] => {
+    const content = item.content || {}
+    if (Array.isArray(content.components)) {
+      return normalizeLayout({ canvas: layout.canvas, components: content.components }).components
+    }
+
+    return normalizeLayout(content.layout || content).components
+  }
+
+  const createTemplateComponent = (
+    source: BoardComponent,
+    index: number,
+    groupIdMap: Map<string, string>,
+    offset: boolean
+  ): BoardComponent => {
+    const component = clonePlain(source)
+    const groupId = componentGroupId(component)
+    component.id = `w_${Date.now()}_${Math.floor(Math.random() * 1000)}_${index}`
+    if (groupId) {
+      if (!groupIdMap.has(groupId)) groupIdMap.set(groupId, createGroupId())
+      component.option = { ...(component.option || {}), groupId: groupIdMap.get(groupId) }
+    }
+    if (offset) {
+      const maxZ = Math.max(0, ...layout.components.map((item) => Number(item.rect.z || 1)))
+      const offsetValue = 24 + index * 12
+      component.rect.x = Number(component.rect.x || 0) + offsetValue
+      component.rect.y = Number(component.rect.y || 0) + offsetValue
+      component.rect.z = maxZ + index + 1
+    } else {
+      component.rect.z = Number(component.rect.z || index + 1)
+    }
+
+    const normalized = normalizeLayout({
+      canvas: layout.canvas,
+      components: [component]
+    }).components[0]
+    ensureDataset(normalized)
+    clampComponentRect(normalized)
+    return normalized
   }
 
   const createPastedComponent = (
@@ -1877,6 +2187,8 @@
   )
 
   watch(layout, queueLayoutHistory, { deep: true })
+
+  watch(() => screen.bg_config, queueLayoutHistory, { deep: true })
 
   watch(() => [layout.canvas.width, layout.canvas.height], updateAutoZoom)
 </script>

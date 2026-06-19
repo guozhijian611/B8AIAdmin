@@ -1,6 +1,6 @@
 # SAI Board 大屏可视化插件说明（P0 已落地）
 
-本文档说明 `saiboard` 插件在 B8AIadmin 中的功能边界、技术选型、数据库设计、后端分层、前端集成、鉴权模型和后续计划。当前已完成 P0 最小可用版本和部分 P1/P2 能力，实际入口以 `server/plugin/saiboard`、`saiadmin-artd/src/views/plugin/saiboard`、`Database/migrations/20260619000100_add_saiboard_plugin.php`、`Database/migrations/20260619000200_add_saiboard_screen_version.php` 和 `Database/migrations/20260619000300_add_saiboard_screen_token.php` 为准。
+本文档说明 `saiboard` 插件在 B8AIadmin 中的功能边界、技术选型、数据库设计、后端分层、前端集成、鉴权模型和后续计划。当前已完成 P0 最小可用版本和部分 P1/P2 能力，实际入口以 `server/plugin/saiboard`、`saiadmin-artd/src/views/plugin/saiboard`、`Database/migrations/20260619000100_add_saiboard_plugin.php`、`Database/migrations/20260619000200_add_saiboard_screen_version.php`、`Database/migrations/20260619000300_add_saiboard_screen_token.php` 和 `Database/migrations/20260619000400_add_saiboard_market_item.php` 为准。
 
 > 设计第一原则：**尽可能简单**。只用项目已有依赖（Vue 3 + Element Plus + echarts 6），不引入 go-view、naive-ui、DataV 等需要长期 fork 维护的重型前端工程；**编辑器与对外运行时共用同一套图表渲染组件**，保证「编辑所见 = 运行所得」，避免双引擎割裂。
 
@@ -13,6 +13,7 @@
 | 大屏管理 | `server/plugin/saiboard/app/admin/controller/ScreenController.php` | 维护大屏列表、设计尺寸、背景、对外开关与访问令牌。 |
 | 数据源管理 | `server/plugin/saiboard/app/admin/controller/DatasourceController.php` | 维护 MySQL/HTTP 数据源连接配置，支持连接测试。 |
 | 查询模板 | `server/plugin/saiboard/app/admin/controller/QueryTemplateController.php` | 维护预置取数模板（原始行、计数、聚合、HTTP 透传），不暴露裸 SQL。 |
+| 模板市场 | `server/plugin/saiboard/app/admin/controller/MarketItemController.php` | 维护大屏模板和组件模板，支持公开 / 私有复用。 |
 | 拖拽编辑器 | `saiadmin-artd/src/views/plugin/saiboard/editor/` | Element Plus 外壳 + 薄拖拽层，组件拖拽布局、绑定查询模板，画布直接渲染真实图表组件。 |
 | 对外运行时 | `saiadmin-artd/src/views/plugin/saiboard/runtime/` | 前端静态公开路由 `/screen/:code`，复用**同一套** `art-*` 图表组件，全屏等比缩放渲染。 |
 | 对外取数 | `server/plugin/saiboard/app/api/controller/BoardController.php` | 按组件绑定的查询模板执行数据源，返回脱敏结果。 |
@@ -73,7 +74,7 @@
 server/plugin/saiboard/
 ├── app/
 │   ├── admin/
-│   │   ├── controller/   ScreenController, DatasourceController, QueryTemplateController
+│   │   ├── controller/   ScreenController, DatasourceController, QueryTemplateController, MarketItemController
 │   │   ├── logic/        对应 Logic
 │   │   └── validate/     对应 Validate（save/update 场景）
 │   ├── api/controller/   BoardController（对外：getScreen / data，自鉴权）
@@ -95,6 +96,7 @@ saiadmin-artd/src/views/plugin/saiboard/
 ├── api/            screen.ts, datasource.ts, queryTemplate.ts
 ├── screen/         大屏列表（标准 CRUD，Element Plus）
 ├── datasource/     数据源管理（含测试连接 + 查询模板子管理）
+├── market/         模板市场（大屏模板 / 组件模板）
 ├── editor/         拖拽编辑器（Element Plus 外壳 + DraggableItem + art-* 画布）
 │   └── [id].vue
 ├── runtime/        对外运行时（静态 /screen/:code 路由，复用 widgets/）
@@ -184,6 +186,24 @@ saiadmin-artd/src/views/plugin/saiboard/
 
 > `table_aggregate` 仍保持预置模板模式，不开放裸 SQL。维度和指标字段都必须来自目标数据源真实表字段，日期维度支持原始值、按日、按月、按年。
 
+### `saiboard_market_item` 模板市场表
+
+用于沉淀可复用的大屏模板和组件模板。模板保存时会剥离组件里的 `queryTemplateId` / `query_template_id`，只复用视觉布局、组件配置和字段映射；导入后需要按当前大屏重新绑定查询模板，避免跨用户数据源 / 查询模板泄漏。
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | bigint unsigned PK | 主键。 |
+| `type` | varchar(20) | `screen` 大屏模板 / `component` 组件模板。 |
+| `name` | varchar(80) | 模板名称。 |
+| `category` | varchar(60) | 分类，如订单、运营、装饰。 |
+| `description` | varchar(255) | 模板说明。 |
+| `cover_image` | varchar(255) | 预留封面图 URL。 |
+| `content` | json | `screen` 存 `{layout}`，`component` 存 `{components}`。 |
+| `component_count` | int unsigned | 组件数量，便于列表扫描。 |
+| `is_public` | tinyint unsigned | 1公开 2私有；列表可见范围为公开模板 + 当前数据权限范围内模板。 |
+| `status` | tinyint unsigned | 1启用 2停用。 |
+| 审计字段 | | 同上。 |
+
 ## layout JSON 模型（自定义，极简）
 
 ```json
@@ -230,6 +250,7 @@ saiadmin-artd/src/views/plugin/saiboard/
 | `ScreenController` | index / read / save / update / destroy / changeStatus / saveLayout / publish / copy | `saiboard:screen:*` |
 | `DatasourceController` | 标准 CRUD + `test`（测连接 / 请求）+ `options` / `schema`（模板配置读取） | `saiboard:datasource:*`，`options` / `schema` 复用 `saiboard:datasource:index` |
 | `QueryTemplateController` | 标准 CRUD + `preview`（执行预览） | `saiboard:query_template:*` |
+| `MarketItemController` | 标准 CRUD + `options`（编辑器读取可用模板摘要） | `saiboard:market_item:*` |
 
 每个方法挂 `#[Permission('...', 'saiboard:<module>:<action>')]` 注解。写接口调用 `$this->validate('<scene>', $data)`。
 
@@ -321,6 +342,14 @@ getScreen / data 接口入口：
 - MySQL 查询模板支持 `params[]` 参数白名单；条件值可写 `:param_name`，预览和公开运行时传入的同名参数会按 `string` / `number` / `date` / `datetime` / `time_range` 类型清洗后再进入参数绑定。未声明参数、非法参数名、类型不匹配或必填参数缺失都会被拒绝；URL 上的未知参数会被忽略。
 - `table_raw.field_aliases` 用真实字段名映射输出字段名；`computed_fields` 支持数值字段、数字、括号、`+ - * /` 四则运算，以及 `round` / `abs` / `ceil` / `floor` 安全函数白名单，不开放裸 SQL、任意函数、子查询或条件表达式。
 - HTTP 数据源使用 `http_passthrough`，配置路径和请求参数 JSON。
+
+### 模板市场 `/plugin/saiboard/market`
+
+- 支持大屏模板和组件模板两类市场项，后台可维护名称、分类、说明、公开状态、状态和模板 JSON。
+- 大屏编辑器顶部提供「模板市场」和「保存为模板」入口；左侧组件面板提供「组件市场」入口；右侧属性 / 批量操作区支持把当前选中组件保存为组件模板。
+- `index` / `options` 只返回模板摘要；完整 `content` 必须通过 `read` 权限读取，避免列表权限直接暴露模板 JSON。
+- 套用大屏模板会替换当前草稿画布、背景和组件，并进入撤销历史；插入组件模板会复用当前复制 / 粘贴链路的 ID 重建、组 ID 重映射、边界钳制和数据预览刷新。
+- 模板内容只保留组件视觉和字段映射，不保留查询模板绑定；插入后需重新选择当前用户可访问的查询模板。
 
 时间范围条件示例：
 
@@ -453,7 +482,8 @@ php webman b8:migrate
 - `20260619000100_add_saiboard_plugin.php`：建表 `saiboard_datasource` / `saiboard_screen` / `saiboard_query_template`，幂等。
 - `20260619000200_add_saiboard_screen_version.php`：建表 `saiboard_screen_version`，增加版本权限。
 - `20260619000300_add_saiboard_screen_token.php`：建表 `saiboard_screen_token`，增加访问令牌权限。
-- 后台菜单「大屏管理 / 数据源管理 / 查询模板 / 大屏编辑器」，权限 slug 见后端分层表。
+- `20260619000400_add_saiboard_market_item.php`：建表 `saiboard_market_item`，增加模板市场菜单和权限；回滚只会删除带本迁移标记且无模板数据的表，避免误删已有模板。
+- 后台菜单「大屏管理 / 数据源管理 / 查询模板 / 模板市场 / 大屏编辑器」，权限 slug 见后端分层表。
 - 初始化只读账号使用说明（文档，不写入迁移）。
 
 ## 开发计划
@@ -484,7 +514,7 @@ php webman b8:migrate
 - 已完成：大屏版本管理（保存 / 发布自动快照、最近 50 个版本列表、恢复到草稿、删除快照）。
 - 已完成：数据权限 `scope`（按 `created_by` 隔离大屏 / 数据源 / 查询模板，并覆盖自定义数据源、预览、layout 绑定和运行统计入口）。
 - 已完成：多 token 子表（`saiboard_screen_token`，按客户分发、哈希存储、可独立停用 / 重置 / 删除）。
-- 未完成：组件 / 模板市场。
+- 已完成：组件 / 模板市场（大屏模板、组件模板、公开 / 私有可见范围、编辑器保存 / 插入 / 套用）。
 
 ## 已知边界与后续风险
 
