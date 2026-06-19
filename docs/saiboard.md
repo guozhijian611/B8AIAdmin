@@ -1,6 +1,6 @@
 # SAI Board 大屏可视化插件说明（P0 已落地）
 
-本文档说明 `saiboard` 插件在 B8AIadmin 中的功能边界、技术选型、数据库设计、后端分层、前端集成、鉴权模型和后续计划。当前已完成 P0 最小可用版本和部分 P1/P2 能力，实际入口以 `server/plugin/saiboard`、`saiadmin-artd/src/views/plugin/saiboard`、`Database/migrations/20260619000100_add_saiboard_plugin.php`、`Database/migrations/20260619000200_add_saiboard_screen_version.php`、`Database/migrations/20260619000300_add_saiboard_screen_token.php`、`Database/migrations/20260619000400_add_saiboard_market_item.php` 和 `Database/migrations/20260619000500_add_saiboard_generate_from_table_permission.php` 为准。
+本文档说明 `saiboard` 插件在 B8AIadmin 中的功能边界、技术选型、数据库设计、后端分层、前端集成、鉴权模型和后续计划。当前已完成 P0 最小可用版本和部分 P1/P2 能力，实际入口以 `server/plugin/saiboard`、`saiadmin-artd/src/views/plugin/saiboard`、`Database/migrations/20260619000100_add_saiboard_plugin.php`、`Database/migrations/20260619000200_add_saiboard_screen_version.php`、`Database/migrations/20260619000300_add_saiboard_screen_token.php`、`Database/migrations/20260619000400_add_saiboard_market_item.php`、`Database/migrations/20260619000500_add_saiboard_generate_from_table_permission.php` 和 `Database/migrations/20260619080105_seed_saiboard_default_templates.php` 为准。
 
 > 设计第一原则：**尽可能简单**。只用项目已有依赖（Vue 3 + Element Plus + echarts 6），不引入 go-view、naive-ui、DataV 等需要长期 fork 维护的重型前端工程；**编辑器与对外运行时共用同一套图表渲染组件**，保证「编辑所见 = 运行所得」，避免双引擎割裂。
 
@@ -619,6 +619,7 @@ php webman b8:migrate
 - `20260619000300_add_saiboard_screen_token.php`：建表 `saiboard_screen_token`，增加访问令牌权限；回滚前会检查令牌数据，非空时拒绝删除。
 - `20260619000400_add_saiboard_market_item.php`：建表 `saiboard_market_item`，增加模板市场菜单和权限；回滚只会删除带本迁移标记且无模板数据的表，避免误删已有模板。
 - `20260619000500_add_saiboard_generate_from_table_permission.php`：增加「从数据表生成大屏」按钮权限。
+- `20260619080105_seed_saiboard_default_templates.php`：为模板市场幂等内置 1 个通用运营大屏模板和 2 个组件模板（核心指标三联卡、服务健康状态矩阵），模板内容不绑定任何查询模板或数据源；回滚仅删除本迁移创建且仍归属默认管理员的模板行。
 - 后台菜单「大屏管理 / 数据源管理 / 查询模板 / 模板市场 / 大屏编辑器」，权限 slug 见后端分层表。
 - 初始化只读账号使用说明（文档，不写入迁移）。
 
@@ -643,7 +644,7 @@ php webman b8:migrate
 
 ### P1 能力增强（部分完成）
 
-- 已完成：主题预设、背景图与图片适配；横向柱图 / 双向对比柱图 / K线图 / 仪表盘 / 漏斗图 / 热力图 / 雷达图 / 散点图；时间轴；告警列表；进度排行；状态矩阵；图片轮播；点位地图；CSS 装饰边框 / 流光边框 / 扫描线装饰 / 标题装饰 / 分割线装饰；新增图表字段映射；表格列宽 / 对齐 / 字段别名展示；编辑器复制 / 粘贴 / 撤销 / 重做基础操作；编辑器基础多选、批量复制 / 删除 / 置顶 / 置底 / 对齐 / 分布 / 组合 / 取消组合 / 整体拖拽 / 整体缩放；编辑器缩放占位自适应与缩放后拖拽坐标校正；图层面板基础排序；装饰组件运行时免取数；查询模板条件分组 / OR 组合 / 二维热力图聚合；公开运行时轮询下限、IP / 大屏 / 创建人限流、Redis 原子锁优先的互斥回源、stale 缓存兜底、运行指标与缓存命中率观测。
+- 已完成：主题预设、背景图与图片适配；横向柱图 / 双向对比柱图 / K线图 / 仪表盘 / 漏斗图 / 热力图 / 雷达图 / 散点图；时间轴；告警列表；进度排行；状态矩阵；图片轮播；点位地图；CSS 装饰边框 / 流光边框 / 扫描线装饰 / 标题装饰 / 分割线装饰；新增图表字段映射；表格列宽 / 对齐 / 字段别名展示；编辑器复制 / 粘贴 / 撤销 / 重做基础操作；编辑器基础多选、批量复制 / 删除 / 置顶 / 置底 / 对齐 / 分布 / 组合 / 取消组合 / 整体拖拽 / 整体缩放；编辑器缩放占位自适应与缩放后拖拽坐标校正；图层面板基础排序；装饰组件运行时免取数；查询模板条件分组 / OR 组合 / 二维热力图聚合；公开运行时轮询下限、IP / 大屏 / 创建人限流、Redis 原子锁优先的互斥回源、stale 缓存兜底、运行指标与缓存命中率观测；模板市场内置通用运营大屏模板、核心指标三联卡和服务健康状态矩阵。
 - 未完成：更多行业专用组件仍需按实际大屏场景继续扩展；本轮已补充告警列表、进度排行、状态矩阵和流光边框，覆盖监控、异常订单、工单 SLA、目标达成、设备/服务健康度以及重点区域动态高亮等场景。
 
 ### P2 进阶
