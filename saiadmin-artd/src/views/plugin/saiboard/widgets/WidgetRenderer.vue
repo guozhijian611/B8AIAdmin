@@ -58,6 +58,12 @@
         :value="gaugeValue"
         :name="gaugeName"
       />
+      <ArtFunnelChart
+        v-else-if="component.type === 'art-funnel-chart'"
+        height="100%"
+        :data="ringData"
+        v-bind="component.option"
+      />
       <ArtRingChart
         v-else-if="component.type === 'art-ring-chart'"
         height="100%"
@@ -172,6 +178,7 @@
 <script setup lang="ts">
   import ArtBarChart from '@/components/core/charts/art-bar-chart/index.vue'
   import ArtDualBarCompareChart from '@/components/core/charts/art-dual-bar-compare-chart/index.vue'
+  import ArtFunnelChart from '@/components/core/charts/art-funnel-chart/index.vue'
   import ArtGaugeChart from '@/components/core/charts/art-gauge-chart/index.vue'
   import ArtHBarChart from '@/components/core/charts/art-h-bar-chart/index.vue'
   import ArtKLineChart from '@/components/core/charts/art-k-line-chart/index.vue'
@@ -200,6 +207,7 @@
     'art-dual-bar-compare-chart',
     'art-k-line-chart',
     'art-gauge-chart',
+    'art-funnel-chart',
     'art-ring-chart',
     'art-radar-chart',
     'art-scatter-chart'

@@ -12,6 +12,7 @@
  * - 雷达图类型定义
  * - K线图类型定义
  * - 仪表盘类型定义
+ * - 漏斗图类型定义
  * - 散点图类型定义
  * - 地图图表类型定义
  * - 双向堆叠柱状图类型定义
@@ -255,6 +256,22 @@ export interface GaugeChartProps extends BaseChartProps {
   showPointer?: boolean
   /** 是否显示进度环 */
   showProgress?: boolean
+}
+
+// 漏斗图 Props 接口 - 统一漏斗图配置
+export interface FunnelChartProps extends BaseChartProps, InteractionProps {
+  /** 图表数据 */
+  data?: PieDataItem[]
+  /** 是否显示标签 */
+  showLabel?: boolean
+  /** 是否按值排序 */
+  sort?: 'ascending' | 'descending' | 'none'
+  /** 最小宽度 */
+  minSize?: string
+  /** 最大宽度 */
+  maxSize?: string
+  /** 间距 */
+  gap?: number
 }
 
 // 散点图数据项接口

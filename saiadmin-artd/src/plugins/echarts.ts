@@ -20,7 +20,8 @@ import {
   RadarChart,
   MapChart,
   CandlestickChart,
-  GaugeChart
+  GaugeChart,
+  FunnelChart
 } from 'echarts/charts'
 
 // 导入组件
@@ -52,6 +53,7 @@ echarts.use([
   MapChart,
   CandlestickChart,
   GaugeChart,
+  FunnelChart,
 
   // 组件
   TitleComponent,

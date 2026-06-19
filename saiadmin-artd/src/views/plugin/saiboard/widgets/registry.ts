@@ -69,6 +69,21 @@ export const widgetRegistry: WidgetMeta[] = [
     }
   },
   {
+    type: 'art-funnel-chart',
+    name: '漏斗图',
+    icon: 'ri:filter-3-line',
+    defaultRect: { x: 360, y: 1120, w: 460, h: 320, z: 1 },
+    defaultOption: {
+      showLegend: false,
+      legendPosition: 'right',
+      showLabel: true,
+      sort: 'descending',
+      minSize: '20%',
+      maxSize: '82%',
+      gap: 4
+    }
+  },
+  {
     type: 'art-ring-chart',
     name: '环形图',
     icon: 'ri:donut-chart-line',

@@ -550,6 +550,44 @@
                 <ElSwitch v-model="selectedComponent.option!.showProgress" />
               </ElFormItem>
             </template>
+            <template v-if="selectedComponent.type === 'art-funnel-chart'">
+              <ElFormItem label="显示标签">
+                <ElSwitch v-model="selectedComponent.option!.showLabel" />
+              </ElFormItem>
+              <ElFormItem label="排序">
+                <ElSelect v-model="selectedComponent.option!.sort">
+                  <ElOption label="从大到小" value="descending" />
+                  <ElOption label="从小到大" value="ascending" />
+                  <ElOption label="不排序" value="none" />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="显示图例">
+                <ElSwitch v-model="selectedComponent.option!.showLegend" />
+              </ElFormItem>
+              <ElFormItem v-if="selectedComponent.option!.showLegend" label="图例位置">
+                <ElSelect v-model="selectedComponent.option!.legendPosition">
+                  <ElOption label="右侧" value="right" />
+                  <ElOption label="左侧" value="left" />
+                  <ElOption label="顶部" value="top" />
+                  <ElOption label="底部" value="bottom" />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="块间距">
+                <ElInputNumber
+                  v-model="selectedComponent.option!.gap"
+                  :min="0"
+                  :max="20"
+                  :step="1"
+                  step-strictly
+                />
+              </ElFormItem>
+              <ElFormItem label="最小宽度">
+                <ElInput v-model="selectedComponent.option!.minSize" placeholder="例如 20%" />
+              </ElFormItem>
+              <ElFormItem label="最大宽度">
+                <ElInput v-model="selectedComponent.option!.maxSize" placeholder="例如 82%" />
+              </ElFormItem>
+            </template>
             <template v-if="selectedComponent.type === 'image-carousel'">
               <ElFormItem label="图片字段">
                 <ElSelect
@@ -1086,6 +1124,7 @@
     'art-radar-chart',
     'art-scatter-chart',
     'art-gauge-chart',
+    'art-funnel-chart',
     'stat-number',
     'data-table',
     'image-carousel',

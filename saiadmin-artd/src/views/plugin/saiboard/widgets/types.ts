@@ -31,6 +31,7 @@ export type WidgetType =
   | 'art-dual-bar-compare-chart'
   | 'art-k-line-chart'
   | 'art-gauge-chart'
+  | 'art-funnel-chart'
   | 'art-ring-chart'
   | 'art-radar-chart'
   | 'art-scatter-chart'
