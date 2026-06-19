@@ -191,7 +191,12 @@
 
           <template v-if="form.dataset_type === 'table_aggregate'">
             <ElFormItem label="维度字段">
-              <ElSelect v-model="form.config.dimension" filterable style="width: 100%">
+              <ElSelect
+                v-model="form.config.dimension"
+                filterable
+                style="width: 100%"
+                @change="onDimensionChange"
+              >
                 <ElOption
                   v-for="item in columnOptions"
                   :key="item.name"
@@ -202,6 +207,31 @@
             </ElFormItem>
             <ElFormItem label="维度粒度">
               <ElSelect v-model="form.config.dimension_type" style="width: 100%">
+                <ElOption label="原始值" value="raw" />
+                <ElOption label="按日" value="day" />
+                <ElOption label="按月" value="month" />
+                <ElOption label="按年" value="year" />
+              </ElSelect>
+            </ElFormItem>
+            <ElFormItem label="第二维度">
+              <ElSelect
+                v-model="form.config.secondary_dimension"
+                clearable
+                filterable
+                placeholder="可选，用于热力图 Y 轴"
+                style="width: 100%"
+                @change="onSecondaryDimensionChange"
+              >
+                <ElOption
+                  v-for="item in secondaryDimensionOptions"
+                  :key="item.name"
+                  :label="`${item.name} (${item.type})`"
+                  :value="item.name"
+                />
+              </ElSelect>
+            </ElFormItem>
+            <ElFormItem v-if="form.config.secondary_dimension" label="第二粒度">
+              <ElSelect v-model="form.config.secondary_dimension_type" style="width: 100%">
                 <ElOption label="原始值" value="raw" />
                 <ElOption label="按日" value="day" />
                 <ElOption label="按月" value="month" />
@@ -250,6 +280,11 @@
               <ElSpace wrap>
                 <ElSelect v-model="form.config.order_by" style="width: 160px">
                   <ElOption label="按维度" value="label" />
+                  <ElOption
+                    v-if="form.config.secondary_dimension"
+                    label="按第二维度"
+                    value="series"
+                  />
                   <ElOption
                     v-for="item in aggregateOrderOptions"
                     :key="item.value"
@@ -655,7 +690,7 @@
     table_aggregate: {
       title: '表聚合',
       description:
-        '按维度字段分组，输出 label 加一个或多个聚合指标；适合柱状图、环图、趋势和多指标对比。'
+        '按维度字段分组，输出 label 加一个或多个聚合指标；配置第二维度后输出 label/series/指标列，适合热力图二维矩阵。'
     },
     http_passthrough: {
       title: 'HTTP 透传',
@@ -684,6 +719,9 @@
     if (!fields.length) return columnOptions.value
     return columnOptions.value.filter((item) => fields.includes(item.name))
   })
+  const secondaryDimensionOptions = computed(() =>
+    columnOptions.value.filter((item) => item.name !== form.config.dimension)
+  )
   const dateColumnOptions = computed(() =>
     columnOptions.value.filter(
       (item) => item.kind === 'date' && !item.type.toLowerCase().startsWith('year')
@@ -717,6 +755,8 @@
         params: [],
         dimension: '',
         dimension_type: 'raw',
+        secondary_dimension: '',
+        secondary_dimension_type: 'raw',
         metrics: [{ alias: '数量', aggregate: 'count', field: '' }],
         conditions: [],
         order_by: 'label',
@@ -750,6 +790,8 @@
       if (!Array.isArray(next.order)) next.order = []
     }
     if (type === 'table_aggregate') {
+      next.secondary_dimension = String(next.secondary_dimension || '').trim()
+      next.secondary_dimension_type = normalizeDimensionType(next.secondary_dimension_type)
       next.metrics = normalizeAggregateMetrics(next.metrics, false, next)
     }
     if (type === 'http_passthrough') {
@@ -837,12 +879,32 @@
     form.config.order = []
     form.config.conditions = []
     form.config.dimension = ''
+    form.config.secondary_dimension = ''
+    form.config.secondary_dimension_type = 'raw'
     form.config.metrics = [{ alias: '数量', aggregate: 'count', field: '' }]
     await loadSchema(form.config.table)
   }
 
   const onMetricAggregateChange = (metric: AggregateMetric) => {
     if (metric.aggregate === 'count') metric.field = ''
+  }
+
+  const onDimensionChange = () => {
+    if (form.config.secondary_dimension === form.config.dimension) {
+      form.config.secondary_dimension = ''
+    }
+    onSecondaryDimensionChange()
+  }
+
+  const onSecondaryDimensionChange = () => {
+    form.config.secondary_dimension_type = form.config.secondary_dimension
+      ? normalizeDimensionType(form.config.secondary_dimension_type)
+      : 'raw'
+    form.config.order_by = normalizeAggregateOrderBy(
+      form.config.order_by,
+      form.config.metrics,
+      Boolean(form.config.secondary_dimension)
+    )
   }
 
   const buildPayload = () => ({ ...form, config: buildConfig(true) })
@@ -864,9 +926,29 @@
       config.limit = Number(config.limit || 100)
     }
     if (form.dataset_type === 'table_aggregate') {
+      config.dimension = String(config.dimension || '').trim()
+      config.dimension_type = normalizeDimensionType(config.dimension_type)
+      config.secondary_dimension = String(config.secondary_dimension || '').trim()
+      if (config.secondary_dimension) {
+        if (config.secondary_dimension === config.dimension) {
+          if (strict) {
+            throw new Error('第二维度字段不能与维度字段相同')
+          }
+          config.secondary_dimension = ''
+        }
+        config.secondary_dimension_type = normalizeDimensionType(config.secondary_dimension_type)
+      }
+      if (!config.secondary_dimension) {
+        delete config.secondary_dimension
+        delete config.secondary_dimension_type
+      }
       config.limit = Number(config.limit || 100)
       config.metrics = normalizeAggregateMetrics(config.metrics, true, config)
-      config.order_by = normalizeAggregateOrderBy(config.order_by, config.metrics)
+      config.order_by = normalizeAggregateOrderBy(
+        config.order_by,
+        config.metrics,
+        Boolean(config.secondary_dimension)
+      )
       config.order_type = config.order_type === 'desc' ? 'desc' : 'asc'
       delete config.aggregate
       delete config.metric
@@ -992,7 +1074,11 @@
     if (!form.config.metrics.length) {
       form.config.metrics.push({ alias: '数量', aggregate: 'count', field: '' })
     }
-    form.config.order_by = normalizeAggregateOrderBy(form.config.order_by, form.config.metrics)
+    form.config.order_by = normalizeAggregateOrderBy(
+      form.config.order_by,
+      form.config.metrics,
+      Boolean(form.config.secondary_dimension)
+    )
   }
 
   const removeCondition = (index: number) => {
@@ -1216,6 +1302,10 @@
     return ['count', 'sum', 'avg', 'min', 'max'].includes(value) ? value : 'count'
   }
 
+  function normalizeDimensionType(value: string) {
+    return ['raw', 'day', 'date', 'month', 'year'].includes(value) ? value : 'raw'
+  }
+
   function aggregateMetricAlias(metric: Partial<AggregateMetric>, index: number) {
     const alias = String(metric.alias || '').trim()
     if (alias) return alias
@@ -1227,8 +1317,14 @@
     return metric.alias || aggregateMetricAlias(metric, index)
   }
 
-  function normalizeAggregateOrderBy(value: string, metrics: AggregateMetric[]) {
+  function normalizeAggregateOrderBy(
+    value: string,
+    metrics: AggregateMetric[],
+    allowSeries = false
+  ) {
     const aliases = new Set(metrics.map((item, index) => aggregateMetricAlias(item, index)))
+    if (value === 'label') return value
+    if (allowSeries && value === 'series') return value
     return value && aliases.has(value) ? value : 'label'
   }
 

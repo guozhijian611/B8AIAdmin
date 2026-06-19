@@ -76,7 +76,19 @@ class SqlBuilder
         $columns = $this->columns($pdo, $table);
         $columnTypes = $this->columnTypes($pdo, $table);
         $dimension = $this->assertColumn($columns, (string) ($config['dimension'] ?? ''), '维度字段');
-        $metrics = $this->normalizeAggregateMetrics($config, $columns, $columnTypes);
+        $secondaryDimension = trim((string) ($config['secondary_dimension'] ?? ''));
+        if ($secondaryDimension !== '') {
+            $secondaryDimension = $this->assertColumn($columns, $secondaryDimension, '第二维度字段');
+            if ($secondaryDimension === $dimension) {
+                throw new InvalidArgumentException('第二维度字段不能与维度字段相同');
+            }
+        }
+        $metrics = $this->normalizeAggregateMetrics(
+            $config,
+            $columns,
+            $columnTypes,
+            $secondaryDimension !== '' ? ['label', 'series'] : ['label']
+        );
 
         [$whereSql, $bindings] = $this->buildWhere(
             $columns,
@@ -85,13 +97,35 @@ class SqlBuilder
             $templateParams
         );
         $labelExpression = $this->dimensionExpression($dimension, (string) ($config['dimension_type'] ?? 'raw'));
+        $seriesExpression = $secondaryDimension === ''
+            ? ''
+            : $this->dimensionExpression(
+                $secondaryDimension,
+                (string) ($config['secondary_dimension_type'] ?? 'raw')
+            );
         $metricExpressions = array_map(
             fn (array $metric) => $metric['expression'] . ' AS ' . $this->quoteAlias($metric['alias']),
             $metrics
         );
-        $orderBy = $this->aggregateOrderBy($config['order_by'] ?? 'label', $metrics);
+        $orderBy = $this->aggregateOrderBy($config['order_by'] ?? 'label', $metrics, $secondaryDimension !== '');
         $direction = strtolower((string) ($config['order_type'] ?? 'asc')) === 'desc' ? 'DESC' : 'ASC';
         $limit = $this->normalizeLimit($config['limit'] ?? 100);
+
+        if ($seriesExpression !== '') {
+            $sql = sprintf(
+                'SELECT %s AS `label`, %s AS `series`, %s FROM `%s`%s GROUP BY `label`, `series` ORDER BY %s %s LIMIT %d',
+                $labelExpression,
+                $seriesExpression,
+                implode(', ', $metricExpressions),
+                $table,
+                $whereSql,
+                $orderBy,
+                $direction,
+                $limit
+            );
+
+            return [$sql, $bindings, 'raw'];
+        }
 
         $sql = sprintf(
             'SELECT %s AS `label`, %s FROM `%s`%s GROUP BY `label` ORDER BY %s %s LIMIT %d',
@@ -107,7 +141,12 @@ class SqlBuilder
         return [$sql, $bindings, 'raw'];
     }
 
-    private function normalizeAggregateMetrics(array $config, array $columns, array $columnTypes): array
+    private function normalizeAggregateMetrics(
+        array $config,
+        array $columns,
+        array $columnTypes,
+        array $reservedNames = ['label']
+    ): array
     {
         $items = $config['metrics'] ?? [];
         if (!is_array($items) || $items === []) {
@@ -122,7 +161,7 @@ class SqlBuilder
         }
 
         $result = [];
-        $usedNames = ['label' => true];
+        $usedNames = array_fill_keys($reservedNames, true);
         foreach ($items as $index => $item) {
             if (!is_array($item)) {
                 throw new InvalidArgumentException('聚合指标配置不正确');
@@ -180,11 +219,14 @@ class SqlBuilder
         return $field === '' ? 'value_' . ($index + 1) : $field . '_' . $aggregate;
     }
 
-    private function aggregateOrderBy(mixed $orderBy, array $metrics): string
+    private function aggregateOrderBy(mixed $orderBy, array $metrics, bool $withSeries = false): string
     {
         $orderBy = trim((string) $orderBy);
         if ($orderBy === '' || strtolower($orderBy) === 'label') {
             return '`label`';
+        }
+        if ($withSeries && strtolower($orderBy) === 'series') {
+            return '`series`';
         }
 
         foreach ($metrics as $metric) {

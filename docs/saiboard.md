@@ -182,9 +182,9 @@ saiadmin-artd/src/views/plugin/saiboard/
 | `table_raw` | P0 | 表原始：选表 + 字段 + 条件 + 排序 + limit。 |
 | `table_count` | P0 | 单值计数。 |
 | `http_passthrough` | P0 | HTTP 透传：配置路径 + 参数。 |
-| `table_aggregate` | P0 + P1 | 表聚合：维度（x 轴）+ 多指标（y 轴）+ 聚合（count/sum/avg/min/max）+ 条件 + 排序 + limit。 |
+| `table_aggregate` | P0 + P1 | 表聚合：维度 + 可选第二维度 + 多指标 + 聚合（count/sum/avg/min/max）+ 条件 + 排序 + limit。 |
 
-> `table_aggregate` 仍保持预置模板模式，不开放裸 SQL。维度和指标字段都必须来自目标数据源真实表字段，日期维度支持原始值、按日、按月、按年。
+> `table_aggregate` 仍保持预置模板模式，不开放裸 SQL。维度、第二维度和指标字段都必须来自目标数据源真实表字段，日期维度支持原始值、按日、按月、按年。
 
 ### `saiboard_market_item` 模板市场表
 
@@ -278,7 +278,7 @@ saiadmin-artd/src/views/plugin/saiboard/
 - 输入：`dataset_type` + `config`（表名、字段、条件、排序、limit）。
 - 输出：**参数化** SELECT。
 - 表名、字段名走**白名单校验**：只能是指定 datasource 库里真实存在的表 / 列，运行时通过 `SHOW TABLES` / `SHOW COLUMNS` 复核。
-- `table_aggregate` 输出统一的 `label + 指标列` 行；单指标兼容 `{label, value}`，多指标如 `{label, 订单数, 订单金额}` 可被柱状图、折线图自动识别为多系列。
+- `table_aggregate` 单维聚合输出统一的 `label + 指标列` 行；配置第二维度后输出 `label + series + 指标列`，可直接被热力图识别为 X/Y/value 矩阵。单指标兼容 `{label, value}`，多指标如 `{label, 订单数, 订单金额}` 可被柱状图、折线图自动识别为多系列。
 - 强烈建议生产仍给数据源配**只读 MySQL 账号**，作为第二道防线。
 
 ## 安全设计
@@ -337,7 +337,7 @@ getScreen / data 接口入口：
 - 支持按数据源读取 MySQL 表和字段，表单化配置 `table_raw` / `table_count` / `table_aggregate`。
 - `table_raw` 可选返回字段、字段别名、计算字段、条件、排序和 limit。
 - `table_count` 可选条件，统一返回 `{rows, total}`，其中 `total` 是计数值。
-- `table_aggregate` 可选维度字段、日期粒度、多个聚合指标、条件、排序和 limit，统一返回 `{rows, total}`；每行结构为 `label + 指标列`，指标最多 8 项，非 `count` 指标必须选择数值字段。
+- `table_aggregate` 可选维度字段、第二维度字段、日期粒度、多个聚合指标、条件、排序和 limit，统一返回 `{rows, total}`；单维每行结构为 `label + 指标列`，二维每行结构为 `label + series + 指标列`，指标最多 8 项，非 `count` 指标必须选择数值字段。
 - 条件支持 `= / != / > / >= / < / <= / like / in / between / time_range`，并支持条件组内 `AND / OR` 组合；顶层条件按 `AND` 合并，老的平铺条件数组继续兼容。`time_range` 只允许日期 / 时间字段，`value` 可用 `today`、`yesterday`、`last_7_days`、`last_30_days`、`this_week`、`this_month`、`last_month`、`this_year`。
 - MySQL 查询模板支持 `params[]` 参数白名单；条件值可写 `:param_name`，预览和公开运行时传入的同名参数会按 `string` / `number` / `date` / `datetime` / `time_range` 类型清洗后再进入参数绑定。未声明参数、非法参数名、类型不匹配或必填参数缺失都会被拒绝；URL 上的未知参数会被忽略。
 - `table_raw.field_aliases` 用真实字段名映射输出字段名；`computed_fields` 支持数值字段、数字、括号、`+ - * /` 四则运算，以及 `round` / `abs` / `ceil` / `floor` 安全函数白名单，不开放裸 SQL、任意函数、子查询或条件表达式。
@@ -425,6 +425,22 @@ getScreen / data 接口入口：
 }
 ```
 
+二维热力图聚合示例：
+
+```json
+{
+  "table": "saipay_order",
+  "dimension": "create_time",
+  "dimension_type": "day",
+  "secondary_dimension": "pay_method",
+  "secondary_dimension_type": "raw",
+  "metrics": [{ "alias": "数量", "aggregate": "count" }],
+  "order_by": "label",
+  "order_type": "asc",
+  "limit": 200
+}
+```
+
 ## 数据源配置示例
 
 ### MySQL 数据源 config
@@ -473,7 +489,7 @@ getScreen / data 接口入口：
 | --- | --- | --- | --- |
 | `table_raw` 表原始行 | MySQL | 返回明细 `rows`，字段来自「返回字段」和「计算字段」。 | 表格、排行榜、折线图、柱状图、散点图、漏斗图、热力图、K线图、仪表盘、图片轮播、时间轴。 |
 | `table_count` 表计数 | MySQL | 返回 `rows[0].total`，`total` 同步为计数值。 | 指标卡、仪表盘、总量统计、告警数量。 |
-| `table_aggregate` 表聚合 | MySQL | 按维度字段分组，固定输出 `label`，再输出一个或多个聚合指标。 | 柱状图、漏斗图、环图、雷达图、趋势图、多指标对比、仪表盘。 |
+| `table_aggregate` 表聚合 | MySQL | 按维度字段分组，固定输出 `label`；配置第二维度时额外输出 `series`；再输出一个或多个聚合指标。 | 柱状图、漏斗图、环图、雷达图、趋势图、多指标对比、仪表盘、热力图。 |
 | `http_passthrough` HTTP 透传 | HTTP | 若接口返回 `rows` 则直接使用；否则取 `data`，数组转多行，对象转单行。 | 外部系统指标、第三方接口、已聚合好的业务数据、漏斗图、热力图、K线图、仪表盘、时间轴。 |
 
 K线图需要把数据行映射为 `time`、`open`、`close`、`high`、`low` 五类字段；编辑器属性面板支持分别选择时间、开盘、收盘、最高、最低字段。字段名命中 `time/date/open/close/high/low` 等常见命名时会自动识别，未命中时手动选择即可。
@@ -482,7 +498,7 @@ K线图需要把数据行映射为 `time`、`open`、`close`、`high`、`low` �
 
 漏斗图读取多行 `label/value` 数据，字段映射沿用通用 `labelField` / `valueField`；适合转化路径、销售阶段、流程流失等按阶段递减或对比的场景。属性面板支持标签、排序、图例位置、块间距和宽度范围配置。
 
-热力图读取多行 `x/y/value` 数据，`value` 字段映射沿用通用 `valueField`，`xField` / `yField` 在组件属性面板配置；适合按时间、状态、渠道、类型组成二维矩阵的活跃度、订单量、告警密度等场景。同一个 `x/y` 组合出现多行时前端会累加数值。当前 `table_aggregate` 仍是单维聚合，不直接生成二维热力图；需要二维数据时优先使用 `table_raw` 返回明细或 `http_passthrough` 透传已聚合结果。
+热力图读取多行 `x/y/value` 数据，`value` 字段映射沿用通用 `valueField`，`xField` / `yField` 在组件属性面板配置；适合按时间、状态、渠道、类型组成二维矩阵的活跃度、订单量、告警密度等场景。同一个 `x/y` 组合出现多行时前端会累加数值。MySQL 查询模板可用 `table_aggregate` 的第二维度直接输出 `label/series/指标列`，热力图会默认识别 `label` 为 X 轴、`series` 为 Y 轴；也可继续使用 `table_raw` 返回明细或 `http_passthrough` 透传已聚合结果。
 
 时间轴读取多行 `time/title/content/status` 事件数据，字段在组件属性面板配置；适合订单流转、内容发布、告警记录、任务进度等按时间展示的事件流。组件支持正序 / 倒序、最大条数、显示时间、显示内容和强调色配置；状态字段会按成功、告警、异常等常见值自动切换节点颜色。
 
@@ -546,7 +562,7 @@ php webman b8:migrate
 | 后端 | `SqlBuilder`（`table_raw` / `table_count` / `table_aggregate`）+ `DataSourceExecutor`（mysql / http + SSRF 防护 + Cache 缓存）。 |
 | 后端 | `ScreenController` 标准 CRUD + `saveLayout` / `publish`；`BoardController`（`getScreen` / `data`，IDOR 绑定校验）。 |
 | 后端 | `DatasourceController::test` 支持新增态 payload 测试校验，连接失败写入 `last_error` 并返回稳定错误消息；测试成功返回脱敏诊断信息。 |
-| 后端 | `table_aggregate` 支持 `metrics[]` 多指标聚合，指标 alias 白名单化、最多 8 项，排序只允许维度或已校验指标。 |
+| 后端 | `table_aggregate` 支持 `metrics[]` 多指标聚合和可选第二维度聚合，指标 alias 白名单化、最多 8 项，排序只允许维度、第二维度或已校验指标。 |
 | 后端 | `table_raw.computed_fields` 支持 `round` / `abs` / `ceil` / `floor` 安全函数白名单，仍禁止裸 SQL、任意函数、子查询和条件表达式。 |
 | 后端/前端 | MySQL 查询模板支持 `params[]` 参数白名单、`:param_name` 条件占位符、条件分组和组内 `AND / OR`；预览与公开运行时按白名单参数清洗后执行。 |
 | 前端 | `DraggableItem.vue`（封装 `vue3-draggable-resizable`）+ `widgets/` 注册表，复用 `art-*` 图表（柱/折线/横向柱/K线/仪表盘/漏斗/热力图/环形/雷达/散点 + 单值指标 / 表格 / 时间轴 / 点位地图）并提供 CSS 装饰边框 / 扫描线 / 标题装饰 / 分割线。 |
@@ -555,7 +571,7 @@ php webman b8:migrate
 
 ### P1 能力增强（部分完成）
 
-- 已完成：主题预设、背景图与图片适配；横向柱图 / 双向对比柱图 / K线图 / 仪表盘 / 漏斗图 / 热力图 / 雷达图 / 散点图；时间轴；图片轮播；点位地图；CSS 装饰边框 / 扫描线装饰 / 标题装饰 / 分割线装饰；新增图表字段映射；表格列宽 / 对齐 / 字段别名展示；编辑器复制 / 粘贴 / 撤销 / 重做基础操作；编辑器基础多选、批量复制 / 删除 / 置顶 / 置底 / 对齐 / 分布 / 组合 / 取消组合 / 整体拖拽 / 整体缩放；编辑器缩放占位自适应；图层面板基础排序；装饰组件运行时免取数；查询模板条件分组 / OR 组合；公开运行时轮询下限、IP / 大屏 / 创建人限流、Redis 原子锁优先的互斥回源、stale 缓存兜底、运行指标与缓存命中率观测。
+- 已完成：主题预设、背景图与图片适配；横向柱图 / 双向对比柱图 / K线图 / 仪表盘 / 漏斗图 / 热力图 / 雷达图 / 散点图；时间轴；图片轮播；点位地图；CSS 装饰边框 / 扫描线装饰 / 标题装饰 / 分割线装饰；新增图表字段映射；表格列宽 / 对齐 / 字段别名展示；编辑器复制 / 粘贴 / 撤销 / 重做基础操作；编辑器基础多选、批量复制 / 删除 / 置顶 / 置底 / 对齐 / 分布 / 组合 / 取消组合 / 整体拖拽 / 整体缩放；编辑器缩放占位自适应；图层面板基础排序；装饰组件运行时免取数；查询模板条件分组 / OR 组合 / 二维热力图聚合；公开运行时轮询下限、IP / 大屏 / 创建人限流、Redis 原子锁优先的互斥回源、stale 缓存兜底、运行指标与缓存命中率观测。
 - 未完成：更多垂直领域图表，以及业务场景更强的动态装饰组件按实际大屏场景继续扩展。
 
 ### P2 进阶
