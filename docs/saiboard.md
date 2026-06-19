@@ -670,14 +670,15 @@ php webman b8:migrate
 
 1. 在 `server/` 执行 `php webman b8:migrate:status`，确认 6 个 SAI Board 迁移均为 `up`；再执行 `php webman b8:migrate --dry-run`，确认无待执行迁移。
 2. 在 `server/` 执行 `php webman route:list | rg "saiboard|apidoc/openapi"`，确认后台、公开运行时和 APIDOC 路由存在。
-3. 配置生产 `.env`：按实际域名设置 `SAIBOARD_HTTP_ALLOWED_HOSTS`；多副本部署确认 `CACHE_MODE=redis`、`REDIS_HOST`、`REDIS_PASSWORD`、`REDIS_DB` 可用；保留 `SAIBOARD_RATE_LIMIT=true` 和 `SAIBOARD_REDIS_LOCK=true`。
-4. 为每个 MySQL 数据源创建只读账号，并用数据源管理页「测试」确认连接成功；失败时确认数据库名、账号密码、网络和授权范围。
-5. 新建或选择一个查询模板，先在查询模板页预览，再在大屏编辑器绑定组件预览，确认返回结构符合组件字段映射。
-6. 通过「从数据表生成大屏」生成草稿，进入编辑器检查指标卡、趋势、排行、分布、状态矩阵和明细表；保存草稿后使用「预览草稿」查看 `/screen/:code?admin_preview=1&draft=1`。
-7. 发布大屏后打开发布预览，确认运行页适配模式符合预期：`contain` 完整显示、`cover` 允许裁切、`stretch` 拉伸铺满。
-8. 若对外私有访问，创建子令牌并只保存创建 / 重置时返回的明文；用 `/screen/:code?token=...` 或 `X-Saiboard-Token` 验证可访问，再停用令牌验证访问被拒绝。
-9. 使用普通角色账号验证菜单、按钮权限和数据权限：只能看到自己数据范围内的大屏、数据源和查询模板，不能读取或绑定其他归属的查询模板。
-10. 打开大屏列表的运行统计，确认缓存命中、回源、限流、Redis 锁或文件锁指标有记录；压测或投屏前确认没有持续 `source_fail` 或频繁锁等待。
+3. 在 `saiadmin-artd/` 执行 `pnpm verify:saiboard-runtime`，自动覆盖数据源测试、表结构读取、查询模板预览、从表生成大屏、发布、私有 token 访问、公开运行时取数和运行统计读取；脚本会清理自身生成的临时大屏、查询模板、版本和令牌。
+4. 配置生产 `.env`：按实际域名设置 `SAIBOARD_HTTP_ALLOWED_HOSTS`；多副本部署确认 `CACHE_MODE=redis`、`REDIS_HOST`、`REDIS_PASSWORD`、`REDIS_DB` 可用；保留 `SAIBOARD_RATE_LIMIT=true` 和 `SAIBOARD_REDIS_LOCK=true`。
+5. 为每个 MySQL 数据源创建只读账号，并用数据源管理页「测试」确认连接成功；失败时确认数据库名、账号密码、网络和授权范围。
+6. 新建或选择一个查询模板，先在查询模板页预览，再在大屏编辑器绑定组件预览，确认返回结构符合组件字段映射。
+7. 通过「从数据表生成大屏」生成草稿，进入编辑器检查指标卡、趋势、排行、分布、状态矩阵和明细表；保存草稿后使用「预览草稿」查看 `/screen/:code?admin_preview=1&draft=1`。
+8. 发布大屏后打开发布预览，确认运行页适配模式符合预期：`contain` 完整显示、`cover` 允许裁切、`stretch` 拉伸铺满。
+9. 若对外私有访问，创建子令牌并只保存创建 / 重置时返回的明文；用 `/screen/:code?token=...` 或 `X-Saiboard-Token` 验证可访问，再停用令牌验证访问被拒绝。
+10. 使用普通角色账号验证菜单、按钮权限和数据权限：只能看到自己数据范围内的大屏、数据源和查询模板，不能读取或绑定其他归属的查询模板。
+11. 打开大屏列表的运行统计，确认缓存命中、回源、限流、Redis 锁或文件锁指标有记录；压测或投屏前确认没有持续 `source_fail` 或频繁锁等待。
 
 ## 开发计划
 
