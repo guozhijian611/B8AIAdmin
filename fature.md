@@ -41,6 +41,7 @@ B8 Framework
 ├── b8-observability   trace、日志、SQL、队列、任务、运行时诊断
 ├── b8-admin           管理端 UI、组件体系、菜单、权限页面
 ├── b8-release         Docker、二进制、静态资源、发布检查
+├── b8-test            AI 测试计划、测试生成、执行、诊断、鉴权身份
 └── b8-ai              AI 上下文导出、AI 技能、AI 任务协议
 ```
 
@@ -1118,6 +1119,7 @@ docs/
   plugin/
   hook/
   event/
+  testing/
   deploy/
   ai/
   changelog/
@@ -1129,6 +1131,7 @@ skills/
   b8-migration/
   b8-saas/
   b8-permission/
+  b8-test/
   b8-release/
 
 .ai/
@@ -1145,6 +1148,10 @@ skills/
   mock_scenarios.json
   faker_rules.json
   fixtures.json
+  tests.json
+  test_identities.json
+  auth_flows.json
+  test_runs.json
 ```
 
 职责：
@@ -1163,6 +1170,7 @@ php webman b8:ai:hooks
 php webman b8:ai:events
 php webman b8:ai:plugins
 php webman b8:ai:mock
+php webman b8:ai:tests
 php webman b8:ai:explain b8/coupon
 ```
 
@@ -1179,11 +1187,371 @@ Hook 注册表 -> hooks.json
 Mock Profile -> mock_profiles.json
 Mock Scenario -> mock_scenarios.json
 Faker 规则 -> faker_rules.json
+测试计划 -> tests.json
+测试身份 -> test_identities.json
+鉴权流程 -> auth_flows.json
 ```
 
 不要让 AI 依赖过期文档猜测当前系统。
 
-## 16. 可观测和运行时诊断
+## 16. AI 测试体系
+
+AI 测试不是让 AI 凭感觉判断页面是否正确，而是让 AI 基于框架事实生成测试计划、测试数据和测试代码，再交给确定性的测试执行器、断言和 trace 诊断来判定结果。
+
+核心原则：
+
+```text
+AI 负责生成测试计划、生成测试用例、选择模拟数据、分析失败原因。
+程序负责执行测试、断言结果、判定通过失败。
+```
+
+### 16.1 b8-test 模块定位
+
+`b8-test` 是框架级测试系统，负责：
+
+- 从 `.ai` 上下文、OpenAPI、模型元数据、权限、Hook、事件和插件 manifest 生成测试计划。
+- 调用 `b8-faker` 生成测试数据和场景数据。
+- 生成可执行测试，而不是只生成自然语言说明。
+- 执行 API、CRUD、权限、SaaS、插件、Hook/Event、Revision、前端 E2E 测试。
+- 将失败结果与 trace、SQL、Hook、Event、队列、路由、迁移状态关联。
+- 输出 AI 可读的失败诊断和修复建议。
+
+### 16.2 测试上下文
+
+AI 测试前必须读取真实上下文：
+
+```text
+.ai/routes.json
+.ai/models.json
+.ai/relations.json
+.ai/permissions.json
+.ai/hooks.json
+.ai/events.json
+.ai/plugins.json
+.ai/openapi.json
+.ai/migrations.json
+.ai/mock_profiles.json
+.ai/mock_scenarios.json
+.ai/test_identities.json
+.ai/auth_flows.json
+```
+
+这样 AI 能知道：
+
+- 有哪些接口。
+- 每个接口需要什么参数。
+- 哪些接口需要 token。
+- token 来自哪个登录入口。
+- 哪些模型字段必填。
+- 哪些权限点控制菜单、按钮和 API。
+- 哪些租户、角色、套餐、插件授权会影响结果。
+- 哪个 mock 场景适合当前测试。
+
+### 16.3 测试计划生成
+
+命令：
+
+```bash
+php webman b8:test:plan mall/order
+php webman b8:test:plan plugin b8/coupon
+php webman b8:test:plan --from-openapi
+php webman b8:test:plan --changed-only
+php webman b8:test:plan --with-auth-matrix
+```
+
+生成计划示例：
+
+```text
+订单模块测试计划：
+1. CRUD smoke test
+2. OpenAPI contract test
+3. RBAC 权限测试
+4. ABAC 资源权限测试
+5. 租户隔离测试
+6. Token 鉴权矩阵测试
+7. Hook 注入测试
+8. Event 分发测试
+9. 历史版本和回退测试
+10. 前端后台 E2E 测试
+```
+
+### 16.4 测试代码生成
+
+AI 生成的不是临时脚本，而是可维护测试文件：
+
+```bash
+php webman b8:test:generate mall/order --type=api
+php webman b8:test:generate mall/order --type=crud
+php webman b8:test:generate mall/order --type=permission
+php webman b8:test:generate mall/order --type=tenant
+php webman b8:test:generate mall/order --type=e2e
+```
+
+测试类型：
+
+```text
+PHPUnit/Pest API 测试
+HTTP contract 测试
+数据库断言测试
+权限矩阵测试
+租户隔离测试
+Hook/Event 测试
+Revision 回退测试
+Playwright 后台 E2E 测试
+```
+
+### 16.5 测试执行命令
+
+```bash
+php webman b8:test:seed smoke
+php webman b8:test:run smoke
+php webman b8:test:run api
+php webman b8:test:run crud
+php webman b8:test:run permission
+php webman b8:test:run tenant
+php webman b8:test:run plugin
+php webman b8:test:run hook
+php webman b8:test:run e2e
+php webman b8:test:run --changed-only
+php webman b8:test:diagnose <run-id>
+php webman b8:test:clear --marker=test:smoke
+```
+
+测试执行前自动检查：
+
+```text
+php -l
+php webman route:list
+php webman b8:migrate:status
+php webman b8:migrate --dry-run
+测试数据库连接
+测试租户上下文
+测试身份和 token 可用性
+```
+
+### 16.6 鉴权和 Token 测试
+
+需要 token 鉴权的场景不能手工复制真实用户 token，也不能在测试代码中硬编码长期 token。框架应该提供测试身份和临时 token 机制。
+
+测试身份声明：
+
+```yaml
+identities:
+  super_admin:
+    type: admin
+    roles: [super_admin]
+    tenant: system
+  tenant_admin:
+    type: admin
+    roles: [tenant_admin]
+    tenant: demo
+  operator:
+    type: admin
+    roles: [order_operator]
+    tenant: demo
+  readonly:
+    type: admin
+    roles: [readonly]
+    tenant: demo
+  member:
+    type: api
+    roles: [member]
+    tenant: demo
+  denied:
+    type: admin
+    roles: []
+    tenant: demo
+```
+
+测试 token 签发命令：
+
+```bash
+php webman b8:test:auth:issue tenant_admin --ttl=15m
+php webman b8:test:auth:issue member --guard=api --ttl=15m
+php webman b8:test:auth:matrix mall/order
+php webman b8:test:auth:revoke --run-id=20260620-001
+```
+
+签发策略：
+
+- 优先走真实登录接口，验证登录链路和 token 格式。
+- 对后台 E2E 测试可生成 Playwright `storageState`，避免每个用例重复登录。
+- 对 API 测试可由 `TestTokenBroker` 签发短期测试 token。
+- token 只写入 `runtime/test-runs/<run-id>/secrets.json` 或等价临时存储。
+- 日志、trace、报告必须脱敏 token，只显示 token hash 或后 6 位。
+- 测试结束自动 revoke 或过期。
+- 生产环境默认禁止签发测试 token。
+
+测试请求示例：
+
+```text
+Authorization: Bearer ${token:tenant_admin}
+X-B8-Test-Run: 20260620-001
+X-B8-Tenant: demo
+```
+
+### 16.7 Token 鉴权矩阵
+
+每个需要鉴权的接口至少测试：
+
+```text
+无 token                  应返回 401
+伪造 token                应返回 401
+过期 token                应返回 401
+错误 guard token          应返回 401 或 403
+有 token 无权限           应返回 403
+有 token 有菜单无按钮权限  按钮不可见，API 拒绝
+有 API 权限无数据权限      返回空列表或 403
+跨租户 token              不得读取其他租户数据
+超级管理员 token          可访问但仍记录审计
+普通用户 token            只访问自己的资源
+```
+
+对于刷新 token 或多端登录，还要测试：
+
+```text
+refresh token 正常刷新
+refresh token 过期
+logout 后 token 失效
+修改密码后 token 失效
+角色权限变更后缓存刷新
+租户禁用后 token 失效
+```
+
+### 16.8 前端 E2E 鉴权
+
+后台 E2E 测试支持两种模式：
+
+```text
+login-flow      通过真实登录页面登录，验证登录 UI 和接口。
+storage-state   使用测试 token 生成浏览器状态，加速页面测试。
+```
+
+命令：
+
+```bash
+php webman b8:test:e2e:auth tenant_admin --mode=login-flow
+php webman b8:test:e2e:auth tenant_admin --mode=storage-state
+php webman b8:test:run e2e --identity=tenant_admin
+```
+
+E2E 权限测试应覆盖：
+
+- 不同角色菜单是否正确显示。
+- 按钮权限是否正确显示。
+- 页面直输 URL 是否被拦截。
+- token 过期后是否跳转登录。
+- 切换租户后数据是否隔离。
+
+### 16.9 测试数据和 token 绑定
+
+测试数据必须和测试身份绑定：
+
+```text
+tenant_admin -> demo 租户管理数据
+operator     -> demo 租户订单操作数据
+readonly     -> demo 租户只读数据
+member       -> demo 租户前台用户数据
+denied       -> 无授权数据
+```
+
+`b8:test:seed permission` 应同时生成：
+
+- 测试租户。
+- 测试用户。
+- 测试角色。
+- 测试权限。
+- 测试 token 身份。
+- 测试业务数据。
+- 可清理 marker。
+
+### 16.10 AI 失败诊断
+
+测试失败后，AI 自动读取：
+
+```text
+测试输出
+HTTP 请求和响应
+trace_id
+/__trace 详情
+SQL 日志
+Hook 执行日志
+Event 日志
+队列日志
+迁移状态
+route:list
+权限缓存状态
+token 签发记录
+当前测试身份
+```
+
+命令：
+
+```bash
+php webman b8:test:diagnose runtime/test-runs/20260620-001
+php webman b8:test:diagnose --trace-id=xxx
+php webman b8:test:explain-failure --case=OrderCreateRequiresPermission
+```
+
+诊断输出：
+
+```text
+失败接口：POST /app/mall/admin/order/save
+测试身份：operator
+期望结果：200
+实际结果：403
+失败原因：operator 角色缺少 mall:order:save 权限
+证据：
+- route:list 中接口存在
+- token 有效
+- UserAuthCache 未包含 mall:order:save
+- trace_id=xxx
+建议：
+1. 检查插件迁移是否注册按钮/API 权限
+2. 检查角色授权是否包含 mall:order:save
+3. 清理权限缓存后重试
+```
+
+### 16.11 AI 测试安全边界
+
+AI 测试必须受限制：
+
+- AI 不能在生产库自动生成测试数据。
+- AI 不能自动删除无 marker 数据。
+- AI 不能读取或输出完整 token。
+- AI 不能使用真实管理员长期 token。
+- AI 不能绕过登录和权限直接改业务数据。
+- AI 生成测试后必须经过 dry-run 或人工确认。
+- 所有测试 token 必须短期有效、可撤销、可审计。
+- 所有测试数据必须带 `test_marker` 或 `mock_marker`。
+
+### 16.12 测试报告
+
+测试报告应输出给人和 AI 两种格式：
+
+```text
+runtime/test-runs/<run-id>/report.md
+runtime/test-runs/<run-id>/report.json
+runtime/test-runs/<run-id>/trace-map.json
+runtime/test-runs/<run-id>/auth-map.json
+runtime/test-runs/<run-id>/screenshots/
+runtime/test-runs/<run-id>/videos/
+```
+
+报告内容：
+
+- 测试计划。
+- 执行命令。
+- 测试身份。
+- token hash。
+- mock 场景。
+- 通过和失败用例。
+- 失败 trace。
+- 截图和视频。
+- 建议修复。
+- 可复现命令。
+
+## 17. 可观测和运行时诊断
 
 内置诊断能力：
 
@@ -1196,6 +1564,7 @@ php webman b8:plugin:list
 php webman b8:openapi:build
 php webman b8:hook:list
 php webman b8:event:list
+php webman b8:test:diagnose <run-id>
 ```
 
 本地调试优先使用内置 trace：
@@ -1214,6 +1583,8 @@ trace 应覆盖：
 - 事件分发。
 - 队列任务。
 - 插件安装。
+- 测试身份。
+- token 签发和撤销摘要。
 - 异常。
 
 敏感信息默认脱敏：
@@ -1227,7 +1598,7 @@ password
 authorization
 ```
 
-## 17. 数据迁移和安装
+## 18. 数据迁移和安装
 
 首次安装：
 
@@ -1256,7 +1627,7 @@ php webman b8:migrate:create <Name>
 
 插件安装、SaaS 初始化、模拟数据生成都要优先生成迁移或可追踪的 seed 记录，避免只留下本地数据库状态。
 
-## 18. 发布和部署
+## 19. 发布和部署
 
 发布分层：
 
@@ -1284,7 +1655,7 @@ Webman 是常驻进程：
 - 安装新的 Composer 包后需要 restart。
 - 启用已安装插件且只刷新 Hook 注册表时，可以不重启，但必须可诊断。
 
-## 19. 阶段路线图
+## 20. 阶段路线图
 
 ### Phase 1：B8 Core
 
@@ -1309,7 +1680,18 @@ Webman 是常驻进程：
 - OpenAPI 生成。
 - CRUD 生成器升级。
 
-### Phase 3：B8 Event + Hook
+### Phase 3：B8 Test
+
+- AI 测试计划生成。
+- API、CRUD、权限、租户、插件、E2E 测试生成。
+- smoke 测试数据和场景数据。
+- 测试身份和短期 token。
+- Token 鉴权矩阵。
+- 测试执行报告。
+- trace 关联诊断。
+- 失败原因解释和修复建议。
+
+### Phase 4：B8 Event + Hook
 
 - 领域事件。
 - 系统事件。
@@ -1320,7 +1702,7 @@ Webman 是常驻进程：
 - Hook 调试和可观测。
 - AOP 基础能力。
 
-### Phase 4：B8 Plugin + Marketplace
+### Phase 5：B8 Plugin + Marketplace
 
 - 插件 manifest。
 - 依赖解析。
@@ -1331,7 +1713,7 @@ Webman 是常驻进程：
 - 插件授权。
 - 插件安全审计。
 
-### Phase 5：B8 SaaS + Permission
+### Phase 6：B8 SaaS + Permission
 
 - RBAC。
 - ABAC。
@@ -1342,7 +1724,7 @@ Webman 是常驻进程：
 - 租户数据隔离。
 - 租户审计和额度。
 
-### Phase 6：B8 Revision + Release
+### Phase 7：B8 Revision + Release
 
 - CRUD 历史版本。
 - 差异对比。
@@ -1353,7 +1735,7 @@ Webman 是常驻进程：
 - 环境检查。
 - 运维面板。
 
-## 20. 最小可行版本建议
+## 21. 最小可行版本建议
 
 第一版不要一次性做全插件商城和完整 SaaS，建议先做一个能真实落地的最小闭环：
 
@@ -1366,20 +1748,22 @@ Webman 是常驻进程：
 6. 模拟数据生成
 7. CRUD 生成器
 8. AI Context 导出
-9. Event
-10. Hook
-11. 插件 manifest 和 dry-run 安装预检
+9. AI 测试 smoke
+10. Token 鉴权测试矩阵
+11. Event
+12. Hook
+13. 插件 manifest 和 dry-run 安装预检
 ```
 
 这个闭环完成后，AI 就可以基于真实结构生成业务模块，插件也可以安全地声明依赖和扩展点。
 
-## 21. 关键判断
+## 22. 关键判断
 
 B8 新框架和 SaiAdmin 的区别不应该是换 UI 或换目录，而应该是：
 
 ```text
 SaiAdmin 强在后台 CRUD 和基础分层。
-B8 新框架要强在 AI 可理解、插件可治理、事件可扩展、Hook 可注入、数据可追溯、SaaS 可运营。
+B8 新框架要强在 AI 可理解、AI 可测试、插件可治理、事件可扩展、Hook 可注入、数据可追溯、SaaS 可运营。
 ```
 
 最终目标是让框架自己能回答：
@@ -1394,6 +1778,9 @@ B8 新框架要强在 AI 可理解、插件可治理、事件可扩展、Hook �
 - 安装插件会改什么？
 - 某条数据历史版本是什么？
 - 如何生成模拟数据？
+- 如何生成测试计划？
+- 某个需要 token 的接口应该用哪个测试身份？
+- 某次测试失败对应哪个 trace_id？
 - AI 开发这个模块应该遵循什么规范？
 
 做到这些，B8 才不是另一个后台模板，而是面向 AI 时代的 Webman 集成开发平台。
