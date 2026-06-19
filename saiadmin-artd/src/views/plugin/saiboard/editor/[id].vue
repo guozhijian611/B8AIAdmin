@@ -49,8 +49,8 @@
             v-for="component in layerItems"
             :key="component.id"
             class="layer-item"
-            :class="{ 'is-active': selectedId === component.id }"
-            @click="selectLayer(component.id)"
+            :class="{ 'is-active': selectedIds.includes(component.id) }"
+            @click="selectLayer(component.id, $event)"
           >
             <span class="layer-item__name">{{ component.title || componentName(component) }}</span>
             <span class="layer-item__type">{{ componentName(component) }}</span>
@@ -89,7 +89,7 @@
             height: layout.canvas.height + 'px',
             transform: `scale(${effectiveZoom})`
           }"
-          @mousedown.self="selectedId = ''"
+          @mousedown.self="clearSelection"
         >
           <DraggableItem
             v-for="component in layout.components"
@@ -97,8 +97,8 @@
             :component="component"
             :rows="componentRows(component)"
             :error="componentError(component)"
-            :selected="selectedId === component.id"
-            @select="selectedId = $event"
+            :selected="selectedIds.includes(component.id)"
+            @select="selectComponent"
             @update="updateComponent"
           />
         </div>
@@ -561,6 +561,15 @@
             </ElFormItem>
           </ElForm>
         </template>
+        <template v-else-if="selectedComponents.length > 1">
+          <div class="panel-title">批量操作</div>
+          <ElText type="info" size="small"> 已选择 {{ selectedComponents.length }} 个组件 </ElText>
+          <ElSpace class="bulk-actions" direction="vertical" alignment="stretch">
+            <ElButton @click="bringToFront">批量置顶</ElButton>
+            <ElButton @click="sendSelectedToBottom">批量置底</ElButton>
+            <ElButton type="danger" @click="removeSelected">批量删除</ElButton>
+          </ElSpace>
+        </template>
         <template v-else>
           <div class="panel-title">画布</div>
           <ElForm label-width="84px">
@@ -630,7 +639,8 @@
   const autoZoom = ref(0.75)
   const canvasShellRef = ref<HTMLElement>()
   const selectedId = ref('')
-  const copiedComponent = ref<BoardComponent>()
+  const selectedIds = ref<string[]>([])
+  const copiedComponents = ref<BoardComponent[]>([])
   const templateOptions = ref<any[]>([])
   const previewMap = reactive<Record<string, PreviewState>>({})
   const layoutHistory = reactive<LayoutHistoryState>({
@@ -697,8 +707,13 @@
   const decorTypes = new Set(['decor-border', 'decor-scanline'])
   const componentNeedsData = (component: BoardComponent) => !decorTypes.has(component.type)
 
+  const selectedComponents = computed(() =>
+    layout.components.filter((item) => selectedIds.value.includes(item.id))
+  )
   const selectedComponent = computed(() =>
-    layout.components.find((item) => item.id === selectedId.value)
+    selectedIds.value.length <= 1
+      ? layout.components.find((item) => item.id === selectedId.value)
+      : undefined
   )
   const layerItems = computed(() => orderedLayerComponents().slice().reverse())
   const requiresDataset = computed(() =>
@@ -724,8 +739,8 @@
   )
   const canUndo = computed(() => layoutHistory.past.length > 0)
   const canRedo = computed(() => layoutHistory.future.length > 0)
-  const canCopy = computed(() => Boolean(selectedComponent.value))
-  const canPaste = computed(() => Boolean(copiedComponent.value))
+  const canCopy = computed(() => selectedComponents.value.length > 0)
+  const canPaste = computed(() => copiedComponents.value.length > 0)
   const effectiveZoom = computed(() =>
     zoom.value === 'auto' ? autoZoom.value : Number(zoom.value)
   )
@@ -823,7 +838,30 @@
     const component = createDefaultComponent(type, layout.components.length) as BoardComponent
     ensureDataset(component)
     layout.components.push(component)
-    selectedId.value = component.id
+    setSingleSelection(component.id)
+  }
+
+  const setSingleSelection = (id: string) => {
+    selectedId.value = id
+    selectedIds.value = id ? [id] : []
+  }
+
+  const clearSelection = () => {
+    selectedId.value = ''
+    selectedIds.value = []
+  }
+
+  const selectComponent = (id: string, additive = false) => {
+    if (!additive) {
+      setSingleSelection(id)
+      return
+    }
+
+    const exists = selectedIds.value.includes(id)
+    selectedIds.value = exists
+      ? selectedIds.value.filter((item) => item !== id)
+      : [...selectedIds.value, id]
+    selectedId.value = exists ? selectedIds.value[selectedIds.value.length - 1] || '' : id
   }
 
   const updateComponent = (component: BoardComponent) => {
@@ -958,15 +996,21 @@
     const nextLayout = normalizeLayout(JSON.parse(snapshot))
     Object.assign(layout.canvas, nextLayout.canvas)
     layout.components.splice(0, layout.components.length, ...nextLayout.components)
-    if (!layout.components.some((component) => component.id === selectedId.value)) {
-      selectedId.value = ''
-    }
+    pruneSelection()
     nextTick(async () => {
       updateAutoZoom()
       await refreshAllComponentData()
       layoutHistory.current = serializeLayout()
       suppressHistory = false
     })
+  }
+
+  const pruneSelection = () => {
+    const ids = new Set(layout.components.map((component) => component.id))
+    selectedIds.value = selectedIds.value.filter((id) => ids.has(id))
+    if (!ids.has(selectedId.value)) {
+      selectedId.value = selectedIds.value[selectedIds.value.length - 1] || ''
+    }
   }
 
   const undoLayout = () => {
@@ -1090,26 +1134,31 @@
   }
 
   const copySelected = () => {
-    if (!selectedComponent.value) return
-    copiedComponent.value = clonePlain(selectedComponent.value)
-    ElMessage.success('已复制组件')
+    if (!selectedComponents.value.length) return
+    copiedComponents.value = selectedComponents.value.map((component) => clonePlain(component))
+    ElMessage.success(`已复制 ${copiedComponents.value.length} 个组件`)
   }
 
   const pasteCopied = async () => {
-    if (!copiedComponent.value) return
-    const component = createPastedComponent(copiedComponent.value)
-    ensureDataset(component)
-    layout.components.push(component)
-    selectedId.value = component.id
-    if (componentNeedsData(component) && component.dataset.queryTemplateId) {
-      await refreshComponentData(component)
-    }
+    if (!copiedComponents.value.length) return
+    const components = copiedComponents.value.map((component, index) =>
+      createPastedComponent(component, index)
+    )
+    components.forEach(ensureDataset)
+    layout.components.push(...components)
+    selectedIds.value = components.map((component) => component.id)
+    selectedId.value = components[components.length - 1]?.id || ''
+    await Promise.all(
+      components
+        .filter((component) => componentNeedsData(component) && component.dataset.queryTemplateId)
+        .map((component) => refreshComponentData(component))
+    )
   }
 
-  const createPastedComponent = (source: BoardComponent): BoardComponent => {
+  const createPastedComponent = (source: BoardComponent, index = 0): BoardComponent => {
     const component = clonePlain(source)
     const maxZ = Math.max(0, ...layout.components.map((item) => Number(item.rect.z || 1)))
-    const offset = 24
+    const offset = 24 + index * 12
     const maxX = Math.max(0, Number(layout.canvas.width || 0) - Number(component.rect.w || 0))
     const maxY = Math.max(0, Number(layout.canvas.height || 0) - Number(component.rect.h || 0))
 
@@ -1117,7 +1166,7 @@
     component.title = component.title ? `${component.title}副本` : component.title
     component.rect.x = Math.min(maxX, Math.max(0, Number(component.rect.x || 0) + offset))
     component.rect.y = Math.min(maxY, Math.max(0, Number(component.rect.y || 0) + offset))
-    component.rect.z = maxZ + 1
+    component.rect.z = maxZ + index + 1
 
     return normalizeLayout({ canvas: layout.canvas, components: [component] }).components[0]
   }
@@ -1125,8 +1174,8 @@
   const componentName = (component: BoardComponent) =>
     getWidgetMeta(component.type)?.name || component.type || '组件'
 
-  const selectLayer = (id: string) => {
-    selectedId.value = id
+  const selectLayer = (id: string, event?: MouseEvent) => {
+    selectComponent(id, Boolean(event?.shiftKey || event?.metaKey || event?.ctrlKey))
   }
 
   const orderedLayerComponents = () =>
@@ -1174,7 +1223,7 @@
     if (index < 0 || targetIndex < 0 || targetIndex >= ordered.length) return
     ;[ordered[index], ordered[targetIndex]] = [ordered[targetIndex], ordered[index]]
     normalizeLayerOrder(ordered)
-    selectedId.value = component.id
+    setSingleSelection(component.id)
     recordLayoutHistory()
   }
 
@@ -1183,7 +1232,7 @@
     const ordered = orderedLayerComponents().filter((item) => item.id !== component.id)
     ordered.push(component)
     normalizeLayerOrder(ordered)
-    selectedId.value = component.id
+    setSingleSelection(component.id)
     recordLayoutHistory()
   }
 
@@ -1192,24 +1241,54 @@
     const ordered = orderedLayerComponents().filter((item) => item.id !== component.id)
     ordered.unshift(component)
     normalizeLayerOrder(ordered)
-    selectedId.value = component.id
+    setSingleSelection(component.id)
     recordLayoutHistory()
   }
 
   const bringToFront = () => {
-    if (!selectedComponent.value) return
-    sendLayerToTop(selectedComponent.value)
+    if (!selectedComponents.value.length) return
+    if (selectedComponents.value.length === 1) {
+      sendLayerToTop(selectedComponents.value[0])
+      return
+    }
+    flushLayoutHistory()
+    const selected = new Set(selectedIds.value)
+    const ordered = orderedLayerComponents()
+    normalizeLayerOrder([
+      ...ordered.filter((component) => !selected.has(component.id)),
+      ...ordered.filter((component) => selected.has(component.id))
+    ])
+    recordLayoutHistory()
   }
 
   const sendSelectedToBottom = () => {
-    if (!selectedComponent.value) return
-    sendLayerToBottom(selectedComponent.value)
+    if (!selectedComponents.value.length) return
+    if (selectedComponents.value.length === 1) {
+      sendLayerToBottom(selectedComponents.value[0])
+      return
+    }
+    flushLayoutHistory()
+    const selected = new Set(selectedIds.value)
+    const ordered = orderedLayerComponents()
+    normalizeLayerOrder([
+      ...ordered.filter((component) => selected.has(component.id)),
+      ...ordered.filter((component) => !selected.has(component.id))
+    ])
+    recordLayoutHistory()
   }
 
   const removeSelected = () => {
-    const index = layout.components.findIndex((item) => item.id === selectedId.value)
-    if (index >= 0) layout.components.splice(index, 1)
-    selectedId.value = ''
+    if (!selectedIds.value.length) return
+    flushLayoutHistory()
+    const selected = new Set(selectedIds.value)
+    for (let index = layout.components.length - 1; index >= 0; index--) {
+      if (selected.has(layout.components[index].id)) {
+        delete previewMap[layout.components[index].id]
+        layout.components.splice(index, 1)
+      }
+    }
+    clearSelection()
+    recordLayoutHistory()
   }
 
   const saveLayout = async () => {

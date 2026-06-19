@@ -13,7 +13,8 @@
     :min-height="80"
     class-name="saiboard-draggable"
     class-name-active="saiboard-draggable-active"
-    @activated="$emit('select', component.id)"
+    @mousedown.capture="handlePointerSelect"
+    @activated="handleActivated"
     @dragging="handleDragging"
     @resizing="handleResizing"
   >
@@ -42,9 +43,24 @@
   )
 
   const emit = defineEmits<{
-    (e: 'select', id: string): void
+    (e: 'select', id: string, additive: boolean): void
     (e: 'update', component: BoardComponent): void
   }>()
+
+  let lastPointerSelectWasAdditive = false
+
+  function handlePointerSelect(event: MouseEvent) {
+    lastPointerSelectWasAdditive = event.shiftKey || event.metaKey || event.ctrlKey
+    emit('select', props.component.id, lastPointerSelectWasAdditive)
+  }
+
+  function handleActivated() {
+    if (lastPointerSelectWasAdditive) {
+      lastPointerSelectWasAdditive = false
+      return
+    }
+    emit('select', props.component.id, false)
+  }
 
   function handleDragging(x: number, y: number) {
     emit('update', {
