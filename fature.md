@@ -661,6 +661,35 @@ php webman b8:dict:export --format=json
 
 ## 12. 模拟数据和演示场景
 
+模拟数据生成要作为框架一级能力，而不是临时写 seed 脚本。目标是让 AI、开发者和测试流程都能基于同一套模型元数据生成可用、可复现、可清理、可迁移的业务数据。
+
+### 12.1 核心目标
+
+模拟数据系统需要解决：
+
+- 新模块生成后没有数据，后台页面、移动端和接口无法验证。
+- AI 开发时不知道字段语义，只能随便填假值。
+- 多表关联数据难以手工构造。
+- SaaS 租户、权限、套餐、插件授权等复杂场景缺少演示数据。
+- 临时插入的数据不可追踪，换环境后无法复现。
+
+框架应提供 `b8-faker` 模块，统一处理：
+
+```text
+字段级 faker 规则
+模型级 mock profile
+场景级 mock scenario
+关联数据生成
+租户隔离
+幂等标记
+数据清理
+迁移沉淀
+AI 生成建议
+后台可视化预览
+```
+
+### 12.2 字段级生成规则
+
 模拟数据和模型元数据绑定：
 
 ```php
@@ -668,17 +697,167 @@ php webman b8:dict:export --format=json
 #[Field(label: '邮箱', faker: 'safeEmail')]
 #[Field(label: '状态', dict: 'user_status', faker: 'dict')]
 #[Field(label: '租户ID', faker: 'tenant')]
+#[Field(label: '金额', faker: 'money:CNY,10,5000')]
+#[Field(label: '头像', faker: 'image:avatar')]
+#[Field(label: '介绍', faker: 'paragraph:zh_CN')]
+#[Field(label: '排序', faker: 'sequence:10')]
 ```
 
-命令：
+字段 faker 支持：
+
+```text
+name                 姓名
+mobile               手机号
+email                邮箱
+url                  URL
+image                图片
+paragraph            文本段落
+dict                 从字典随机选择
+enum                 从枚举随机选择
+money                金额
+date                 日期
+datetime             时间
+boolean              布尔
+json                 JSON 模板
+tenant               当前租户
+user                 当前用户或指定角色用户
+relation             关联模型
+sequence             顺序递增
+constant             固定值
+expression           表达式
+ai                   由 AI 按上下文生成
+```
+
+### 12.3 模型级 Mock Profile
+
+每个模型可以定义默认 mock profile：
+
+```php
+#[MockProfile(
+    name: 'default',
+    locale: 'zh_CN',
+    count: 50,
+    marker: 'demo:user',
+    fields: [
+        'status' => 'dict:user_status',
+        'nickname' => 'name',
+        'avatar' => 'image:avatar',
+        'tenant_id' => 'tenant',
+    ]
+)]
+class User extends BaseModel
+{
+}
+```
+
+一个模型可以有多个 profile：
+
+```text
+default       默认演示数据
+minimal       最小 smoke test 数据
+stress        压测数据
+edge          边界值数据
+invalid       表单校验反例，只用于测试，不入正式库
+```
+
+### 12.4 场景级 Mock Scenario
+
+复杂业务不要逐表生成，而要通过场景生成完整数据集。
+
+示例场景：
+
+```yaml
+name: mall-demo
+title: 商城演示数据
+tenant: demo
+marker: demo:mall
+steps:
+  - model: User
+    profile: buyer
+    count: 20
+  - model: ProductCategory
+    profile: tree
+    count: 8
+  - model: Product
+    profile: published
+    count: 100
+    depends_on: ProductCategory
+  - model: Order
+    profile: paid
+    count: 60
+    depends_on:
+      - User
+      - Product
+  - model: OrderItem
+    profile: by_order
+    depends_on: Order
+```
+
+场景必须支持：
+
+- 依赖顺序。
+- 外键引用。
+- 树形数据。
+- 一对多和多对多。
+- 状态流转。
+- 指定租户。
+- 指定语言。
+- 固定随机种子。
+- 重复执行幂等。
+- 按 marker 清理。
+
+### 12.5 关联数据生成
+
+框架根据模型关系自动生成关联数据：
+
+```php
+#[BelongsTo(User::class, foreignKey: 'user_id', label: '下单用户')]
+#[MockRelation(strategy: 'existing_or_create', profile: 'buyer')]
+public function user() {}
+
+#[HasMany(OrderItem::class, foreignKey: 'order_id', label: '订单明细')]
+#[MockRelation(strategy: 'create_many', min: 1, max: 5)]
+public function items() {}
+```
+
+关联策略：
+
+```text
+existing           只使用已有记录
+create             总是新建
+existing_or_create 优先已有，没有则创建
+create_many        创建多条子记录
+none               不自动生成
+```
+
+### 12.6 命令设计
 
 ```bash
 php webman b8:mock:generate user --count=100
+php webman b8:mock:generate order --profile=paid --tenant=demo
 php webman b8:mock:scenario mall-demo
+php webman b8:mock:scenario mall-demo --seed=20260620
+php webman b8:mock:preview mall-demo
+php webman b8:mock:validate mall-demo
 php webman b8:mock:clear --marker=demo:mall
+php webman b8:mock:export mall-demo --format=migration
+php webman b8:mock:export mall-demo --format=json
+php webman b8:mock:list
+php webman b8:mock:profiles user
 ```
 
-要求：
+命令行为：
+
+- `generate` 直接生成数据，默认只允许本地和测试环境。
+- `preview` 只预览将生成哪些表、多少行、依赖关系和危险操作。
+- `validate` 检查模型、字段、字典、关联、租户和权限是否满足生成条件。
+- `clear` 只清理带 marker 的模拟数据，不允许无条件清库。
+- `export --format=migration` 将模拟数据沉淀为 Phinx seed 迁移。
+- `export --format=json` 输出 AI 或测试可消费的数据包。
+
+### 12.7 安全和环境防护
+
+模拟数据必须内置安全边界：
 
 - 支持租户隔离。
 - 支持关联数据。
@@ -687,6 +866,137 @@ php webman b8:mock:clear --marker=demo:mall
 - 支持可清理。
 - 默认禁止生产环境误执行。
 - 生成后可以同步写入 Phinx seed 迁移或生成独立 demo migration。
+- 生产环境执行必须显式 `--force --i-know-this-is-production`，并记录审计日志。
+- 所有 mock 数据必须写入 `mock_marker`、`mock_scenario` 或等价追踪字段。
+- 不允许覆盖真实用户数据，除非场景声明 `mode: update_demo_only`。
+- 清理时必须按 marker、scenario、tenant 限定范围。
+
+### 12.8 数据持久化和迁移沉淀
+
+模拟数据有三种输出模式：
+
+```text
+runtime      只写当前数据库，用于本地调试
+migration    生成 Phinx 迁移，用于可复现演示数据
+fixture      生成 JSON/YAML fixture，用于测试和 AI
+```
+
+重要规则：
+
+- 一次性本地验证可以用 runtime。
+- 可交付演示数据必须导出 migration。
+- 自动化测试建议使用 fixture。
+- 迁移必须幂等，优先使用 `INSERT ... SELECT ... WHERE NOT EXISTS` 或唯一 marker。
+- 结构迁移和默认数据迁移要分开，避免回滚时误删用户真实数据。
+
+### 12.9 后台可视化
+
+后台应提供“模拟数据中心”：
+
+```text
+场景列表
+模型 profile 列表
+生成预览
+依赖图
+生成记录
+清理记录
+失败日志
+导出迁移
+```
+
+生成前展示：
+
+```text
+将生成 mall-demo：
+- 租户：demo
+- 用户：20 条
+- 商品分类：8 条
+- 商品：100 条
+- 订单：60 条
+- 订单明细：约 180 条
+- marker：demo:mall
+- 可清理：是
+- 可导出迁移：是
+```
+
+### 12.10 AI 生成模拟数据
+
+面向 AI 开发时，模拟数据系统还要支持 AI 辅助生成：
+
+```bash
+php webman b8:mock:ai-suggest mall/order
+php webman b8:mock:ai-scenario "生成一个包含下单、支付、退款的商城演示场景"
+```
+
+AI 只能生成 scenario 草稿，最终必须经过：
+
+```text
+模型元数据校验
+字典校验
+外键校验
+租户校验
+权限校验
+dry-run 预览
+人工确认或测试环境自动确认
+```
+
+AI Context 需要包含：
+
+```text
+mock_profiles.json
+mock_scenarios.json
+faker_rules.json
+field_semantics.json
+relations.json
+dicts.json
+```
+
+### 12.11 和测试体系集成
+
+Mock 数据应服务测试：
+
+```bash
+php webman b8:test:seed smoke
+php webman b8:test:seed permission
+php webman b8:test:seed tenant-isolation
+```
+
+典型测试场景：
+
+- CRUD smoke test。
+- 权限按钮可见性。
+- ABAC 资源访问。
+- 租户隔离。
+- 插件安装后演示数据。
+- OpenAPI 示例响应。
+- 前端表格和表单预览。
+
+### 12.12 插件提供模拟数据
+
+插件 manifest 可以声明自带 mock 场景：
+
+```json
+{
+  "mock": {
+    "profiles": "mock/profiles.php",
+    "scenarios": [
+      "mock/scenarios/mall-demo.yaml",
+      "mock/scenarios/mall-smoke.yaml"
+    ],
+    "defaultScenario": "mall-smoke"
+  }
+}
+```
+
+插件安装预检时应提示：
+
+```text
+该插件提供 2 个模拟数据场景：
+- mall-smoke：最小验证数据
+- mall-demo：完整演示数据
+
+是否安装后生成 smoke 数据：否，需手动执行。
+```
 
 ## 13. CRUD 历史版本、回退和回收站
 
@@ -781,6 +1091,9 @@ Event
 前端弹窗表单
 数据字典
 模拟数据规则
+Mock Profile
+Mock Scenario
+Fixture 示例
 AI Context
 ```
 
@@ -828,6 +1141,10 @@ skills/
   permissions.json
   plugins.json
   migrations.json
+  mock_profiles.json
+  mock_scenarios.json
+  faker_rules.json
+  fixtures.json
 ```
 
 职责：
@@ -845,6 +1162,7 @@ php webman b8:ai:routes
 php webman b8:ai:hooks
 php webman b8:ai:events
 php webman b8:ai:plugins
+php webman b8:ai:mock
 php webman b8:ai:explain b8/coupon
 ```
 
@@ -858,6 +1176,9 @@ Hook 注册表 -> hooks.json
 插件 manifest -> plugins.json
 权限表 -> permissions.json
 迁移状态 -> migrations.json
+Mock Profile -> mock_profiles.json
+Mock Scenario -> mock_scenarios.json
+Faker 规则 -> faker_rules.json
 ```
 
 不要让 AI 依赖过期文档猜测当前系统。
@@ -981,6 +1302,8 @@ Webman 是常驻进程：
 - 模型字段注解。
 - 关联关系注解。
 - 数据字典生成。
+- Mock Profile 和 Mock Scenario。
+- 模拟数据生成、预览和清理。
 - AI Context 导出。
 - docs/skills/.ai 目录规范。
 - OpenAPI 生成。
@@ -1040,11 +1363,12 @@ Webman 是常驻进程：
 3. Phinx 迁移
 4. 模型元数据
 5. 数据字典生成
-6. CRUD 生成器
-7. AI Context 导出
-8. Event
-9. Hook
-10. 插件 manifest 和 dry-run 安装预检
+6. 模拟数据生成
+7. CRUD 生成器
+8. AI Context 导出
+9. Event
+10. Hook
+11. 插件 manifest 和 dry-run 安装预检
 ```
 
 这个闭环完成后，AI 就可以基于真实结构生成业务模块，插件也可以安全地声明依赖和扩展点。
