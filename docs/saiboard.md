@@ -671,7 +671,7 @@ php webman b8:migrate
 
 1. 在 `server/` 执行 `php webman b8:migrate:status`，确认 6 个 SAI Board 迁移均为 `up`；再执行 `php webman b8:migrate --dry-run`，确认无待执行迁移。
 2. 在 `server/` 执行 `php webman route:list | rg "saiboard|apidoc/openapi"`，确认后台、公开运行时和 APIDOC 路由存在。
-3. 在 `saiadmin-artd/` 执行 `pnpm verify:saiboard-runtime`，自动覆盖数据源测试、表结构读取、查询模板预览、从表生成大屏、发布、私有 token 访问、公开运行时取数和运行统计读取；脚本会清理自身生成的临时大屏、查询模板、版本和令牌。
+3. 在 `saiadmin-artd/` 执行 `pnpm verify:saiboard-runtime`，自动覆盖数据源测试、表结构读取、查询模板预览、从表生成大屏、发布、私有 token 访问、访问令牌停用 / 重置 / 删除、旧单令牌兼容兜底、公开运行时取数和运行统计读取；脚本会清理自身生成的临时大屏、查询模板、版本和令牌。
 4. 在 `saiadmin-artd/` 执行 `pnpm verify:saiboard-scope`，自动创建临时普通角色和两个非超管用户，覆盖 SAI Board 菜单权限、`created_by` 数据范围、跨用户读取 / 预览 / 生成 / layout 绑定拦截，以及私有运行页后台 token 越权拦截；脚本会清理自身创建的用户、角色、权限绑定和业务 smoke 数据。
 5. 配置生产 `.env`：按实际域名设置 `SAIBOARD_HTTP_ALLOWED_HOSTS`；多副本部署确认 `CACHE_MODE=redis`、`REDIS_HOST`、`REDIS_PASSWORD`、`REDIS_DB` 可用；保留 `SAIBOARD_RATE_LIMIT=true` 和 `SAIBOARD_REDIS_LOCK=true`。
 6. 为每个 MySQL 数据源创建只读账号，并用数据源管理页「测试」确认连接成功；失败时确认数据库名、账号密码、网络和授权范围。

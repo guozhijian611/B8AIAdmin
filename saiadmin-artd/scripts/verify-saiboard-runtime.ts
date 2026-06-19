@@ -112,6 +112,28 @@ function pruneTemporaryRows(screenId?: number, templateIds: number[] = []) {
   log('临时 smoke 数据已物理清理')
 }
 
+function setLegacyAccessToken(screenId: number, accessToken: string) {
+  const code = [
+    'require __DIR__ . "/vendor/autoload.php";',
+    'require __DIR__ . "/support/bootstrap.php";',
+    '$payload=json_decode($argv[1] ?? "{}", true) ?: [];',
+    '$screenId=(int)($payload["screenId"] ?? 0);',
+    '$accessToken=(string)($payload["accessToken"] ?? "");',
+    '$prefix="SAI Board Runtime Smoke ";',
+    '$screen=\\support\\think\\Db::name("saiboard_screen")->where("id", $screenId)->find();',
+    'if (!$screen || !str_starts_with((string)($screen["name"] ?? ""), $prefix)) {',
+    '    throw new RuntimeException("只能设置 smoke 大屏的旧访问令牌");',
+    '}',
+    '\\support\\think\\Db::name("saiboard_screen")->where("id", $screenId)->update(["access_token" => $accessToken]);'
+  ].join('')
+
+  execFileSync('php', ['-r', code, JSON.stringify({ screenId, accessToken })], {
+    cwd: serverDir,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe']
+  })
+}
+
 async function cleanup(
   token: string,
   screenId?: number,
@@ -290,6 +312,16 @@ async function main() {
     })
     log('私有大屏无 token 拒绝访问通过')
 
+    await api(`/app/saiboard/api/screen/${screen.code}`, {
+      query: { token: 'invalid-runtime-smoke-token' },
+      expectCode: 401
+    })
+    log('私有大屏错误 token 拒绝访问通过')
+
+    const legacyToken = `legacy-${suffix}`
+    setLegacyAccessToken(screenId, legacyToken)
+    log('临时旧单令牌已写入 smoke 大屏')
+
     const runtimeScreen = await api<{ screen: any }>(`/app/saiboard/api/screen/${screen.code}`, {
       query: { token: createdToken.token }
     })
@@ -298,6 +330,12 @@ async function main() {
     const dataComponent = components.find((component: any) => component?.dataset?.queryTemplateId)
     assert(dataComponent?.id, '运行时大屏没有可取数组件')
     log(`运行时获取大屏配置通过，组件数 ${components.length}`)
+
+    await api(`/app/saiboard/api/screen/${screen.code}`, {
+      query: { token: legacyToken },
+      expectCode: 401
+    })
+    log('存在启用子令牌时旧单令牌拒绝访问通过')
 
     const componentData = await api<{ rows: any[]; total?: number }>('/app/saiboard/api/data', {
       query: {
@@ -308,6 +346,66 @@ async function main() {
     })
     assert(Array.isArray(componentData.rows), '运行时组件取数未返回 rows')
     log(`运行时组件取数通过，rows=${componentData.rows.length}`)
+
+    await api('/app/saiboard/admin/Screen/changeTokenStatus', {
+      token,
+      body: { id: screenId, token_id: tokenId, status: 2 }
+    })
+    await api(`/app/saiboard/api/screen/${screen.code}`, {
+      query: { token: createdToken.token },
+      expectCode: 401
+    })
+    const legacyRuntimeScreen = await api<{ screen: any }>(
+      `/app/saiboard/api/screen/${screen.code}`,
+      {
+        query: { token: legacyToken }
+      }
+    )
+    assert(legacyRuntimeScreen.screen?.code === screen.code, '停用子令牌后旧单令牌未生效')
+    log('停用子令牌后旧单令牌兜底访问通过')
+
+    await api('/app/saiboard/admin/Screen/changeTokenStatus', {
+      token,
+      body: { id: screenId, token_id: tokenId, status: 1 }
+    })
+    const resetToken = await api<{ token: string; row: { id: number } }>(
+      '/app/saiboard/admin/Screen/resetToken',
+      {
+        token,
+        body: { id: screenId, token_id: tokenId }
+      }
+    )
+    assert(
+      resetToken.token && resetToken.token !== createdToken.token,
+      '重置令牌未返回新的明文 token'
+    )
+    await api(`/app/saiboard/api/screen/${screen.code}`, {
+      query: { token: createdToken.token },
+      expectCode: 401
+    })
+    await api(`/app/saiboard/api/screen/${screen.code}`, {
+      query: { token: resetToken.token }
+    })
+    await api(`/app/saiboard/api/screen/${screen.code}`, {
+      query: { token: legacyToken },
+      expectCode: 401
+    })
+    log('重置子令牌后新旧 token 切换与旧单令牌屏蔽通过')
+
+    await api('/app/saiboard/admin/Screen/deleteToken', {
+      method: 'DELETE',
+      token,
+      body: { id: screenId, token_id: tokenId }
+    })
+    tokenId = undefined
+    await api(`/app/saiboard/api/screen/${screen.code}`, {
+      query: { token: resetToken.token },
+      expectCode: 401
+    })
+    await api(`/app/saiboard/api/screen/${screen.code}`, {
+      query: { token: legacyToken }
+    })
+    log('删除子令牌后子 token 失效且旧单令牌兜底访问通过')
 
     const metrics = await api<any>('/app/saiboard/admin/Screen/runtimeMetrics', {
       token,
