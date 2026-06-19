@@ -147,6 +147,38 @@
         </ElCarousel>
         <div v-else class="carousel-empty">暂无图片</div>
       </div>
+      <div
+        v-else-if="component.type === 'event-timeline'"
+        class="event-timeline"
+        :style="timelineStyleVars"
+      >
+        <template v-if="timelineItems.length">
+          <div
+            v-for="(item, index) in timelineItems"
+            :key="`${item.time}-${item.title}-${index}`"
+            class="event-timeline__item"
+            :class="`is-${item.tone}`"
+          >
+            <span class="event-timeline__dot"></span>
+            <div class="event-timeline__content">
+              <div class="event-timeline__meta">
+                <span v-if="component.option?.showTime !== false" class="event-timeline__time">
+                  {{ item.time }}
+                </span>
+                <span v-if="item.status" class="event-timeline__status">{{ item.status }}</span>
+              </div>
+              <div class="event-timeline__title">{{ item.title }}</div>
+              <div
+                v-if="component.option?.showContent !== false && item.content"
+                class="event-timeline__desc"
+              >
+                {{ item.content }}
+              </div>
+            </div>
+          </div>
+        </template>
+        <div v-else class="timeline-empty">{{ timelineEmptyText }}</div>
+      </div>
       <div v-else-if="component.type === 'geo-point-map'" class="geo-map">
         <div class="geo-map__grid"></div>
         <div class="geo-map__region">{{ geoRegionName }}</div>
@@ -211,6 +243,15 @@
     value: string
     size: number
   }
+  interface TimelineItem {
+    time: string
+    title: string
+    content: string
+    status: string
+    tone: 'primary' | 'success' | 'warning' | 'danger' | 'info'
+    timestamp: number
+    index: number
+  }
 
   const chartTypes = new Set([
     'art-bar-chart',
@@ -269,6 +310,35 @@
     { value: [2, 2, 21] },
     { value: [3, 2, 32] },
     { value: [4, 2, 39] }
+  ]
+  const sampleTimelineItems: TimelineItem[] = [
+    {
+      time: '09:00',
+      title: '数据源连接',
+      content: '完成订单库连接测试',
+      status: '成功',
+      tone: 'success',
+      timestamp: 9 * 3600,
+      index: 0
+    },
+    {
+      time: '10:30',
+      title: '订单同步',
+      content: '同步最近 1 小时订单数据',
+      status: '进行中',
+      tone: 'primary',
+      timestamp: 10 * 3600 + 30 * 60,
+      index: 1
+    },
+    {
+      time: '11:20',
+      title: '支付告警',
+      content: '微信支付失败率超过阈值',
+      status: '告警',
+      tone: 'warning',
+      timestamp: 11 * 3600 + 20 * 60,
+      index: 2
+    }
   ]
 
   const tableRows = computed(() => {
@@ -629,6 +699,84 @@
   const carouselIndicatorPosition = computed(() =>
     props.component.option?.showDots === false ? 'none' : ''
   )
+  const timelineTimeKey = computed(() =>
+    findOptionalKey(props.component.option?.timeField, [
+      'time',
+      'date',
+      'datetime',
+      'event_time',
+      'created_at',
+      'create_time',
+      'updated_at',
+      'published_at',
+      'timestamp',
+      '日期',
+      '时间'
+    ])
+  )
+  const timelineTitleKey = computed(() =>
+    findOptionalKey(props.component.option?.titleField, [
+      'title',
+      'name',
+      'label',
+      'event',
+      'action',
+      'subject',
+      'order_name',
+      '标题',
+      '名称'
+    ])
+  )
+  const timelineContentKey = computed(() =>
+    findOptionalKey(props.component.option?.contentField, [
+      'content',
+      'description',
+      'desc',
+      'summary',
+      'remark',
+      'message',
+      'body',
+      '内容',
+      '说明'
+    ])
+  )
+  const timelineStatusKey = computed(() =>
+    findOptionalKey(props.component.option?.statusField, [
+      'status',
+      'state',
+      'type',
+      'level',
+      'result',
+      '状态',
+      '类型'
+    ])
+  )
+  const timelineItems = computed<TimelineItem[]>(() => {
+    if (!hasBoundDataset.value && !(props.rows || []).length) return sampleTimelineItems
+    if (!timelineTimeKey.value || !timelineTitleKey.value) return []
+
+    const rows = props.rows || []
+    const items = rows
+      .map((row, index) => createTimelineItem(row, index))
+      .filter(Boolean) as TimelineItem[]
+
+    const sortOrder = String(props.component.option?.sortOrder || 'desc')
+    const sorted = items.sort((a, b) => {
+      const left = Number.isFinite(a.timestamp) ? a.timestamp : a.index
+      const right = Number.isFinite(b.timestamp) ? b.timestamp : b.index
+      return sortOrder === 'asc' ? left - right : right - left
+    })
+    const maxRows = normalizeTimelineMaxRows(props.component.option?.maxRows)
+    return maxRows > 0 ? sorted.slice(0, maxRows) : sorted
+  })
+  const timelineEmptyText = computed(() => {
+    if (!hasBoundDataset.value || !(props.rows || []).length) return '暂无事件'
+    if (!timelineTimeKey.value || !timelineTitleKey.value) return '请配置时间/标题字段'
+    return '暂无有效事件'
+  })
+  const timelineStyleVars = computed(() => ({
+    '--timeline-accent': String(props.component.option?.accent || 'var(--saiboard-accent, #69b7ff)')
+  }))
   const geoPoints = computed(() => {
     const points = normalizeGeoPoints()
     if (points.length) return points
@@ -818,6 +966,63 @@
 
   function normalizeCarouselImageFit(value: unknown) {
     return value === 'contain' || value === 'fill' ? value : 'cover'
+  }
+
+  function createTimelineItem(row: Record<string, any>, index: number) {
+    const rawTime = String(row[timelineTimeKey.value] ?? '').trim()
+    const title = String(row[timelineTitleKey.value] ?? '').trim()
+    if (!rawTime || !title) return undefined
+
+    const status = timelineStatusKey.value ? String(row[timelineStatusKey.value] ?? '').trim() : ''
+
+    return {
+      time: rawTime,
+      title,
+      content: timelineContentKey.value ? String(row[timelineContentKey.value] ?? '').trim() : '',
+      status,
+      tone: timelineTone(status),
+      timestamp: parseTimelineTimestamp(rawTime),
+      index
+    }
+  }
+
+  function normalizeTimelineMaxRows(value: unknown) {
+    const maxRows = Number(value ?? 8)
+    if (!Number.isFinite(maxRows) || maxRows < 0) return 8
+    return Math.min(50, Math.round(maxRows))
+  }
+
+  function parseTimelineTimestamp(value: string) {
+    const numeric = Number(value)
+    if (Number.isFinite(numeric)) return numeric > 100000000000 ? numeric : numeric * 1000
+    const timeOnly = value.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/)
+    if (timeOnly) {
+      const hours = Number(timeOnly[1])
+      const minutes = Number(timeOnly[2])
+      const seconds = Number(timeOnly[3] || 0)
+      if (hours < 24 && minutes < 60 && seconds < 60) {
+        return hours * 3600 + minutes * 60 + seconds
+      }
+    }
+    const timestamp = Date.parse(value.replace(/-/g, '/'))
+    return Number.isFinite(timestamp) ? timestamp : Number.NaN
+  }
+
+  function timelineTone(status: string): TimelineItem['tone'] {
+    const normalized = status.toLowerCase()
+    if (
+      ['success', 'done', 'completed', 'ok', '1', '成功', '完成', '已完成'].includes(normalized)
+    ) {
+      return 'success'
+    }
+    if (['warning', 'warn', 'pending', '2', '告警', '警告', '待处理'].includes(normalized)) {
+      return 'warning'
+    }
+    if (['error', 'fail', 'failed', 'danger', '0', '失败', '异常', '错误'].includes(normalized)) {
+      return 'danger'
+    }
+    if (['info', 'notice', '通知', '提示'].includes(normalized)) return 'info'
+    return 'primary'
   }
 
   function normalizeGeoPoints() {
@@ -1126,6 +1331,136 @@
   }
 
   .carousel-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: rgb(215 231 255 / 72%);
+    background: rgb(255 255 255 / 4%);
+    border: 1px dashed rgb(255 255 255 / 16%);
+    border-radius: 4px;
+  }
+
+  .event-timeline {
+    height: 100%;
+    min-height: 0;
+    padding: 2px 4px 2px 2px;
+    overflow: auto;
+  }
+
+  .event-timeline__item {
+    position: relative;
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr);
+    column-gap: 8px;
+    padding-bottom: 13px;
+    color: #d7e7ff;
+  }
+
+  .event-timeline__item::before {
+    position: absolute;
+    top: 12px;
+    bottom: 0;
+    left: 7px;
+    width: 1px;
+    content: '';
+    background: rgb(104 166 255 / 22%);
+  }
+
+  .event-timeline__item:last-child {
+    padding-bottom: 0;
+  }
+
+  .event-timeline__item:last-child::before {
+    display: none;
+  }
+
+  .event-timeline__dot {
+    position: relative;
+    z-index: 1;
+    width: 9px;
+    height: 9px;
+    margin-top: 5px;
+    margin-left: 3px;
+    background: var(--timeline-accent);
+    border: 2px solid rgb(255 255 255 / 82%);
+    border-radius: 50%;
+    box-shadow: 0 0 12px color-mix(in srgb, var(--timeline-accent) 62%, transparent);
+  }
+
+  .event-timeline__item.is-success {
+    --timeline-accent: #14deba;
+  }
+
+  .event-timeline__item.is-warning {
+    --timeline-accent: #ffaf20;
+  }
+
+  .event-timeline__item.is-danger {
+    --timeline-accent: #fa8a6c;
+  }
+
+  .event-timeline__item.is-info {
+    --timeline-accent: #a8b4c6;
+  }
+
+  .event-timeline__content {
+    min-width: 0;
+    padding: 8px 10px;
+    background: rgb(255 255 255 / 4%);
+    border: 1px solid rgb(104 166 255 / 12%);
+    border-radius: 4px;
+  }
+
+  .event-timeline__meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-width: 0;
+    gap: 8px;
+    margin-bottom: 4px;
+    font-size: 12px;
+    color: rgb(215 231 255 / 64%);
+  }
+
+  .event-timeline__time {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .event-timeline__status {
+    flex: 0 0 auto;
+    max-width: 80px;
+    overflow: hidden;
+    color: var(--timeline-accent);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .event-timeline__title {
+    min-width: 0;
+    overflow: hidden;
+    font-size: 14px;
+    font-weight: 700;
+    color: #f8fbff;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .event-timeline__desc {
+    display: -webkit-box;
+    margin-top: 4px;
+    overflow: hidden;
+    font-size: 12px;
+    line-height: 1.45;
+    color: rgb(215 231 255 / 72%);
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  .timeline-empty {
     display: flex;
     align-items: center;
     justify-content: center;

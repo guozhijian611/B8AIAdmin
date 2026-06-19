@@ -39,6 +39,7 @@ export type WidgetType =
   | 'stat-number'
   | 'data-table'
   | 'image-carousel'
+  | 'event-timeline'
   | 'geo-point-map'
   | 'decor-border'
   | 'decor-scanline'

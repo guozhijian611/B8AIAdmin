@@ -654,6 +654,96 @@
                 </ElSpace>
               </ElFormItem>
             </template>
+            <template v-if="selectedComponent.type === 'event-timeline'">
+              <ElFormItem label="时间字段">
+                <ElSelect
+                  v-model="selectedComponent.option!.timeField"
+                  clearable
+                  filterable
+                  placeholder="自动识别"
+                  :disabled="!fieldOptions.length"
+                >
+                  <ElOption
+                    v-for="field in fieldOptions"
+                    :key="field"
+                    :label="field"
+                    :value="field"
+                  />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="标题字段">
+                <ElSelect
+                  v-model="selectedComponent.option!.titleField"
+                  clearable
+                  filterable
+                  placeholder="自动识别"
+                  :disabled="!fieldOptions.length"
+                >
+                  <ElOption
+                    v-for="field in fieldOptions"
+                    :key="field"
+                    :label="field"
+                    :value="field"
+                  />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="内容字段">
+                <ElSelect
+                  v-model="selectedComponent.option!.contentField"
+                  clearable
+                  filterable
+                  placeholder="自动识别"
+                  :disabled="!fieldOptions.length"
+                >
+                  <ElOption
+                    v-for="field in fieldOptions"
+                    :key="field"
+                    :label="field"
+                    :value="field"
+                  />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="状态字段">
+                <ElSelect
+                  v-model="selectedComponent.option!.statusField"
+                  clearable
+                  filterable
+                  placeholder="自动识别"
+                  :disabled="!fieldOptions.length"
+                >
+                  <ElOption
+                    v-for="field in fieldOptions"
+                    :key="field"
+                    :label="field"
+                    :value="field"
+                  />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="排序">
+                <ElSelect v-model="selectedComponent.option!.sortOrder">
+                  <ElOption label="时间倒序" value="desc" />
+                  <ElOption label="时间正序" value="asc" />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="最大条数">
+                <ElInputNumber
+                  v-model="selectedComponent.option!.maxRows"
+                  :min="0"
+                  :max="50"
+                  :step="1"
+                  step-strictly
+                />
+              </ElFormItem>
+              <ElFormItem label="显示时间">
+                <ElSwitch v-model="selectedComponent.option!.showTime" />
+              </ElFormItem>
+              <ElFormItem label="显示内容">
+                <ElSwitch v-model="selectedComponent.option!.showContent" />
+              </ElFormItem>
+              <ElFormItem label="强调色">
+                <ElColorPicker v-model="selectedComponent.option!.accent" />
+              </ElFormItem>
+            </template>
             <template v-if="selectedComponent.type === 'image-carousel'">
               <ElFormItem label="图片字段">
                 <ElSelect
@@ -1198,6 +1288,7 @@
     'geo-point-map'
   ])
   const kLineFieldOptionKeys = ['timeField', 'openField', 'closeField', 'highField', 'lowField']
+  const timelineFieldOptionKeys = ['timeField', 'titleField', 'contentField', 'statusField']
   const decorTypes = new Set(['decor-border', 'decor-scanline'])
   const componentNeedsData = (component: BoardComponent) => !decorTypes.has(component.type)
   const componentGroupId = (component?: BoardComponent) => String(component?.option?.groupId || '')
@@ -1753,6 +1844,9 @@
     if (selectedComponent.value.type === 'art-k-line-chart') {
       resetOptionFields(selectedComponent.value, kLineFieldOptionKeys)
     }
+    if (selectedComponent.value.type === 'event-timeline') {
+      resetOptionFields(selectedComponent.value, timelineFieldOptionKeys)
+    }
     await refreshComponentData(selectedComponent.value)
   }
 
@@ -1786,6 +1880,9 @@
     }
     if (component.type === 'art-k-line-chart') {
       resetOptionFields(component, kLineFieldOptionKeys, fields)
+    }
+    if (component.type === 'event-timeline') {
+      resetOptionFields(component, timelineFieldOptionKeys, fields)
     }
   }
 

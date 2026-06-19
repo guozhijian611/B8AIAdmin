@@ -149,6 +149,23 @@ export const widgetRegistry: WidgetMeta[] = [
     }
   },
   {
+    type: 'event-timeline',
+    name: '时间轴',
+    icon: 'ri:timeline-view',
+    defaultRect: { x: 40, y: 1120, w: 520, h: 360, z: 1 },
+    defaultOption: {
+      timeField: '',
+      titleField: '',
+      contentField: '',
+      statusField: '',
+      maxRows: 8,
+      sortOrder: 'desc',
+      showTime: true,
+      showContent: true,
+      accent: '#69b7ff'
+    }
+  },
+  {
     type: 'geo-point-map',
     name: '点位地图',
     icon: 'ri:map-pin-line',
