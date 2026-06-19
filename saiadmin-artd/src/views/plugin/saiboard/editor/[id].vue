@@ -884,6 +884,7 @@
       const data = await api.read(id)
       Object.assign(screen, data, { bg_config: normalizeBgConfig(data.bg_config) })
       const draft = normalizeLayout(data.draft_layout || data.layout || {})
+      screen.bg_config = normalizeBgConfig(draft.bg_config || screen.bg_config)
       Object.assign(layout.canvas, draft.canvas)
       layout.components.splice(0, layout.components.length, ...draft.components)
       await nextTick()
@@ -899,33 +900,40 @@
     templateOptions.value = await templateApi.options()
   }
 
-  const normalizeLayout = (value: any): BoardLayout => ({
-    canvas: {
-      width: Number(value?.canvas?.width || screen.width || 1920),
-      height: Number(value?.canvas?.height || screen.height || 1080)
-    },
-    components: Array.isArray(value?.components)
-      ? value.components.map((component: any, index: number) => {
-          const type = component.type || 'art-bar-chart'
-          const meta = getWidgetMeta(type)
+  const normalizeLayout = (value: any): BoardLayout => {
+    const result: BoardLayout = {
+      canvas: {
+        width: Number(value?.canvas?.width || screen.width || 1920),
+        height: Number(value?.canvas?.height || screen.height || 1080)
+      },
+      components: Array.isArray(value?.components)
+        ? value.components.map((component: any, index: number) => {
+            const type = component.type || 'art-bar-chart'
+            const meta = getWidgetMeta(type)
 
-          return {
-            id: component.id || `w_${Date.now()}_${index}`,
-            type,
-            title: typeof component.title === 'string' ? component.title : meta?.name || '组件',
-            rect: {
-              x: Number(component.rect?.x || 0),
-              y: Number(component.rect?.y || 0),
-              w: Number(component.rect?.w || 320),
-              h: Number(component.rect?.h || 180),
-              z: Number(component.rect?.z || 1)
-            },
-            dataset: normalizeDataset(component.dataset),
-            option: normalizeOption(type, component.option)
-          }
-        })
-      : []
-  })
+            return {
+              id: component.id || `w_${Date.now()}_${index}`,
+              type,
+              title: typeof component.title === 'string' ? component.title : meta?.name || '组件',
+              rect: {
+                x: Number(component.rect?.x || 0),
+                y: Number(component.rect?.y || 0),
+                w: Number(component.rect?.w || 320),
+                h: Number(component.rect?.h || 180),
+                z: Number(component.rect?.z || 1)
+              },
+              dataset: normalizeDataset(component.dataset),
+              option: normalizeOption(type, component.option)
+            }
+          })
+        : []
+    }
+    if (value?.bg_config && typeof value.bg_config === 'object') {
+      result.bg_config = normalizeBgConfig(value.bg_config)
+    }
+
+    return result
+  }
 
   const normalizeDataset = (dataset: any = {}) => {
     const rawColumns = normalizeTableColumns(dataset?.mapping?.tableColumns)
@@ -1477,6 +1485,7 @@
 
   const normalizedLayoutForSave = (): BoardLayout => {
     const payloadLayout = clonePlain(layout)
+    payloadLayout.bg_config = normalizeBgConfig(screen.bg_config)
     const ordered = payloadLayout.components.slice().sort((a, b) => {
       const diff = Number(a.rect.z || 1) - Number(b.rect.z || 1)
       if (diff !== 0) return diff
@@ -1815,26 +1824,19 @@
     recordLayoutHistory()
   }
 
-  const saveLayout = async () => {
+  const persistDraftLayout = async () => {
     const payloadLayout = normalizedLayoutForSave()
-    await api.update({
-      id: screen.id,
-      name: screen.name,
-      code: screen.code,
-      width: payloadLayout.canvas.width,
-      height: payloadLayout.canvas.height,
-      bg_config: normalizeBgConfig(screen.bg_config),
-      is_public: screen.is_public,
-      access_token: screen.access_token,
-      status: 2
-    })
     await api.saveLayout({ id: screen.id, layout: payloadLayout })
+  }
+
+  const saveLayout = async () => {
+    await persistDraftLayout()
     ElMessage.success('保存成功')
     await loadData()
   }
 
   const publish = async () => {
-    await saveLayout()
+    await persistDraftLayout()
     await api.publish({ id: screen.id })
     ElMessage.success('发布成功')
     await loadData()

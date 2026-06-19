@@ -5,6 +5,7 @@ namespace plugin\saiboard\app\admin\logic;
 use plugin\saiadmin\basic\think\BaseLogic;
 use plugin\saiadmin\exception\ApiException;
 use plugin\saiboard\app\model\Screen;
+use plugin\saiboard\app\model\ScreenVersion;
 
 class ScreenLogic extends BaseLogic
 {
@@ -29,21 +30,42 @@ class ScreenLogic extends BaseLogic
 
     public function saveLayout(int $id, array $layout): bool
     {
-        $screen = $this->read($id);
-        return (bool) $screen->save([
-            'draft_layout' => $this->normalizeLayout($layout, (int) $screen->width, (int) $screen->height),
-            'status' => 2,
-        ]);
+        return (bool) $this->transaction(function () use ($id, $layout) {
+            $screen = $this->read($id);
+            $layout = $this->normalizeLayout($layout, (int) $screen->width, (int) $screen->height);
+            $result = (bool) $screen->save([
+                'draft_layout' => $layout,
+            ]);
+            if ($result) {
+                $this->createVersion($screen, 'save_layout', $layout);
+            }
+
+            return $result;
+        });
     }
 
     public function publish(int $id): bool
     {
-        $screen = $this->read($id);
-        $layout = $screen->draft_layout ?: $this->defaultLayout((int) $screen->width, (int) $screen->height);
-        return (bool) $screen->save([
-            'layout' => $this->normalizeLayout($layout, (int) $screen->width, (int) $screen->height),
-            'status' => 1,
-        ]);
+        return (bool) $this->transaction(function () use ($id) {
+            $screen = $this->read($id);
+            $layout = $screen->draft_layout ?: $this->defaultLayout((int) $screen->width, (int) $screen->height);
+            $layout = $this->normalizeLayout($layout, (int) $screen->width, (int) $screen->height);
+            $width = (int) $layout['canvas']['width'];
+            $height = (int) $layout['canvas']['height'];
+            $bgConfig = $this->normalizeBgConfig($layout['bg_config'] ?? $screen->bg_config);
+            $result = (bool) $screen->save([
+                'width' => $width,
+                'height' => $height,
+                'bg_config' => $bgConfig,
+                'layout' => $layout,
+                'status' => 1,
+            ]);
+            if ($result) {
+                $this->createVersion($screen, 'publish', $layout);
+            }
+
+            return $result;
+        });
     }
 
     public function copy(int $id): int
@@ -63,6 +85,60 @@ class ScreenLogic extends BaseLogic
         $data['layout'] = $this->normalizeLayout($publishedLayout, $width, $height);
 
         return (int) parent::add($data);
+    }
+
+    public function versions(int $screenId): array
+    {
+        $this->read($screenId);
+
+        return ScreenVersion::where('screen_id', $screenId)
+            ->whereNull('delete_time')
+            ->order('id', 'desc')
+            ->limit(50)
+            ->select()
+            ->toArray();
+    }
+
+    public function restoreVersion(int $screenId, int $versionId): bool
+    {
+        return (bool) $this->transaction(function () use ($screenId, $versionId) {
+            $screen = $this->read($screenId);
+            $version = ScreenVersion::where('screen_id', $screenId)
+                ->where('id', $versionId)
+                ->whereNull('delete_time')
+                ->findOrEmpty();
+            if ($version->isEmpty()) {
+                throw new ApiException('版本不存在');
+            }
+
+            $this->createVersion(
+                $screen,
+                'restore_before',
+                $screen->draft_layout ?: $this->defaultLayout((int) $screen->width, (int) $screen->height)
+            );
+            $width = (int) $version->width;
+            $height = (int) $version->height;
+            $layout = $this->normalizeLayout($version->layout, $width, $height);
+            $layout['bg_config'] = $this->normalizeBgConfig($version->bg_config);
+
+            return (bool) $screen->save([
+                'draft_layout' => $layout,
+            ]);
+        });
+    }
+
+    public function deleteVersion(int $screenId, int $versionId): bool
+    {
+        $this->read($screenId);
+        $version = ScreenVersion::where('screen_id', $screenId)
+            ->where('id', $versionId)
+            ->whereNull('delete_time')
+            ->findOrEmpty();
+        if ($version->isEmpty()) {
+            throw new ApiException('版本不存在');
+        }
+
+        return (bool) $version->delete();
     }
 
     private function normalizePayload(array $data, int $ignoreId = 0): array
@@ -101,6 +177,9 @@ class ScreenLogic extends BaseLogic
             'width' => max(320, (int) ($layout['canvas']['width'] ?? $width)),
             'height' => max(240, (int) ($layout['canvas']['height'] ?? $height)),
         ];
+        if (isset($layout['bg_config'])) {
+            $layout['bg_config'] = $this->normalizeBgConfig($layout['bg_config']);
+        }
         $components = is_array($layout['components'] ?? null) ? $layout['components'] : [];
         $layout['components'] = array_values(array_filter($components, static fn ($item) => is_array($item)));
         return $layout;
@@ -112,6 +191,55 @@ class ScreenLogic extends BaseLogic
             'canvas' => ['width' => $width, 'height' => $height],
             'components' => [],
         ];
+    }
+
+    private function createVersion(Screen $screen, string $source, array $layout): void
+    {
+        $screenId = (int) $screen->id;
+        Screen::where('id', $screenId)->lock(true)->value('id');
+        $width = max(320, (int) ($layout['canvas']['width'] ?? $screen->width));
+        $height = max(240, (int) ($layout['canvas']['height'] ?? $screen->height));
+        $versionNo = ((int) ScreenVersion::where('screen_id', $screenId)->max('version_no')) + 1;
+
+        ScreenVersion::create([
+            'screen_id' => $screenId,
+            'version_no' => $versionNo,
+            'source' => $source,
+            'title' => $this->versionTitle($source, $versionNo),
+            'width' => $width,
+            'height' => $height,
+            'bg_config' => $this->normalizeBgConfig($layout['bg_config'] ?? $screen->bg_config),
+            'layout' => $this->normalizeLayout($layout, $width, $height),
+        ]);
+        $this->trimVersions($screenId);
+    }
+
+    private function trimVersions(int $screenId): void
+    {
+        $keepIds = ScreenVersion::where('screen_id', $screenId)
+            ->whereNull('delete_time')
+            ->order('id', 'desc')
+            ->limit(50)
+            ->column('id');
+        if (!$keepIds) {
+            return;
+        }
+
+        ScreenVersion::where('screen_id', $screenId)
+            ->whereNull('delete_time')
+            ->whereNotIn('id', $keepIds)
+            ->delete();
+    }
+
+    private function versionTitle(string $source, int $versionNo): string
+    {
+        $label = match ($source) {
+            'publish' => '发布快照',
+            'restore_before' => '恢复前快照',
+            default => '保存快照',
+        };
+
+        return $label . ' #' . $versionNo;
     }
 
     private function normalizeBgConfig(mixed $config): array

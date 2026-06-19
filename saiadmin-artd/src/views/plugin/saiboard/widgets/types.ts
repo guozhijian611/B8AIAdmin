@@ -61,6 +61,7 @@ export interface BoardLayout {
     width: number
     height: number
   }
+  bg_config?: BoardBgConfig
   components: BoardComponent[]
 }
 

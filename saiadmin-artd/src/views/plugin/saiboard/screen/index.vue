@@ -81,6 +81,12 @@
                       复制
                     </ElDropdownItem>
                     <ElDropdownItem
+                      v-permission="'saiboard:screen:versions'"
+                      @click="openVersions(row)"
+                    >
+                      版本
+                    </ElDropdownItem>
+                    <ElDropdownItem
                       v-permission="'saiboard:screen:index'"
                       @click="openMetrics(row)"
                     >
@@ -214,6 +220,54 @@
         <ElButton type="primary" @click="refreshMetrics">刷新</ElButton>
       </template>
     </ElDialog>
+
+    <ElDialog
+      v-model="versionVisible"
+      :title="`${versionTarget?.name || '大屏'}版本`"
+      width="860px"
+    >
+      <ElTable v-loading="versionLoading" :data="versionRows" row-key="id" max-height="460">
+        <ElTableColumn prop="version_no" label="版本" width="90">
+          <template #default="{ row }">#{{ row.version_no }}</template>
+        </ElTableColumn>
+        <ElTableColumn prop="title" label="标题" min-width="150" show-overflow-tooltip />
+        <ElTableColumn label="来源" width="120">
+          <template #default="{ row }">
+            <ElTag>{{ versionSourceLabel(row.source) }}</ElTag>
+          </template>
+        </ElTableColumn>
+        <ElTableColumn label="尺寸" width="130">
+          <template #default="{ row }">{{ row.width }} x {{ row.height }}</template>
+        </ElTableColumn>
+        <ElTableColumn prop="create_time" label="创建时间" width="180" />
+        <ElTableColumn label="操作" width="150" fixed="right">
+          <template #default="{ row }">
+            <ElSpace>
+              <ElButton
+                v-permission="'saiboard:screen:restoreVersion'"
+                size="small"
+                type="primary"
+                @click="restoreVersion(row)"
+              >
+                恢复
+              </ElButton>
+              <ElButton
+                v-permission="'saiboard:screen:deleteVersion'"
+                size="small"
+                type="danger"
+                @click="deleteVersion(row)"
+              >
+                删除
+              </ElButton>
+            </ElSpace>
+          </template>
+        </ElTableColumn>
+      </ElTable>
+      <template #footer>
+        <ElButton @click="versionVisible = false">关闭</ElButton>
+        <ElButton type="primary" @click="refreshVersions">刷新</ElButton>
+      </template>
+    </ElDialog>
   </div>
 </template>
 
@@ -235,6 +289,10 @@
   const metricsLoading = ref(false)
   const metrics = ref<any>(null)
   const metricsTarget = ref<any>(null)
+  const versionVisible = ref(false)
+  const versionLoading = ref(false)
+  const versionRows = ref<any[]>([])
+  const versionTarget = ref<any>(null)
   const formRef = ref<FormInstance>()
   const search = reactive({ name: '', code: '', status: undefined as number | undefined })
   const form = reactive({
@@ -259,6 +317,11 @@
     { label: '裁切铺满', value: 'cover' },
     { label: '非等比拉伸', value: 'stretch' }
   ]
+  const versionSourceMap: Record<string, string> = {
+    publish: '发布',
+    restore_before: '恢复前',
+    save_layout: '保存'
+  }
 
   const rules: FormRules = {
     name: [{ required: true, message: '名称必填', trigger: 'blur' }],
@@ -376,6 +439,45 @@
     loadData()
   }
 
+  const openVersions = async (row: any) => {
+    versionTarget.value = row
+    versionVisible.value = true
+    await refreshVersions()
+  }
+
+  const refreshVersions = async () => {
+    if (!versionTarget.value?.id) return
+    versionLoading.value = true
+    try {
+      const data = await api.versions({ id: versionTarget.value.id })
+      versionRows.value = Array.isArray(data) ? data : []
+    } finally {
+      versionLoading.value = false
+    }
+  }
+
+  const restoreVersion = async (row: any) => {
+    if (!versionTarget.value?.id) return
+    await ElMessageBox.confirm(
+      `确定恢复到版本 #${row.version_no} 吗？当前草稿会先保存为恢复前快照。`,
+      '恢复版本',
+      { type: 'warning' }
+    )
+    await api.restoreVersion({ id: versionTarget.value.id, version_id: row.id })
+    ElMessage.success('已恢复为草稿')
+    await Promise.all([loadData(), refreshVersions()])
+  }
+
+  const deleteVersion = async (row: any) => {
+    if (!versionTarget.value?.id) return
+    await ElMessageBox.confirm(`确定删除版本 #${row.version_no} 吗？`, '删除版本', {
+      type: 'warning'
+    })
+    await api.deleteVersion({ id: versionTarget.value.id, version_id: row.id })
+    ElMessage.success('删除成功')
+    refreshVersions()
+  }
+
   const openMetrics = async (row: any) => {
     metricsTarget.value = row
     metricsVisible.value = true
@@ -404,6 +506,8 @@
     fitModeOptions.find((item) => item.value === normalizeFitMode(mode))?.label || '完整显示'
 
   const formatPercent = (value: number) => `${Math.round(value * 10000) / 100}%`
+
+  const versionSourceLabel = (source: string) => versionSourceMap[source] || source || '保存'
 
   onMounted(loadData)
 </script>

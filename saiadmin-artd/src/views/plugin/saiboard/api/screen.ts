@@ -28,6 +28,15 @@ export default {
   copy(data: Record<string, any>) {
     return request.post<any>({ url: '/app/saiboard/admin/Screen/copy', data })
   },
+  versions(params: Record<string, any>) {
+    return request.get<any>({ url: '/app/saiboard/admin/Screen/versions', params })
+  },
+  restoreVersion(data: Record<string, any>) {
+    return request.post<any>({ url: '/app/saiboard/admin/Screen/restoreVersion', data })
+  },
+  deleteVersion(data: Record<string, any>) {
+    return request.del<any>({ url: '/app/saiboard/admin/Screen/deleteVersion', data })
+  },
   runtimeMetrics(params: Record<string, any> = {}) {
     return request.get<any>({ url: '/app/saiboard/admin/Screen/runtimeMetrics', params })
   }

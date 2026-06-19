@@ -1,6 +1,6 @@
 # SAI Board 大屏可视化插件说明（P0 已落地）
 
-本文档说明 `saiboard` 插件在 B8AIadmin 中的功能边界、技术选型、数据库设计、后端分层、前端集成、鉴权模型和后续计划。当前已完成 P0 最小可用版本，实际入口以 `server/plugin/saiboard`、`saiadmin-artd/src/views/plugin/saiboard` 和 `Database/migrations/20260619000100_add_saiboard_plugin.php` 为准。
+本文档说明 `saiboard` 插件在 B8AIadmin 中的功能边界、技术选型、数据库设计、后端分层、前端集成、鉴权模型和后续计划。当前已完成 P0 最小可用版本，实际入口以 `server/plugin/saiboard`、`saiadmin-artd/src/views/plugin/saiboard`、`Database/migrations/20260619000100_add_saiboard_plugin.php` 和 `Database/migrations/20260619000200_add_saiboard_screen_version.php` 为准。
 
 > 设计第一原则：**尽可能简单**。只用项目已有依赖（Vue 3 + Element Plus + echarts 6），不引入 go-view、naive-ui、DataV 等需要长期 fork 维护的重型前端工程；**编辑器与对外运行时共用同一套图表渲染组件**，保证「编辑所见 = 运行所得」，避免双引擎割裂。
 
@@ -136,7 +136,7 @@ saiadmin-artd/src/views/plugin/saiboard/
 | `bg_config` | json | 背景、主题与运行时适配：`color`、`theme`、`fit_mode`、`image`、`image_fit` 等。 |
 | `is_public` | tinyint unsigned | 1对外公开 2需鉴权。 |
 | `access_token` | varchar(64) NULL | `is_public=2` 时校验用，空则要求后台登录态。 |
-| `draft_layout` | json | **编辑中的**组件树，`saveLayout` 只写这里。 |
+| `draft_layout` | json | **编辑中的**画布尺寸、背景配置与组件树，`saveLayout` 只写这里。 |
 | `layout` | json | **已发布的**组件树，运行时只读这里；`publish` 时由 `draft_layout` 拷贝而来。 |
 | `status` | tinyint unsigned | 1已发布 2草稿。 |
 | 审计字段 | | 同上。 |
@@ -173,6 +173,7 @@ saiadmin-artd/src/views/plugin/saiboard/
 ```json
 {
   "canvas": { "width": 1920, "height": 1080 },
+  "bg_config": { "color": "#07111f", "theme": "midnight", "fit_mode": "contain" },
   "components": [
     {
       "id": "w_1",
@@ -457,8 +458,8 @@ php webman b8:migrate
 ### P2 进阶
 
 - 已完成：大屏克隆（保留草稿 / 发布布局，重置访问编码、访问令牌和状态）。
+- 已完成：大屏版本管理（保存 / 发布自动快照、最近 50 个版本列表、恢复到草稿、删除快照）。
 - 未完成：组件 / 模板市场。
-- 大屏版本管理（多快照，扩展 `layout` 历史）。
 - 多 token 子表（`saiboard_screen_token`，按客户分发可独立吊销）。
 - 数据权限 `scope`（按 `created_by` 隔离大屏归属，在对应 Logic 显式 `protected bool $scope = true;`）。
 

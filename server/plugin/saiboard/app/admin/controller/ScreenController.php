@@ -141,6 +141,59 @@ class ScreenController extends AbstractCrudController
         return $this->success(['id' => $this->logic->copy($id)], '复制成功');
     }
 
+    #[Apidoc\Title('大屏版本列表')]
+    #[Apidoc\Url('/app/saiboard/admin/Screen/versions')]
+    #[Apidoc\Method('GET')]
+    #[Apidoc\Query('id', type: 'int', require: true, desc: '大屏ID')]
+    #[Permission('大屏版本列表', 'saiboard:screen:versions')]
+    public function versions(Request $request): Response
+    {
+        $id = (int) $request->input('id', 0);
+        if ($id <= 0) {
+            return $this->fail('请选择大屏');
+        }
+
+        return $this->success($this->logic->versions($id));
+    }
+
+    #[Apidoc\Title('恢复大屏版本')]
+    #[Apidoc\Url('/app/saiboard/admin/Screen/restoreVersion')]
+    #[Apidoc\Method('POST')]
+    #[Apidoc\Param('id', type: 'int', require: true, desc: '大屏ID')]
+    #[Apidoc\Param('version_id', type: 'int', require: true, desc: '版本ID')]
+    #[Permission('恢复大屏版本', 'saiboard:screen:restoreVersion')]
+    public function restoreVersion(Request $request): Response
+    {
+        $id = (int) $request->post('id', 0);
+        $versionId = (int) $request->post('version_id', 0);
+        if ($id <= 0 || $versionId <= 0) {
+            return $this->fail('参数错误');
+        }
+
+        return $this->logic->restoreVersion($id, $versionId)
+            ? $this->success('已恢复为草稿')
+            : $this->fail('恢复失败');
+    }
+
+    #[Apidoc\Title('删除大屏版本')]
+    #[Apidoc\Url('/app/saiboard/admin/Screen/deleteVersion')]
+    #[Apidoc\Method('DELETE')]
+    #[Apidoc\Param('id', type: 'int', require: true, desc: '大屏ID')]
+    #[Apidoc\Param('version_id', type: 'int', require: true, desc: '版本ID')]
+    #[Permission('删除大屏版本', 'saiboard:screen:deleteVersion')]
+    public function deleteVersion(Request $request): Response
+    {
+        $id = (int) $request->post('id', 0);
+        $versionId = (int) $request->post('version_id', 0);
+        if ($id <= 0 || $versionId <= 0) {
+            return $this->fail('参数错误');
+        }
+
+        return $this->logic->deleteVersion($id, $versionId)
+            ? $this->success('删除成功')
+            : $this->fail('删除失败');
+    }
+
     #[Apidoc\Title('大屏运行统计')]
     #[Apidoc\Url('/app/saiboard/admin/Screen/runtimeMetrics')]
     #[Apidoc\Method('GET')]
