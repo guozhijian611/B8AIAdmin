@@ -23,6 +23,7 @@ final class B8Install extends AbstractPhinxCommand
         $this->addOption('force', 'f', InputOption::VALUE_NONE, '跳过 .env 更新确认');
         $this->addOption('no-import', null, InputOption::VALUE_NONE, '不导入 Database/b8aiadmin.sql');
         $this->addOption('no-migrate', null, InputOption::VALUE_NONE, '不执行 Phinx 迁移');
+        $this->addOption('with-plugin', null, InputOption::VALUE_REQUIRED | InputOption::VALUE_IS_ARRAY, '主框架迁移后额外安装指定插件，可重复传入，例如 --with-plugin=saiboard');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -76,6 +77,19 @@ final class B8Install extends AbstractPhinxCommand
             $exitCode = $this->runPhinx(['migrate'], [0], $output);
             if ($exitCode !== self::SUCCESS) {
                 return $exitCode;
+            }
+
+            foreach ((array) $input->getOption('with-plugin') as $plugin) {
+                $plugin = trim((string) $plugin);
+                if ($plugin === '') {
+                    continue;
+                }
+
+                $output->writeln("<info>开始执行 {$plugin} 插件独立迁移...</info>");
+                $exitCode = $this->runPhinx(['migrate'], [0], $output, $plugin);
+                if ($exitCode !== self::SUCCESS) {
+                    return $exitCode;
+                }
             }
         }
 

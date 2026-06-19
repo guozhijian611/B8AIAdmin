@@ -1,12 +1,12 @@
 # SAI Board 大屏可视化插件说明（P0 已落地）
 
-本文档说明 `saiboard` 插件在 B8AIadmin 中的功能边界、技术选型、数据库设计、后端分层、前端集成、鉴权模型和后续计划。当前已完成 P0 最小可用版本和部分 P1/P2 能力，实际入口以 `server/plugin/saiboard`、`saiadmin-artd/src/views/plugin/saiboard`、`Database/migrations/20260619000100_add_saiboard_plugin.php`、`Database/migrations/20260619000200_add_saiboard_screen_version.php`、`Database/migrations/20260619000300_add_saiboard_screen_token.php`、`Database/migrations/20260619000400_add_saiboard_market_item.php`、`Database/migrations/20260619000500_add_saiboard_generate_from_table_permission.php` 和 `Database/migrations/20260619080105_seed_saiboard_default_templates.php` 为准。
+本文档说明 `saiboard` 插件在 B8AIadmin 中的功能边界、技术选型、数据库设计、后端分层、前端集成、鉴权模型和后续计划。当前已完成 P0 最小可用版本和部分 P1/P2 能力，实际入口以 `server/plugin/saiboard`、`saiadmin-artd/src/views/plugin/saiboard` 和 `server/plugin/saiboard/db/migrations/` 为准。
 
 > 设计第一原则：**尽可能简单**。只用项目已有依赖（Vue 3 + Element Plus + echarts 6），不引入 go-view、naive-ui、DataV 等需要长期 fork 维护的重型前端工程；**编辑器与对外运行时共用同一套图表渲染组件**，保证「编辑所见 = 运行所得」，避免双引擎割裂。
 
 ## 功能定位
 
-`saiboard` 是框架内置的数据可视化大屏插件，目标是让管理员在后台**自由拖拽**搭建大屏，绑定本地 MySQL 或远程 HTTP 数据源，并按需对外发布访问。
+`saiboard` 是框架内置的可选数据可视化大屏插件，目标是让管理员在后台**自由拖拽**搭建大屏，绑定本地 MySQL 或远程 HTTP 数据源，并按需对外发布访问。
 
 | 能力 | 入口 | 说明 |
 | --- | --- | --- |
@@ -90,7 +90,22 @@ server/plugin/saiboard/
 │   └── middleware.php    ← admin: CheckLogin+CheckAuth+SystemLog；api: 空（自鉴权）
 ```
 
-数据库结构、菜单和权限由 Phinx 迁移 `Database/migrations/20260619000100_add_saiboard_plugin.php` 维护，不使用插件 `install.sql`。
+数据库结构、菜单和权限由 Phinx 迁移维护，不使用插件 `install.sql`。`saiboard` 迁移文件位于 `server/plugin/saiboard/db/migrations/`，不进入主框架默认迁移链，需要显式单独安装：
+
+```bash
+cd server
+php webman b8:migrate:status --plugin=saiboard
+php webman b8:migrate --plugin=saiboard --dry-run
+php webman b8:migrate --plugin=saiboard
+```
+
+独立迁移使用 `phinxlog_saiboard` 记录版本，避免与主框架 `phinxlog` 冲突。首次安装主框架时如果需要同时安装 SAI Board，可执行：
+
+```bash
+php webman b8:install --with-plugin=saiboard
+```
+
+如果当前环境曾通过主框架全局迁移安装过 SAI Board，也可以重新执行 `php webman b8:migrate --plugin=saiboard`。迁移逻辑是幂等的，用于补齐 `phinxlog_saiboard` 记录，不会重复创建已有菜单和表结构。
 
 ### 前端
 

@@ -6,6 +6,7 @@
 - `migrations/`：Phinx 增量迁移，后续结构或初始化数据变更优先放这里。
 - `seeds/`：Phinx seed 目录，保留给测试数据或一次性初始化数据。
 - `phinx.php`：Phinx 配置，读取 `server/.env` 中的 `DB_*` 配置。
+- `server/plugin/<插件名>/db/migrations/`：可选插件独立迁移目录，不进入主框架默认迁移链。
 
 ## 常用命令
 
@@ -21,8 +22,14 @@ php webman b8:migrate:status
 # 执行迁移
 php webman b8:migrate
 
+# 单独安装插件迁移，例如 SAI Board
+php webman b8:migrate --plugin=saiboard
+
 # 预览迁移 SQL，不写入数据库
 php webman b8:migrate --dry-run
+
+# 预览插件迁移 SQL，不写入数据库
+php webman b8:migrate --plugin=saiboard --dry-run
 
 # 回滚最后一批迁移，默认会二次确认
 php webman b8:migrate:rollback
@@ -32,6 +39,9 @@ php webman b8:migrate:rollback --force
 
 # 创建迁移
 php webman b8:migrate:create AddExampleTable
+
+# 在插件独立迁移目录创建迁移
+php webman b8:migrate:create AddExamplePluginTable --plugin=saiboard
 ```
 
 也可以直接调用 Phinx：
@@ -50,6 +60,11 @@ vendor/bin/phinx rollback -c ../Database/phinx.php
 3. 安装向导会在目标库不存在时询问是否创建，空库会导入 `Database/b8aiadmin.sql`，然后执行 `php webman b8:migrate`。
 
 `b8aiadmin.sql` 是基线，Phinx 只负责基线之后的增量变更。
+`b8:install` 默认只安装主框架迁移，不会自动安装可选插件。需要新环境首次安装时同时安装插件，可显式传入：
+
+```bash
+php webman b8:install --with-plugin=saiboard
+```
 
 如需手动安装，也可以按下面顺序执行：
 
@@ -60,9 +75,32 @@ mysql -u root -p b8aiadmin < Database/b8aiadmin.sql
 cd server && php webman b8:migrate
 ```
 
+## 插件独立安装
+
+框架可选插件使用独立迁移目录，不进入 `Database/migrations/` 默认升级链。以 `saiboard` 为例：
+
+```bash
+cd server
+
+# 查看 SAI Board 插件迁移状态，使用独立日志表 phinxlog_saiboard
+php webman b8:migrate:status --plugin=saiboard
+
+# 预览 SQL
+php webman b8:migrate --plugin=saiboard --dry-run
+
+# 单独安装
+php webman b8:migrate --plugin=saiboard
+```
+
+插件迁移日志表格式为 `phinxlog_<插件名>`，避免可选插件版本号与主框架 `phinxlog` 互相影响。插件迁移文件放在 `server/plugin/<插件名>/db/migrations/`，例如 `server/plugin/saiboard/db/migrations/`。
+
+如果某个可选插件曾经短暂进入过主框架迁移链，`Database/migrations/` 可以保留同版本号的空迁移占位，只用于避免旧环境 `phinxlog` 状态显示 missing，不承担插件安装逻辑。
+
+历史上已经随主框架迁移安装过的插件，可以重新执行一次插件迁移命令。插件迁移应保持幂等，用于补齐独立日志表记录，不应重复创建菜单或业务数据。
+
 ## 迁移编写规范
 
-- 文件放在 `Database/migrations/`。
+- 主框架迁移文件放在 `Database/migrations/`；可选插件迁移文件放在 `server/plugin/<插件名>/db/migrations/`。
 - 类名使用清晰的动词短语，例如 `AddUserStatus`、`CreateDemoTable`。
 - `up()` 必须尽量幂等：新增表、字段、菜单、权限前先判断是否存在。
 - `down()` 只回滚当前迁移创建的内容，不要删除用户原本已有的数据。

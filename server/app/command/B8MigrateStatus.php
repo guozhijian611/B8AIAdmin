@@ -6,13 +6,19 @@ namespace app\command;
 
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
 #[AsCommand('b8:migrate:status', '查看 B8AIadmin 数据库迁移状态')]
 final class B8MigrateStatus extends AbstractPhinxCommand
 {
+    protected function configure(): void
+    {
+        $this->addOption('plugin', 'p', InputOption::VALUE_REQUIRED, '只查看指定插件的独立迁移状态，例如 saiboard');
+    }
+
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        return $this->runPhinx(['status'], [0, 3], $output);
+        return $this->runPhinx(['status'], [0, 3], $output, $this->pluginOption($input));
     }
 }

@@ -16,6 +16,7 @@ final class B8Migrate extends AbstractPhinxCommand
     {
         $this->addOption('target', 't', InputOption::VALUE_REQUIRED, '迁移到指定版本');
         $this->addOption('dry-run', null, InputOption::VALUE_NONE, '预览迁移 SQL，不写入数据库');
+        $this->addOption('plugin', 'p', InputOption::VALUE_REQUIRED, '只执行指定插件的独立迁移，例如 saiboard');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -31,6 +32,6 @@ final class B8Migrate extends AbstractPhinxCommand
             $arguments[] = '--dry-run';
         }
 
-        return $this->runPhinx($arguments, [0], $output);
+        return $this->runPhinx($arguments, [0], $output, $this->pluginOption($input));
     }
 }

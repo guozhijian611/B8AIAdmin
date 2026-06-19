@@ -19,6 +19,7 @@ final class B8MigrateRollback extends AbstractPhinxCommand
         $this->addOption('target', 't', InputOption::VALUE_REQUIRED, '回滚到指定版本');
         $this->addOption('force', 'f', InputOption::VALUE_NONE, '跳过确认直接回滚');
         $this->addOption('dry-run', null, InputOption::VALUE_NONE, '预览回滚 SQL，不写入数据库');
+        $this->addOption('plugin', 'p', InputOption::VALUE_REQUIRED, '只回滚指定插件的独立迁移，例如 saiboard');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -47,6 +48,6 @@ final class B8MigrateRollback extends AbstractPhinxCommand
             $arguments[] = '--dry-run';
         }
 
-        return $this->runPhinx($arguments, [0], $output);
+        return $this->runPhinx($arguments, [0], $output, $this->pluginOption($input));
     }
 }

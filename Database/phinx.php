@@ -23,13 +23,33 @@ $env = static function (string $name, mixed $default = null): mixed {
     return $value;
 };
 
+$plugin = (string) $env('B8_PHINX_PLUGIN', '');
+$migrationsPath = __DIR__ . '/migrations';
+$seedsPath = __DIR__ . '/seeds';
+$migrationTable = 'phinxlog';
+
+if ($plugin !== '') {
+    if (!preg_match('/^[a-z][a-z0-9_]*$/', $plugin)) {
+        throw new RuntimeException('B8_PHINX_PLUGIN 只能包含小写字母、数字和下划线，且必须以字母开头。');
+    }
+
+    $migrationsPath = $serverPath . '/plugin/' . $plugin . '/db/migrations';
+    if (!is_dir($migrationsPath)) {
+        throw new RuntimeException("插件 {$plugin} 没有独立迁移目录：plugin/{$plugin}/db/migrations");
+    }
+
+    $pluginSeedsPath = $serverPath . '/plugin/' . $plugin . '/db/seeds';
+    $seedsPath = is_dir($pluginSeedsPath) ? $pluginSeedsPath : $seedsPath;
+    $migrationTable = 'phinxlog_' . $plugin;
+}
+
 return [
     'paths' => [
-        'migrations' => __DIR__ . '/migrations',
-        'seeds' => __DIR__ . '/seeds',
+        'migrations' => $migrationsPath,
+        'seeds' => $seedsPath,
     ],
     'environments' => [
-        'default_migration_table' => 'phinxlog',
+        'default_migration_table' => $migrationTable,
         'default_environment' => 'default',
         'default' => [
             'adapter' => $env('DB_TYPE', 'mysql'),
