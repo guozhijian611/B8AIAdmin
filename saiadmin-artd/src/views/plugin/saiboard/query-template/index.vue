@@ -95,17 +95,34 @@
               :key="item.value"
               :label="item.label"
               :value="item.value"
-            />
+            >
+              <div class="dataset-type-option">
+                <div class="dataset-type-option__head">
+                  <span>{{ item.label }}</span>
+                  <ElTag size="small" effect="plain">{{ item.value }}</ElTag>
+                </div>
+                <div class="dataset-type-option__summary">{{ item.summary }}</div>
+              </div>
+            </ElOption>
           </ElSelect>
         </ElFormItem>
-        <ElAlert
-          class="dataset-type-help"
-          type="info"
-          show-icon
-          :closable="false"
-          :title="datasetTypeHelp.title"
-          :description="datasetTypeHelp.description"
-        />
+        <div class="dataset-type-help">
+          <div class="dataset-type-help__head">
+            <span>{{ datasetTypeHelp.label }}</span>
+            <ElTag size="small" effect="plain">{{ form.dataset_type }}</ElTag>
+          </div>
+          <div class="dataset-type-help__summary">{{ datasetTypeHelp.description }}</div>
+          <div class="dataset-type-help__meta">
+            <span>
+              <strong>返回结构</strong>
+              {{ datasetTypeHelp.structure }}
+            </span>
+            <span>
+              <strong>适用组件</strong>
+              {{ datasetTypeHelp.components }}
+            </span>
+          </div>
+        </div>
 
         <template v-if="isMysqlTemplate">
           <ElFormItem label="数据表">
@@ -625,6 +642,15 @@
     required: boolean
   }
 
+  interface DatasetTypeOption {
+    label: string
+    value: string
+    summary: string
+    description: string
+    structure: string
+    components: string
+  }
+
   interface QueryCondition {
     field: string
     op: string
@@ -708,34 +734,45 @@
     { label: '日期时间', value: 'datetime' },
     { label: '时间范围', value: 'time_range' }
   ]
-  const mysqlDatasetTypes = [
-    { label: '表原始行', value: 'table_raw' },
-    { label: '表计数', value: 'table_count' },
-    { label: '表聚合', value: 'table_aggregate' }
-  ]
-  const httpDatasetTypes = [{ label: 'HTTP 透传', value: 'http_passthrough' }]
-  const datasetTypeHelpMap: Record<string, { title: string; description: string }> = {
-    table_raw: {
-      title: '表原始行',
-      description:
-        '按字段、条件和排序读取明细行，返回 rows 列表；适合表格、排行榜、折线/柱状图的原始明细数据。'
+  const mysqlDatasetTypes: DatasetTypeOption[] = [
+    {
+      label: '表原始行',
+      value: 'table_raw',
+      summary: '读取明细 rows，字段来自返回字段和计算字段。',
+      description: '按字段、条件和排序读取明细行，适合先拿到业务原始记录再由组件做展示。',
+      structure: 'rows: [{ 字段名: 值, 计算字段: 值 }], total: 行数',
+      components: '表格、排行、折线/柱状图、状态矩阵、时间轴、告警列表'
     },
-    table_count: {
-      title: '表计数',
-      description:
-        '只返回一行 total 计数，返回结构为 rows[0].total；适合指标卡、总数统计和告警数量。'
+    {
+      label: '表计数',
+      value: 'table_count',
+      summary: '只统计数量，返回 rows[0].total。',
+      description: '只做 count 计数，不返回明细字段，适合页面顶部总量和告警数量。',
+      structure: 'rows: [{ total: 数量 }], total: 数量',
+      components: '指标卡、仪表盘、总数统计'
     },
-    table_aggregate: {
-      title: '表聚合',
-      description:
-        '按维度字段分组，输出 label 加一个或多个聚合指标；配置第二维度后输出 label/series/指标列，适合热力图二维矩阵。'
-    },
-    http_passthrough: {
-      title: 'HTTP 透传',
-      description:
-        '支持 GET 或 POST JSON，请求数据源 URL 加模板路径和参数；可配置响应路径，最终统一转换为 rows/total。'
+    {
+      label: '表聚合',
+      value: 'table_aggregate',
+      summary: '按维度聚合，输出 label/series/指标列。',
+      description: '按维度分组并计算一个或多个指标，配置第二维度后可直接喂给二维图表。',
+      structure: 'rows: [{ label, series?, 指标别名: 值 }], total: 分组行数',
+      components: '柱状图、环图、漏斗图、热力图、雷达图、进度排行'
     }
-  }
+  ]
+  const httpDatasetTypes: DatasetTypeOption[] = [
+    {
+      label: 'HTTP 透传',
+      value: 'http_passthrough',
+      summary: '请求外部 JSON，按响应路径转换为 rows/total。',
+      description: '复用 HTTP 数据源的基础 URL 和请求头，模板负责路径、参数、Body 和响应提取。',
+      structure: 'rows: 数组/对象/标量转换后的统一行数据, total: 总数或行数',
+      components: '第三方指标、已聚合接口、表格、图表、状态矩阵、告警列表'
+    }
+  ]
+  const datasetTypeHelpMap: Record<string, DatasetTypeOption> = Object.fromEntries(
+    [...mysqlDatasetTypes, ...httpDatasetTypes].map((item) => [item.value, item])
+  )
   const paramTypeDescription =
     '文本会按字符串绑定；数字必须是数值；日期格式为 YYYY-MM-DD；日期时间格式为 YYYY-MM-DD HH:mm:ss；时间范围可用 today、last_7_days 等预设。条件值写成 :参数名 时，会优先取运行时传入值，没有传入则使用默认值。'
 
@@ -747,7 +784,7 @@
     currentDatasource.value?.type === 'http' ? httpDatasetTypes : mysqlDatasetTypes
   )
   const datasetTypeHelp = computed(
-    () => datasetTypeHelpMap[form.dataset_type] || datasetTypeHelpMap.table_raw
+    () => datasetTypeHelpMap[form.dataset_type] || mysqlDatasetTypes[0]
   )
   const numericColumnOptions = computed(() =>
     columnOptions.value.filter((item) => item.kind === 'number')
@@ -1447,8 +1484,72 @@
     width: 100%;
   }
 
+  .dataset-type-option {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 4px 0;
+    line-height: 1.35;
+  }
+
+  .dataset-type-option__head {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: space-between;
+    font-weight: 600;
+  }
+
+  .dataset-type-option__summary {
+    overflow: hidden;
+    font-size: 12px;
+    color: var(--el-text-color-secondary);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .dataset-type-help {
+    padding: 12px;
     margin-bottom: 18px;
+    background: var(--el-fill-color-lighter);
+    border: 1px solid var(--default-border);
+    border-radius: 6px;
+  }
+
+  .dataset-type-help__head {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .dataset-type-help__summary {
+    margin-bottom: 10px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--el-text-color-regular);
+  }
+
+  .dataset-type-help__meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--el-text-color-secondary);
+  }
+
+  .dataset-type-help__meta span {
+    min-width: 0;
+  }
+
+  .dataset-type-help__meta strong {
+    display: block;
+    margin-bottom: 2px;
+    color: var(--el-text-color-primary);
   }
 
   .param-help {
@@ -1500,5 +1601,11 @@
 
   .metric-row {
     grid-template-columns: minmax(160px, 1.2fr) 140px minmax(180px, 1.4fr) 64px;
+  }
+
+  @media (max-width: 720px) {
+    .dataset-type-help__meta {
+      grid-template-columns: 1fr;
+    }
   }
 </style>
