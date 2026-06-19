@@ -35,6 +35,7 @@ class ScreenController extends AbstractCrudController
     #[Apidoc\Url('/app/saiboard/admin/Screen/index')]
     #[Apidoc\Method('GET')]
     #[Apidoc\Query('name', type: 'string', require: false, desc: '大屏名称')]
+    #[Apidoc\Returned('total', type: 'int', desc: '总记录数')]
     #[Permission('大屏列表', 'saiboard:screen:index')]
     public function index(Request $request): Response
     {
@@ -45,6 +46,11 @@ class ScreenController extends AbstractCrudController
     #[Apidoc\Url('/app/saiboard/admin/Screen/read')]
     #[Apidoc\Method('GET')]
     #[Apidoc\Query('id', type: 'int', require: true, desc: '大屏ID')]
+    #[Apidoc\Returned('id', type: 'int', desc: '大屏ID')]
+    #[Apidoc\Returned('name', type: 'string', desc: '大屏名称')]
+    #[Apidoc\Returned('draft_layout', type: 'object', desc: '草稿布局')]
+    #[Apidoc\Returned('layout', type: 'object', desc: '已发布布局')]
+    #[Apidoc\Returned('bg_config', type: 'object', desc: '背景和适配配置')]
     #[Permission('大屏读取', 'saiboard:screen:read')]
     public function read(Request $request): Response
     {
@@ -140,6 +146,7 @@ class ScreenController extends AbstractCrudController
     #[Apidoc\Url('/app/saiboard/admin/Screen/copy')]
     #[Apidoc\Method('POST')]
     #[Apidoc\Param('id', type: 'int', require: true, desc: '大屏ID')]
+    #[Apidoc\Returned('id', type: 'int', desc: '复制后的新大屏ID')]
     #[Permission('复制大屏', 'saiboard:screen:copy')]
     public function copy(Request $request): Response
     {
@@ -166,6 +173,12 @@ class ScreenController extends AbstractCrudController
     #[Apidoc\Param('category_field', type: 'string', require: false, desc: '分布维度字段')]
     #[Apidoc\Param('order_field', type: 'string', require: false, desc: '明细排序字段')]
     #[Apidoc\Param('raw_fields', type: 'array', require: false, desc: '明细表字段，最多8个')]
+    #[Apidoc\Returned('id', type: 'int', desc: '生成的大屏ID')]
+    #[Apidoc\Returned('name', type: 'string', desc: '生成的大屏名称')]
+    #[Apidoc\Returned('table', type: 'string', desc: '来源数据表')]
+    #[Apidoc\Returned('chart_types', type: 'array', desc: '实际生成的模块类型')]
+    #[Apidoc\Returned('template_ids', type: 'array', desc: '自动生成的查询模板ID列表')]
+    #[Apidoc\Returned('component_count', type: 'int', desc: '自动生成的组件数量')]
     #[Permission('从数据表生成大屏', 'saiboard:screen:generateFromTable')]
     public function generateFromTable(Request $request): Response
     {
@@ -246,6 +259,8 @@ class ScreenController extends AbstractCrudController
     #[Apidoc\Param('id', type: 'int', require: true, desc: '大屏ID')]
     #[Apidoc\Param('name', type: 'string', require: true, desc: '令牌名称')]
     #[Apidoc\Param('expire_time', type: 'string', require: false, desc: '过期时间')]
+    #[Apidoc\Returned('token', type: 'string', desc: '明文令牌，仅本次返回')]
+    #[Apidoc\Returned('row', type: 'object', desc: '令牌记录，不包含 token_hash')]
     #[Permission('创建大屏访问令牌', 'saiboard:screen:createToken')]
     public function createToken(Request $request): Response
     {
@@ -262,6 +277,8 @@ class ScreenController extends AbstractCrudController
     #[Apidoc\Method('POST')]
     #[Apidoc\Param('id', type: 'int', require: true, desc: '大屏ID')]
     #[Apidoc\Param('token_id', type: 'int', require: true, desc: '令牌ID')]
+    #[Apidoc\Returned('token', type: 'string', desc: '重置后的明文令牌，仅本次返回')]
+    #[Apidoc\Returned('row', type: 'object', desc: '令牌记录，不包含 token_hash')]
     #[Permission('重置大屏访问令牌', 'saiboard:screen:resetToken')]
     public function resetToken(Request $request): Response
     {
@@ -318,6 +335,9 @@ class ScreenController extends AbstractCrudController
     #[Apidoc\Url('/app/saiboard/admin/Screen/runtimeMetrics')]
     #[Apidoc\Method('GET')]
     #[Apidoc\Query('id', type: 'int', require: false, desc: '大屏ID，不传返回全局运行统计')]
+    #[Apidoc\Returned('window', type: 'int', desc: '统计窗口秒数')]
+    #[Apidoc\Returned('totals', type: 'object', desc: '全局运行统计')]
+    #[Apidoc\Returned('screen', type: 'object', desc: '指定大屏运行统计')]
     #[Permission('大屏运行统计', 'saiboard:screen:index')]
     public function runtimeMetrics(Request $request): Response
     {

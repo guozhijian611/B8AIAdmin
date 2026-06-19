@@ -155,6 +155,25 @@ export const widgetRegistry: WidgetMeta[] = [
     }
   },
   {
+    type: 'status-matrix',
+    name: '状态矩阵',
+    icon: 'ri:grid-fill',
+    defaultRect: { x: 1480, y: 1120, w: 520, h: 360, z: 1 },
+    defaultOption: {
+      labelField: '',
+      statusField: '',
+      valueField: '',
+      groupField: '',
+      maxRows: 12,
+      columns: 3,
+      unit: '',
+      decimals: 0,
+      showValue: true,
+      showStatus: true,
+      accent: '#69b7ff'
+    }
+  },
+  {
     type: 'image-carousel',
     name: '图片轮播',
     icon: 'ri:image-line',

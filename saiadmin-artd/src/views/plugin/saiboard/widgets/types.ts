@@ -40,6 +40,7 @@ export type WidgetType =
   | 'stat-number'
   | 'data-table'
   | 'progress-rank'
+  | 'status-matrix'
   | 'image-carousel'
   | 'event-timeline'
   | 'alarm-list'

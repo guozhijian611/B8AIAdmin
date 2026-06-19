@@ -36,6 +36,7 @@ class DatasourceController extends AbstractCrudController
     #[Apidoc\Title('数据源列表')]
     #[Apidoc\Url('/app/saiboard/admin/Datasource/index')]
     #[Apidoc\Method('GET')]
+    #[Apidoc\Returned('total', type: 'int', desc: '总记录数')]
     #[Permission('数据源列表', 'saiboard:datasource:index')]
     public function index(Request $request): Response
     {
@@ -45,6 +46,11 @@ class DatasourceController extends AbstractCrudController
     #[Apidoc\Title('数据源读取')]
     #[Apidoc\Url('/app/saiboard/admin/Datasource/read')]
     #[Apidoc\Method('GET')]
+    #[Apidoc\Query('id', type: 'int', require: true, desc: '数据源ID')]
+    #[Apidoc\Returned('id', type: 'int', desc: '数据源ID')]
+    #[Apidoc\Returned('name', type: 'string', desc: '数据源名称')]
+    #[Apidoc\Returned('type', type: 'string', desc: '数据源类型：mysql/http')]
+    #[Apidoc\Returned('config', type: 'object', desc: '数据源配置，敏感字段按读取策略脱敏')]
     #[Permission('数据源读取', 'saiboard:datasource:read')]
     public function read(Request $request): Response
     {
@@ -54,6 +60,9 @@ class DatasourceController extends AbstractCrudController
     #[Apidoc\Title('数据源添加')]
     #[Apidoc\Url('/app/saiboard/admin/Datasource/save')]
     #[Apidoc\Method('POST')]
+    #[Apidoc\Param('name', type: 'string', require: true, desc: '数据源名称')]
+    #[Apidoc\Param('type', type: 'string', require: true, desc: '数据源类型：mysql/http')]
+    #[Apidoc\Param('config', type: 'object', require: true, desc: '连接配置')]
     #[Permission('数据源添加', 'saiboard:datasource:save')]
     public function save(Request $request): Response
     {
@@ -63,6 +72,10 @@ class DatasourceController extends AbstractCrudController
     #[Apidoc\Title('数据源修改')]
     #[Apidoc\Url('/app/saiboard/admin/Datasource/update')]
     #[Apidoc\Method('PUT')]
+    #[Apidoc\Param('id', type: 'int', require: true, desc: '数据源ID')]
+    #[Apidoc\Param('name', type: 'string', require: true, desc: '数据源名称')]
+    #[Apidoc\Param('type', type: 'string', require: true, desc: '数据源类型：mysql/http')]
+    #[Apidoc\Param('config', type: 'object', require: true, desc: '连接配置')]
     #[Permission('数据源修改', 'saiboard:datasource:update')]
     public function update(Request $request): Response
     {
@@ -72,6 +85,7 @@ class DatasourceController extends AbstractCrudController
     #[Apidoc\Title('数据源删除')]
     #[Apidoc\Url('/app/saiboard/admin/Datasource/destroy')]
     #[Apidoc\Method('DELETE')]
+    #[Apidoc\Param('ids', type: 'array', require: true, desc: '数据源ID列表')]
     #[Permission('数据源删除', 'saiboard:datasource:destroy')]
     public function destroy(Request $request): Response
     {
@@ -81,6 +95,8 @@ class DatasourceController extends AbstractCrudController
     #[Apidoc\Title('数据源状态')]
     #[Apidoc\Url('/app/saiboard/admin/Datasource/changeStatus')]
     #[Apidoc\Method('POST')]
+    #[Apidoc\Param('id', type: 'int', require: true, desc: '数据源ID')]
+    #[Apidoc\Param('status', type: 'int', require: true, desc: '状态 1启用 2停用')]
     #[Permission('数据源状态', 'saiboard:datasource:changeStatus')]
     public function changeStatus(Request $request): Response
     {
@@ -91,6 +107,9 @@ class DatasourceController extends AbstractCrudController
     #[Apidoc\Url('/app/saiboard/admin/Datasource/test')]
     #[Apidoc\Method('POST')]
     #[Apidoc\Param('test_config', type: 'object', require: false, desc: 'HTTP 测试模板配置：path/method/params/body/response_path/total_path')]
+    #[Apidoc\Returned('rows', type: 'array', desc: '测试返回数据行')]
+    #[Apidoc\Returned('total', type: 'int', desc: '测试返回总数')]
+    #[Apidoc\Returned('diagnostics', type: 'object', desc: '脱敏诊断信息')]
     #[Permission('测试数据源', 'saiboard:datasource:test')]
     public function test(Request $request): Response
     {
@@ -133,6 +152,8 @@ class DatasourceController extends AbstractCrudController
     #[Apidoc\Method('GET')]
     #[Apidoc\Query('id', type: 'int', require: true, desc: '数据源ID')]
     #[Apidoc\Query('table', type: 'string', require: false, desc: '数据表名')]
+    #[Apidoc\Returned('tables', type: 'array', desc: '数据表列表')]
+    #[Apidoc\Returned('columns', type: 'array', desc: '指定数据表字段列表')]
     #[Permission('数据源表结构', 'saiboard:datasource:index')]
     public function schema(Request $request): Response
     {

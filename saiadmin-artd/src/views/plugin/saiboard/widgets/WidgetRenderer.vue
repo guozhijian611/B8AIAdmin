@@ -152,6 +152,35 @@
         </template>
         <div v-else class="progress-rank__empty">{{ progressRankEmptyText }}</div>
       </div>
+      <div
+        v-else-if="component.type === 'status-matrix'"
+        class="status-matrix"
+        :style="statusMatrixStyleVars"
+      >
+        <template v-if="statusMatrixItems.length">
+          <div
+            v-for="item in statusMatrixItems"
+            :key="`${item.label}-${item.index}`"
+            class="status-matrix__item"
+            :class="`is-${item.tone}`"
+          >
+            <div class="status-matrix__topline">
+              <span v-if="item.group" class="status-matrix__group">{{ item.group }}</span>
+              <span v-if="component.option?.showStatus !== false" class="status-matrix__status">
+                {{ item.status || '正常' }}
+              </span>
+            </div>
+            <div class="status-matrix__label">{{ item.label }}</div>
+            <div
+              v-if="component.option?.showValue !== false && item.valueText"
+              class="status-matrix__value"
+            >
+              {{ item.valueText }}
+            </div>
+          </div>
+        </template>
+        <div v-else class="status-matrix__empty">{{ statusMatrixEmptyText }}</div>
+      </div>
       <div v-else-if="component.type === 'image-carousel'" class="image-carousel">
         <ElCarousel
           v-if="carouselSlides.length"
@@ -366,6 +395,14 @@
     tone: StatusTone
     index: number
   }
+  interface StatusMatrixItem {
+    label: string
+    status: string
+    valueText: string
+    group: string
+    tone: StatusTone
+    index: number
+  }
 
   const chartTypes = new Set([
     'art-bar-chart',
@@ -516,6 +553,40 @@
       status: '关注',
       tone: 'warning',
       index: 2
+    }
+  ]
+  const sampleStatusMatrixItems: StatusMatrixItem[] = [
+    {
+      label: '支付网关',
+      status: '正常',
+      valueText: '99.9%',
+      group: '核心链路',
+      tone: 'success',
+      index: 0
+    },
+    {
+      label: '库存同步',
+      status: '关注',
+      valueText: '延迟 3m',
+      group: '业务服务',
+      tone: 'warning',
+      index: 1
+    },
+    {
+      label: '售后工单',
+      status: '处理中',
+      valueText: '18 单',
+      group: '运营',
+      tone: 'primary',
+      index: 2
+    },
+    {
+      label: '内容发布',
+      status: '异常',
+      valueText: '2 条',
+      group: 'CMS',
+      tone: 'danger',
+      index: 3
     }
   ]
 
@@ -1135,6 +1206,88 @@
       props.component.option?.accent || 'var(--saiboard-accent, #23d8ff)'
     )
   }))
+  const statusMatrixLabelKey = computed(() =>
+    findOptionalKey(props.component.option?.labelField, [
+      'label',
+      'name',
+      'title',
+      'device',
+      'node',
+      'service',
+      'asset',
+      'area',
+      'region',
+      'slot',
+      '名称',
+      '标题',
+      '点位'
+    ])
+  )
+  const statusMatrixStatusKey = computed(() =>
+    findOptionalKey(props.component.option?.statusField, [
+      'status',
+      'state',
+      'health',
+      'level',
+      'result',
+      'online',
+      'risk',
+      '状态',
+      '级别',
+      '健康度'
+    ])
+  )
+  const statusMatrixValueKey = computed(() =>
+    findOptionalKey(props.component.option?.valueField || mapping.value.valueField, [
+      'value',
+      'count',
+      'total',
+      'amount',
+      'score',
+      'rate',
+      'percent',
+      'latency',
+      'duration',
+      '数值',
+      '数量'
+    ])
+  )
+  const statusMatrixGroupKey = computed(() =>
+    findOptionalKey(props.component.option?.groupField, [
+      'group',
+      'category',
+      'type',
+      'region',
+      'zone',
+      'series',
+      'department',
+      '分组',
+      '类型',
+      '区域'
+    ])
+  )
+  const statusMatrixItems = computed<StatusMatrixItem[]>(() => {
+    if (!hasBoundDataset.value && !(props.rows || []).length) return sampleStatusMatrixItems
+    if (!statusMatrixLabelKey.value) return []
+
+    const rows = props.rows || []
+    const items = rows
+      .map((row, index) => createStatusMatrixItem(row, index))
+      .filter(Boolean) as StatusMatrixItem[]
+    const maxRows = normalizeTimelineMaxRows(props.component.option?.maxRows)
+    return maxRows > 0 ? items.slice(0, maxRows) : items
+  })
+  const statusMatrixEmptyText = computed(() => {
+    if (!hasBoundDataset.value || !(props.rows || []).length) return '暂无状态'
+    if (!statusMatrixLabelKey.value) return '请配置名称字段'
+    return '暂无有效状态'
+  })
+  const statusMatrixStyleVars = computed(() => ({
+    '--status-matrix-accent': String(
+      props.component.option?.accent || 'var(--saiboard-accent, #69b7ff)'
+    ),
+    '--status-matrix-columns': String(normalizeStatusMatrixColumns(props.component.option?.columns))
+  }))
   const geoPoints = computed(() => {
     const points = normalizeGeoPoints()
     if (points.length) return points
@@ -1496,6 +1649,51 @@
     return {
       width: `${item.progress}%`
     }
+  }
+
+  function createStatusMatrixItem(row: Record<string, any>, index: number) {
+    const label = String(row[statusMatrixLabelKey.value] ?? '').trim()
+    if (!label) return undefined
+
+    const status = statusMatrixStatusKey.value
+      ? String(row[statusMatrixStatusKey.value] ?? '').trim()
+      : ''
+    const valueText = statusMatrixValueKey.value
+      ? statusMatrixValueText(row[statusMatrixValueKey.value])
+      : ''
+    const group =
+      statusMatrixGroupKey.value && statusMatrixGroupKey.value !== statusMatrixLabelKey.value
+        ? String(row[statusMatrixGroupKey.value] ?? '').trim()
+        : ''
+
+    return {
+      label,
+      status,
+      valueText,
+      group,
+      tone: status ? timelineTone(status) : 'success',
+      index
+    }
+  }
+
+  function statusMatrixValueText(value: unknown) {
+    if (value === null || value === undefined || value === '') return ''
+    const numeric = toOptionalNumber(value)
+    if (numeric === undefined) return String(value).trim()
+
+    const decimals = normalizeDecimals(props.component.option?.decimals)
+    const unit = String(props.component.option?.unit ?? '')
+    const normalized = unit === '%' && numeric > 0 && numeric <= 1 ? numeric * 100 : numeric
+    return `${normalized.toLocaleString(undefined, {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals
+    })}${unit}`
+  }
+
+  function normalizeStatusMatrixColumns(value: unknown) {
+    const columns = Number(value ?? 3)
+    if (!Number.isFinite(columns) || columns <= 0) return 3
+    return Math.min(6, Math.max(1, Math.round(columns)))
   }
 
   function normalizeTimelineMaxRows(value: unknown) {
@@ -2268,6 +2466,127 @@
   }
 
   .progress-rank__empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: rgb(215 231 255 / 72%);
+    background: rgb(255 255 255 / 4%);
+    border: 1px dashed rgb(255 255 255 / 16%);
+    border-radius: 4px;
+  }
+
+  .status-matrix {
+    display: grid;
+    grid-template-columns: repeat(var(--status-matrix-columns), minmax(0, 1fr));
+    gap: 8px;
+    height: 100%;
+    min-height: 0;
+    overflow: auto;
+  }
+
+  .status-matrix__item {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-width: 0;
+    min-height: 88px;
+    padding: 10px;
+    overflow: hidden;
+    color: #d7e7ff;
+    background:
+      linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--status-matrix-accent) 14%, transparent),
+        transparent 58%
+      ),
+      rgb(255 255 255 / 4%);
+    border: 1px solid color-mix(in srgb, var(--status-matrix-accent) 20%, transparent);
+    border-radius: 4px;
+  }
+
+  .status-matrix__item::before {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: 2px;
+    content: '';
+    background: var(--status-matrix-accent);
+    box-shadow: 0 0 14px color-mix(in srgb, var(--status-matrix-accent) 44%, transparent);
+  }
+
+  .status-matrix__item.is-success {
+    --status-matrix-accent: #14deba;
+  }
+
+  .status-matrix__item.is-warning {
+    --status-matrix-accent: #ffaf20;
+  }
+
+  .status-matrix__item.is-danger {
+    --status-matrix-accent: #fa8a6c;
+  }
+
+  .status-matrix__item.is-info {
+    --status-matrix-accent: #a8b4c6;
+  }
+
+  .status-matrix__topline {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    justify-content: space-between;
+    min-width: 0;
+    font-size: 12px;
+  }
+
+  .status-matrix__group,
+  .status-matrix__status {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .status-matrix__group {
+    color: rgb(215 231 255 / 58%);
+  }
+
+  .status-matrix__status {
+    flex: 0 0 auto;
+    max-width: 76px;
+    padding: 1px 6px;
+    color: var(--status-matrix-accent);
+    background: color-mix(in srgb, var(--status-matrix-accent) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--status-matrix-accent) 24%, transparent);
+    border-radius: 4px;
+  }
+
+  .status-matrix__label {
+    min-width: 0;
+    margin: 8px 0 6px;
+    overflow: hidden;
+    font-size: 14px;
+    font-weight: 700;
+    color: #f8fbff;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .status-matrix__value {
+    min-width: 0;
+    overflow: hidden;
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--status-matrix-accent);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .status-matrix__empty {
+    grid-column: 1 / -1;
     display: flex;
     align-items: center;
     justify-content: center;
