@@ -50,10 +50,11 @@
 
   const code = computed(() => String(route.params.code || ''))
   const token = computed(() => String(route.query.token || ''))
+  const adminPreview = computed(() => route.query.admin_preview === '1')
   const runtimeParams = computed(() => {
     const params: Record<string, any> = {}
     for (const [key, value] of Object.entries(route.query)) {
-      if (key === 'token') continue
+      if (key === 'token' || key === 'admin_preview') continue
       params[key] = value
     }
     return params
@@ -75,7 +76,7 @@
     loading.value = true
     error.value = ''
     try {
-      const result = await api.screen(code.value, token.value)
+      const result = await api.screen(code.value, authParams())
       Object.assign(screen, result.screen, {
         bg_config: normalizeBgConfig(result.screen?.bg_config)
       })
@@ -106,7 +107,7 @@
       const result = await api.data({
         code: code.value,
         cid,
-        token: token.value,
+        ...authParams(),
         ...runtimeParams.value
       })
       dataMap[cid] = { rows: result.rows || [], error: '' }
@@ -123,6 +124,11 @@
       timers.push(window.setInterval(() => loadComponentData(component.id), seconds * 1000))
     }
   }
+
+  const authParams = () => ({
+    ...(token.value ? { token: token.value } : {}),
+    ...(adminPreview.value ? { admin_preview: 1 } : {})
+  })
 
   const updateScale = () => {
     const el = viewportRef.value

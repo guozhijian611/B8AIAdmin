@@ -300,6 +300,7 @@ getScreen / data 接口入口：
   if screen.is_public == 1:    放行（公开大屏，展厅 / 投屏场景）
   if screen.is_public == 2:
       if 请求 token 命中启用且未过期的 screen_token: 放行，并节流刷新 last_used_time
+      else if admin_preview=1 且后台 JWT 具备大屏读取权限和数据范围: 放行（后台预览）
       else if 存在启用且未过期的 screen_token:        拒绝访问
       else if access_token 非空:                      校验旧单 token 字段（兼容未迁移的已发布链接）
       else:                                           要求后台 JWT 登录态（复用 CheckLogin 逻辑）
@@ -309,7 +310,7 @@ getScreen / data 接口入口：
 
 后台管理端额外启用 SaiAdmin 数据权限：普通角色只能管理自己 `created_by` 范围内的大屏、数据源和查询模板；大屏保存 / 发布时会校验 layout 中绑定的查询模板归属，查询模板保存 / 预览时会校验数据源归属。若具备数据范围权限的用户复制他人可见大屏，副本会保留视觉布局但清空查询模板绑定，避免跨归属数据依赖。
 
-> 旧 `access_token` 字段继续作为无子令牌时的兼容兜底存在；新建客户级令牌应优先使用 `saiboard_screen_token` 子表，避免在数据库保存明文 token，并获得独立吊销能力。
+> 旧 `access_token` 字段继续作为无子令牌时的兼容兜底存在；新建客户级令牌应优先使用 `saiboard_screen_token` 子表，避免在数据库保存明文 token，并获得独立吊销能力。后台列表「预览」使用 `admin_preview=1` 和当前后台 JWT 放行，不依赖也不暴露子令牌明文。
 
 ## 前端关键点
 
@@ -620,7 +621,7 @@ php webman b8:migrate
 
 ## 排障
 
-- 运行时 401：检查大屏是否公开；如为 token 模式，访问 `/screen/:code?token=...` 或请求头传递 `X-Saiboard-Token`；多访问令牌只在创建 / 重置时显示一次，后台列表只能看到前缀。
+- 运行时 401：检查大屏是否公开；如为 token 模式，对外访问 `/screen/:code?token=...` 或请求头传递 `X-Saiboard-Token`；多访问令牌只在创建 / 重置时显示一次，后台列表只能看到前缀。后台管理端预览私有大屏会自动追加 `admin_preview=1`，需要当前后台登录态具备大屏读取权限并通过数据范围校验。
 - SQL 白名单拦截：确认查询模板里的 `table`、`fields`、`conditions.field`、`order.field` 都是目标数据源真实存在的表和字段。
 - HTTP 数据源失败：确认 URL 是公网 `http/https` 地址；localhost、内网 IP、保留地址和无法 DNS 解析的域名会被 SSRF 防护拦截。
 - 数据不刷新：检查数据源 `cache_ttl` 和组件 `dataset.refresh`；预览接口会强制绕过缓存，运行时接口会按 `cache_ttl` 复用结果，公开运行时轮询下限为 10 秒。

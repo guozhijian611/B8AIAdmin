@@ -4,6 +4,9 @@ namespace plugin\saiboard\app\api\controller;
 
 use hg\apidoc\annotation as Apidoc;
 use InvalidArgumentException;
+use plugin\saiadmin\app\cache\UserAuthCache;
+use plugin\saiadmin\exception\ApiException;
+use plugin\saiboard\app\admin\logic\ScreenLogic;
 use plugin\saiboard\app\model\Datasource;
 use plugin\saiboard\app\model\QueryTemplate;
 use plugin\saiboard\app\model\Screen;
@@ -34,6 +37,7 @@ class BoardController
     #[Apidoc\Url('/app/saiboard/api/screen/{code}')]
     #[Apidoc\Method('GET')]
     #[Apidoc\Query('token', type: 'string', require: false, desc: '访问令牌')]
+    #[Apidoc\Query('admin_preview', type: 'int', require: false, desc: '后台预览标记，需携带后台 JWT')]
     #[Apidoc\Returned('screen', type: 'object', desc: '脱敏大屏配置')]
     public function getScreen(Request $request, string $code): Response
     {
@@ -68,6 +72,7 @@ class BoardController
     #[Apidoc\Query('code', type: 'string', require: true, desc: '大屏编码')]
     #[Apidoc\Query('cid', type: 'string', require: true, desc: '组件ID')]
     #[Apidoc\Query('token', type: 'string', require: false, desc: '访问令牌')]
+    #[Apidoc\Query('admin_preview', type: 'int', require: false, desc: '后台预览标记，需携带后台 JWT')]
     #[Apidoc\Query('params', type: 'object', require: false, desc: '运行时查询参数')]
     #[Apidoc\Returned('rows', type: 'array', desc: '数据行')]
     public function data(Request $request): Response
@@ -144,6 +149,9 @@ class BoardController
         if ($token !== '' && $this->validScreenToken($screen, $token)) {
             return true;
         }
+        if ($this->isAdminPreview($request) && $this->canAdminPreview($screen)) {
+            return true;
+        }
         if ($this->hasActiveScreenTokens($screen)) {
             return false;
         }
@@ -155,6 +163,37 @@ class BoardController
 
         $current = getCurrentInfo();
         return is_array($current) && ($current['plat'] ?? '') === 'saiadmin';
+    }
+
+    private function isAdminPreview(Request $request): bool
+    {
+        $value = $request->input('admin_preview', '');
+        return in_array($value, [1, '1', true, 'true'], true);
+    }
+
+    private function canAdminPreview(Screen $screen): bool
+    {
+        $current = getCurrentInfo();
+        if (!is_array($current) || ($current['plat'] ?? '') !== 'saiadmin') {
+            return false;
+        }
+
+        $adminId = (int) ($current['id'] ?? 0);
+        if ($adminId <= 0) {
+            return false;
+        }
+        if ($adminId !== 1 && !in_array('saiboard:screen:read', UserAuthCache::getUserAuth($adminId), true)) {
+            return false;
+        }
+
+        try {
+            (new ScreenLogic())->read((int) $screen->id);
+            return true;
+        } catch (ApiException) {
+            return false;
+        } catch (Throwable) {
+            return false;
+        }
     }
 
     private function validScreenToken(Screen $screen, string $token): bool
@@ -271,7 +310,7 @@ class BoardController
 
     private function runtimeParams(Request $request): array
     {
-        $reserved = ['code' => true, 'cid' => true, 'token' => true];
+        $reserved = ['code' => true, 'cid' => true, 'token' => true, 'admin_preview' => true];
         $params = $request->input('params', []);
         $result = is_array($params) ? $params : [];
 

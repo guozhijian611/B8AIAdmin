@@ -64,7 +64,13 @@
               >
                 编辑器
               </ElButton>
-              <ElButton size="small" @click="openRuntime(row)">预览</ElButton>
+              <ElButton
+                v-permission="'saiboard:screen:read'"
+                size="small"
+                @click="openRuntime(row)"
+              >
+                预览
+              </ElButton>
               <SaButton
                 v-permission="'saiboard:screen:update'"
                 type="secondary"
@@ -516,10 +522,11 @@
   }
 
   const openRuntime = (row: any) => {
-    window.open(
-      `#/screen/${row.code}${row.access_token ? `?token=${row.access_token}` : ''}`,
-      '_blank'
-    )
+    const params = new URLSearchParams()
+    if (row.is_public === 2) {
+      params.set('admin_preview', '1')
+    }
+    window.open(`#/screen/${row.code}${params.toString() ? `?${params.toString()}` : ''}`, '_blank')
   }
 
   const publish = async (row: any) => {
