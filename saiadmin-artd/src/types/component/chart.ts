@@ -11,6 +11,7 @@
  * - 饼图/环形图类型定义
  * - 雷达图类型定义
  * - K线图类型定义
+ * - 仪表盘类型定义
  * - 散点图类型定义
  * - 地图图表类型定义
  * - 双向堆叠柱状图类型定义
@@ -234,6 +235,26 @@ export interface KLineChartProps extends BaseChartProps {
   dataZoomStart?: number
   /** 数据缩放初始结束位置 */
   dataZoomEnd?: number
+}
+
+// 仪表盘 Props 接口 - 统一仪表盘配置
+export interface GaugeChartProps extends BaseChartProps {
+  /** 当前值 */
+  value?: number
+  /** 指标名称 */
+  name?: string
+  /** 最小值 */
+  min?: number
+  /** 最大值 */
+  max?: number
+  /** 单位 */
+  unit?: string
+  /** 小数位 */
+  decimals?: number
+  /** 是否显示指针 */
+  showPointer?: boolean
+  /** 是否显示进度环 */
+  showProgress?: boolean
 }
 
 // 散点图数据项接口

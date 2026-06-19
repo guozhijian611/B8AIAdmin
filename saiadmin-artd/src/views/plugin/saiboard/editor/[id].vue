@@ -511,6 +511,45 @@
                 </ElSpace>
               </ElFormItem>
             </template>
+            <template v-if="selectedComponent.type === 'art-gauge-chart'">
+              <ElFormItem label="显示名称">
+                <ElInput v-model="selectedComponent.option!.name" placeholder="默认使用标题" />
+              </ElFormItem>
+              <ElFormItem label="最小值">
+                <ElInputNumber
+                  v-model="selectedComponent.option!.min"
+                  :min="-999999999"
+                  :max="999999999"
+                  :step="1"
+                />
+              </ElFormItem>
+              <ElFormItem label="最大值">
+                <ElInputNumber
+                  v-model="selectedComponent.option!.max"
+                  :min="-999999999"
+                  :max="999999999"
+                  :step="1"
+                />
+              </ElFormItem>
+              <ElFormItem label="单位">
+                <ElInput v-model="selectedComponent.option!.unit" maxlength="12" />
+              </ElFormItem>
+              <ElFormItem label="小数位">
+                <ElInputNumber
+                  v-model="selectedComponent.option!.decimals"
+                  :min="0"
+                  :max="6"
+                  :step="1"
+                  step-strictly
+                />
+              </ElFormItem>
+              <ElFormItem label="指针">
+                <ElSwitch v-model="selectedComponent.option!.showPointer" />
+              </ElFormItem>
+              <ElFormItem label="进度环">
+                <ElSwitch v-model="selectedComponent.option!.showProgress" />
+              </ElFormItem>
+            </template>
             <template v-if="selectedComponent.type === 'image-carousel'">
               <ElFormItem label="图片字段">
                 <ElSelect
@@ -1046,6 +1085,7 @@
     'art-ring-chart',
     'art-radar-chart',
     'art-scatter-chart',
+    'art-gauge-chart',
     'stat-number',
     'data-table',
     'image-carousel',

@@ -51,6 +51,13 @@
       <div v-else-if="component.type === 'art-k-line-chart'" class="chart-empty">
         {{ kLineEmptyText }}
       </div>
+      <ArtGaugeChart
+        v-else-if="component.type === 'art-gauge-chart'"
+        height="100%"
+        v-bind="component.option"
+        :value="gaugeValue"
+        :name="gaugeName"
+      />
       <ArtRingChart
         v-else-if="component.type === 'art-ring-chart'"
         height="100%"
@@ -165,6 +172,7 @@
 <script setup lang="ts">
   import ArtBarChart from '@/components/core/charts/art-bar-chart/index.vue'
   import ArtDualBarCompareChart from '@/components/core/charts/art-dual-bar-compare-chart/index.vue'
+  import ArtGaugeChart from '@/components/core/charts/art-gauge-chart/index.vue'
   import ArtHBarChart from '@/components/core/charts/art-h-bar-chart/index.vue'
   import ArtKLineChart from '@/components/core/charts/art-k-line-chart/index.vue'
   import ArtLineChart from '@/components/core/charts/art-line-chart/index.vue'
@@ -191,6 +199,7 @@
     'art-h-bar-chart',
     'art-dual-bar-compare-chart',
     'art-k-line-chart',
+    'art-gauge-chart',
     'art-ring-chart',
     'art-radar-chart',
     'art-scatter-chart'
@@ -405,6 +414,20 @@
       return '请配置时间/开盘/收盘/最高/最低字段'
     }
     return '暂无有效K线数据'
+  })
+  const gaugeValue = computed(() => {
+    if (!hasBoundDataset.value) return 72
+    if (!tableRows.value.length) return Number.NaN
+    return toOptionalNumber(tableRows.value[0]?.[valueKey.value]) ?? Number.NaN
+  })
+  const gaugeName = computed(() => {
+    const configuredName = String(props.component.option?.name || '').trim()
+    if (configuredName) return configuredName
+    if (hasBoundDataset.value && tableRows.value.length) {
+      const label = String(tableRows.value[0]?.[axisKey.value] ?? '').trim()
+      if (label) return label
+    }
+    return props.component.title || '指标'
   })
 
   const ringData = computed(() => {

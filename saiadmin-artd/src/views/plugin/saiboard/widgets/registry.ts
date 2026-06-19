@@ -54,6 +54,21 @@ export const widgetRegistry: WidgetMeta[] = [
     }
   },
   {
+    type: 'art-gauge-chart',
+    name: '仪表盘',
+    icon: 'ri:dashboard-3-line',
+    defaultRect: { x: 1320, y: 760, w: 360, h: 280, z: 1 },
+    defaultOption: {
+      name: '完成率',
+      min: 0,
+      max: 100,
+      unit: '%',
+      decimals: 0,
+      showPointer: true,
+      showProgress: true
+    }
+  },
+  {
     type: 'art-ring-chart',
     name: '环形图',
     icon: 'ri:donut-chart-line',
