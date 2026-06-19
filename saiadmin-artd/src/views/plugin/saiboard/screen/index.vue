@@ -239,6 +239,106 @@
             <ElInputNumber v-model="autoForm.height" :min="240" :max="4320" />
           </ElSpace>
         </ElFormItem>
+        <ElDivider content-position="left">生成配置</ElDivider>
+        <ElFormItem label="生成模块" prop="chart_types">
+          <ElCheckboxGroup v-model="autoForm.chart_types">
+            <ElCheckbox
+              v-for="item in autoChartOptions"
+              :key="item.value"
+              :label="item.value"
+              :disabled="item.disabled"
+            >
+              {{ item.label }}
+            </ElCheckbox>
+          </ElCheckboxGroup>
+        </ElFormItem>
+        <ElFormItem label="时间字段">
+          <ElSelect
+            v-model="autoForm.date_field"
+            clearable
+            filterable
+            placeholder="用于趋势图"
+            style="width: 100%"
+            @change="applyAutoChartAvailability"
+          >
+            <ElOption
+              v-for="item in autoDateOptions"
+              :key="item.name"
+              :label="fieldOptionLabel(item)"
+              :value="item.name"
+            />
+          </ElSelect>
+        </ElFormItem>
+        <ElFormItem label="指标字段">
+          <ElSelect
+            v-model="autoForm.metric_field"
+            clearable
+            filterable
+            placeholder="留空则按记录数统计"
+            style="width: 100%"
+          >
+            <ElOption
+              v-for="item in autoMetricOptions"
+              :key="item.name"
+              :label="fieldOptionLabel(item)"
+              :value="item.name"
+            />
+          </ElSelect>
+        </ElFormItem>
+        <ElFormItem label="排行维度">
+          <ElSelect
+            v-model="autoForm.label_field"
+            clearable
+            filterable
+            placeholder="用于排行图"
+            style="width: 100%"
+            @change="applyAutoChartAvailability"
+          >
+            <ElOption
+              v-for="item in autoStringOptions"
+              :key="item.name"
+              :label="fieldOptionLabel(item)"
+              :value="item.name"
+            />
+          </ElSelect>
+        </ElFormItem>
+        <ElFormItem label="分布维度">
+          <ElSelect
+            v-model="autoForm.category_field"
+            clearable
+            filterable
+            placeholder="用于环形分布"
+            style="width: 100%"
+            @change="applyAutoChartAvailability"
+          >
+            <ElOption
+              v-for="item in autoDimensionOptions"
+              :key="item.name"
+              :label="fieldOptionLabel(item)"
+              :value="item.name"
+            />
+          </ElSelect>
+        </ElFormItem>
+        <ElFormItem label="明细字段" prop="raw_fields">
+          <ElSelect
+            v-model="autoForm.raw_fields"
+            multiple
+            :multiple-limit="8"
+            collapse-tags
+            collapse-tags-tooltip
+            filterable
+            placeholder="最多选择 8 个字段"
+            style="width: 100%"
+            @change="applyAutoChartAvailability"
+          >
+            <ElOption
+              v-for="item in autoFieldOptions"
+              :key="item.name"
+              :label="fieldOptionLabel(item)"
+              :value="item.name"
+            />
+          </ElSelect>
+        </ElFormItem>
       </ElForm>
       <template #footer>
         <ElButton @click="autoDialogVisible = false">取消</ElButton>
@@ -447,6 +547,12 @@
     normalizeFitMode
   } from '../widgets/theme'
 
+  interface AutoColumn {
+    name: string
+    type: string
+    kind: 'string' | 'number' | 'date' | string
+  }
+
   const rows = ref<any[]>([])
   const loading = ref(false)
   const dialogVisible = ref(false)
@@ -468,6 +574,7 @@
   const autoSubmitting = ref(false)
   const datasourceOptions = ref<any[]>([])
   const autoTableOptions = ref<any[]>([])
+  const autoColumns = ref<AutoColumn[]>([])
   const formRef = ref<FormInstance>()
   const autoFormRef = ref<FormInstance>()
   const search = reactive({ name: '', code: '', status: undefined as number | undefined })
@@ -477,7 +584,14 @@
     table: '',
     name: '',
     width: 1920,
-    height: 1080
+    height: 1080,
+    chart_types: [] as string[],
+    date_field: '',
+    metric_field: '',
+    label_field: '',
+    category_field: '',
+    order_field: '',
+    raw_fields: [] as string[]
   })
   const form = reactive({
     id: undefined as number | undefined,
@@ -501,6 +615,13 @@
     { label: '裁切铺满', value: 'cover' },
     { label: '非等比拉伸', value: 'stretch' }
   ]
+  const baseAutoChartOptions = [
+    { label: '总数指标', value: 'count' },
+    { label: '趋势图', value: 'trend' },
+    { label: '排行图', value: 'rank' },
+    { label: '分布图', value: 'distribution' },
+    { label: '明细表', value: 'raw' }
+  ]
   const versionSourceMap: Record<string, string> = {
     publish: '发布',
     restore_before: '恢复前',
@@ -514,12 +635,35 @@
   }
   const autoRules: FormRules = {
     datasource_id: [{ required: true, message: '请选择 MySQL 数据源', trigger: 'change' }],
-    table: [{ required: true, message: '请选择数据表', trigger: 'change' }]
+    table: [{ required: true, message: '请选择数据表', trigger: 'change' }],
+    chart_types: [{ required: true, message: '请选择生成模块', trigger: 'change' }]
   }
 
   const currentMetrics = computed(() => metrics.value?.screen || metrics.value?.totals || {})
   const mysqlDatasourceOptions = computed(() =>
     datasourceOptions.value.filter((item) => item.type === 'mysql')
+  )
+  const autoFieldOptions = computed(() => autoColumns.value)
+  const autoDateOptions = computed(() => autoColumns.value.filter((item) => item.kind === 'date'))
+  const autoMetricOptions = computed(() =>
+    autoColumns.value.filter((item) => item.kind === 'number' && !isMetricExcludedField(item.name))
+  )
+  const autoStringOptions = computed(() =>
+    autoColumns.value.filter((item) => item.kind === 'string')
+  )
+  const autoDimensionOptions = computed(() =>
+    autoColumns.value.filter((item) => item.kind === 'string' || isDimensionNumberField(item.name))
+  )
+  const autoChartOptions = computed(() =>
+    baseAutoChartOptions.map((item) => ({
+      ...item,
+      disabled:
+        (item.value === 'trend' && !autoForm.date_field) ||
+        (item.value === 'rank' && !autoForm.label_field) ||
+        (item.value === 'distribution' &&
+          (!autoForm.category_field || autoForm.category_field === autoForm.label_field)) ||
+        (item.value === 'raw' && autoForm.raw_fields.length === 0)
+    }))
   )
   const currentHitRate = computed(() => {
     const hit = Number(currentMetrics.value.cache_hit || 0)
@@ -544,6 +688,142 @@
 
   const loadDatasourceOptions = async () => {
     datasourceOptions.value = await datasourceApi.options()
+  }
+
+  const resetAutoForm = () => {
+    Object.assign(autoForm, {
+      datasource_id: undefined,
+      table: '',
+      name: '',
+      width: 1920,
+      height: 1080,
+      chart_types: [],
+      date_field: '',
+      metric_field: '',
+      label_field: '',
+      category_field: '',
+      order_field: '',
+      raw_fields: []
+    })
+    autoColumns.value = []
+    autoTableOptions.value = []
+  }
+
+  const fieldOptionLabel = (field: AutoColumn) => `${field.name} (${field.type || field.kind})`
+
+  const isDimensionNumberField = (name: string) =>
+    name === 'status' ||
+    name.startsWith('is_') ||
+    name.endsWith('_status') ||
+    name.endsWith('_type') ||
+    name.endsWith('_level')
+
+  const isMetricExcludedField = (name: string) =>
+    name === 'id' ||
+    name === 'created_by' ||
+    name === 'updated_by' ||
+    name === 'sort' ||
+    name.endsWith('_id') ||
+    isDimensionNumberField(name)
+
+  const preferredAutoField = (
+    columns: AutoColumn[],
+    patterns: RegExp[],
+    excluded: string[] = []
+  ) => {
+    for (const pattern of patterns) {
+      const matched = columns.find(
+        (column) => !excluded.includes(column.name) && pattern.test(column.name)
+      )
+      if (matched) return matched.name
+    }
+
+    return columns.find((column) => !excluded.includes(column.name))?.name || ''
+  }
+
+  const preferredRawFields = () => {
+    const fields: string[] = []
+    const pushField = (field: string) => {
+      if (
+        field &&
+        autoColumns.value.some((column) => column.name === field) &&
+        !fields.includes(field)
+      ) {
+        fields.push(field)
+      }
+    }
+    ;[
+      'id',
+      'order_no',
+      'code',
+      'title',
+      'name',
+      'category',
+      'type',
+      'status',
+      'price',
+      'amount',
+      'total',
+      'create_time',
+      'created_at',
+      'update_time'
+    ].forEach(pushField)
+    autoColumns.value.forEach((column) => pushField(column.name))
+
+    return fields.slice(0, 8)
+  }
+
+  const applyAutoRecommendations = () => {
+    const dateColumns = autoColumns.value.filter((column) => column.kind === 'date')
+    const metricColumns = autoColumns.value.filter(
+      (column) => column.kind === 'number' && !isMetricExcludedField(column.name)
+    )
+    const stringColumns = autoColumns.value.filter((column) => column.kind === 'string')
+    const dimensionColumns = autoColumns.value.filter(
+      (column) => column.kind === 'string' || isDimensionNumberField(column.name)
+    )
+    const dateField = preferredAutoField(dateColumns, [
+      /create|created|order|pay|paid|time|date|day|month|update/i
+    ])
+    const metricField = preferredAutoField(metricColumns, [
+      /amount|price|money|total|fee|cost|revenue|income|sales|stock|qty|quantity|num|count|view|click|score|value/i
+    ])
+    const labelField = preferredAutoField(stringColumns, [
+      /name|title|subject|label|category|type|method|source|channel|city|province|platform|lang|code/i
+    ])
+    const categoryField =
+      preferredAutoField(
+        dimensionColumns,
+        [/status|type|category|method|source|channel|platform|lang|level|city|province/i],
+        labelField ? [labelField] : []
+      ) || labelField
+    const rawFields = preferredRawFields()
+    const chartTypes = ['count']
+    if (dateField) chartTypes.push('trend')
+    if (labelField) chartTypes.push('rank')
+    if (categoryField && categoryField !== labelField) chartTypes.push('distribution')
+    if (rawFields.length) chartTypes.push('raw')
+
+    Object.assign(autoForm, {
+      date_field: dateField,
+      metric_field: metricField,
+      label_field: labelField,
+      category_field: categoryField,
+      order_field: dateField || preferredAutoField(autoColumns.value, [/^id$/i, /_id$/i]),
+      raw_fields: rawFields,
+      chart_types: chartTypes
+    })
+  }
+
+  const applyAutoChartAvailability = () => {
+    const allowed = new Set(['count'])
+    if (autoForm.date_field) allowed.add('trend')
+    if (autoForm.label_field) allowed.add('rank')
+    if (autoForm.category_field && autoForm.category_field !== autoForm.label_field) {
+      allowed.add('distribution')
+    }
+    if (autoForm.raw_fields.length) allowed.add('raw')
+    autoForm.chart_types = autoForm.chart_types.filter((item) => allowed.has(item))
   }
 
   const openDialog = (row?: any) => {
@@ -579,14 +859,7 @@
   }
 
   const openAutoDialog = async () => {
-    Object.assign(autoForm, {
-      datasource_id: undefined,
-      table: '',
-      name: '',
-      width: 1920,
-      height: 1080
-    })
-    autoTableOptions.value = []
+    resetAutoForm()
     autoDialogVisible.value = true
     if (!datasourceOptions.value.length) {
       await loadDatasourceOptions()
@@ -603,6 +876,7 @@
   const loadAutoTables = async () => {
     if (!autoForm.datasource_id) {
       autoTableOptions.value = []
+      autoColumns.value = []
       return
     }
     autoSchemaLoading.value = true
@@ -617,16 +891,46 @@
   const onAutoDatasourceChange = async () => {
     autoForm.table = ''
     autoForm.name = ''
+    autoColumns.value = []
     await loadAutoTables()
   }
 
-  const onAutoTableChange = () => {
+  const onAutoTableChange = async () => {
     if (!autoForm.name && autoForm.table) {
       autoForm.name = `${autoForm.table.replace(/_/g, ' ')} 数据大屏`
+    }
+    await loadAutoColumns()
+  }
+
+  const loadAutoColumns = async () => {
+    if (!autoForm.datasource_id || !autoForm.table) {
+      autoColumns.value = []
+      return
+    }
+    autoSchemaLoading.value = true
+    try {
+      const result = await datasourceApi.schema({
+        id: autoForm.datasource_id,
+        table: autoForm.table
+      })
+      autoColumns.value = Array.isArray(result.columns) ? result.columns : []
+      applyAutoRecommendations()
+      autoFormRef.value?.clearValidate()
+    } finally {
+      autoSchemaLoading.value = false
     }
   }
 
   const generateFromTable = async () => {
+    applyAutoChartAvailability()
+    if (!autoForm.chart_types.length) {
+      ElMessage.warning('请至少选择一个可用生成模块')
+      return
+    }
+    if (autoForm.chart_types.includes('raw') && !autoForm.raw_fields.length) {
+      ElMessage.warning('生成明细表时请至少选择一个明细字段')
+      return
+    }
     await autoFormRef.value?.validate()
     autoSubmitting.value = true
     try {

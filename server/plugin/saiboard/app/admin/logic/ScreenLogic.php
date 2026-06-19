@@ -122,7 +122,7 @@ class ScreenLogic extends BaseLogic
                 throw new ApiException('数据表没有可用字段');
             }
 
-            $analysis = $this->analyzeAutoColumns($columns);
+            $analysis = $this->normalizeAutoOptions($this->analyzeAutoColumns($columns), $data);
             $name = trim((string) ($data['name'] ?? ''));
             $name = $name !== '' ? mb_substr($name, 0, 60) : $this->humanizeAutoName($table) . ' 数据大屏';
             $templates = $this->createAutoQueryTemplates($datasource, $table, $name, $analysis);
@@ -146,6 +146,7 @@ class ScreenLogic extends BaseLogic
                 'id' => $screenId,
                 'name' => $name,
                 'table' => $table,
+                'chart_types' => $analysis['chart_types'],
                 'template_ids' => array_column($templates, 'id'),
                 'component_count' => count($layout['components'] ?? []),
             ];
@@ -361,19 +362,132 @@ class ScreenLogic extends BaseLogic
         ];
     }
 
+    private function normalizeAutoOptions(array $analysis, array $data): array
+    {
+        $columnMap = [];
+        foreach ($analysis['columns'] as $column) {
+            $columnMap[(string) $column['name']] = $column;
+        }
+        $available = array_fill_keys(array_keys($columnMap), true);
+        $optionalFields = [
+            'date_field' => '时间字段',
+            'metric_field' => '指标字段',
+            'label_field' => '排行维度',
+            'category_field' => '分布维度',
+            'order_field' => '排序字段',
+        ];
+        foreach ($optionalFields as $key => $label) {
+            if (!array_key_exists($key, $data)) {
+                continue;
+            }
+            $value = trim((string) $data[$key]);
+            if ($value !== '' && !isset($available[$value])) {
+                throw new ApiException("{$label}不存在于当前数据表");
+            }
+            $analysis[$key] = $value;
+        }
+        $this->assertAutoFieldKind($analysis['date_field'], $columnMap, 'date_field');
+        $this->assertAutoFieldKind($analysis['metric_field'], $columnMap, 'metric_field');
+        $this->assertAutoFieldKind($analysis['label_field'], $columnMap, 'label_field');
+        $this->assertAutoFieldKind($analysis['category_field'], $columnMap, 'category_field');
+
+        if (array_key_exists('raw_fields', $data)) {
+            $fields = [];
+            foreach ((array) $data['raw_fields'] as $field) {
+                $field = trim((string) $field);
+                if ($field === '' || isset($fields[$field])) {
+                    continue;
+                }
+                if (!isset($available[$field])) {
+                    throw new ApiException('明细字段不存在于当前数据表');
+                }
+                $fields[$field] = true;
+                if (count($fields) >= 8) {
+                    break;
+                }
+            }
+            if ($fields === []) {
+                throw new ApiException('请至少选择一个明细字段');
+            }
+            $analysis['raw_fields'] = array_keys($fields);
+        }
+
+        $enabled = array_fill_keys(['count', 'trend', 'rank', 'distribution', 'raw'], true);
+        if (array_key_exists('chart_types', $data)) {
+            $enabled = [];
+            foreach ((array) $data['chart_types'] as $type) {
+                $type = trim((string) $type);
+                if (!in_array($type, ['count', 'trend', 'rank', 'distribution', 'raw'], true)) {
+                    throw new ApiException('生成模块类型不正确');
+                }
+                $enabled[$type] = true;
+            }
+            if ($enabled === []) {
+                throw new ApiException('请至少选择一个生成模块');
+            }
+        }
+        if (isset($enabled['trend']) && $analysis['date_field'] === '') {
+            unset($enabled['trend']);
+        }
+        if (isset($enabled['rank']) && $analysis['label_field'] === '') {
+            unset($enabled['rank']);
+        }
+        if (
+            isset($enabled['distribution'])
+            && ($analysis['category_field'] === '' || $analysis['category_field'] === $analysis['label_field'])
+        ) {
+            unset($enabled['distribution']);
+        }
+        if ($enabled === []) {
+            throw new ApiException('当前字段配置无法生成任何模块');
+        }
+        $analysis['chart_types'] = array_keys($enabled);
+        $analysis['enabled_charts'] = $enabled;
+
+        return $analysis;
+    }
+
+    private function assertAutoFieldKind(string $field, array $columnMap, string $fieldKey): void
+    {
+        if ($field === '') {
+            return;
+        }
+
+        $kind = (string) ($columnMap[$field]['kind'] ?? '');
+        $messageMap = [
+            'date_field' => '时间字段必须是日期或时间类型',
+            'metric_field' => '指标字段必须是数值类型',
+            'label_field' => '排行维度必须是文本类型',
+            'category_field' => '分布维度必须是文本类型或状态类数字字段',
+        ];
+        $valid = match ($fieldKey) {
+            'date_field' => $kind === 'date',
+            'metric_field' => $kind === 'number' && !$this->isAutoMetricExcludedNumber($field),
+            'label_field' => $kind === 'string',
+            'category_field' => $kind === 'string' || $this->isAutoDimensionOnlyNumber($field),
+            default => true,
+        };
+        if (!$valid) {
+            throw new ApiException($messageMap[$fieldKey] ?? '字段类型不符合生成要求');
+        }
+    }
+
     private function createAutoQueryTemplates(Datasource $datasource, string $table, string $screenName, array $analysis): array
     {
         $templateLogic = new QueryTemplateLogic();
-        $items = [
-            'count' => [
+        $items = [];
+        if (isset($analysis['enabled_charts']['count'])) {
+            $items['count'] = [
                 'name' => "{$screenName} 总记录数",
                 'dataset_type' => 'table_count',
                 'config' => [
                     'table' => $table,
                     'conditions' => [],
                 ],
-            ],
-            'raw' => [
+            ];
+        }
+        if (isset($analysis['enabled_charts']['raw'])) {
+            $items['raw'] = [
                 'name' => "{$screenName} 最新明细",
                 'dataset_type' => 'table_raw',
                 'config' => [
@@ -387,10 +501,10 @@ class ScreenLogic extends BaseLogic
                         : [],
                     'limit' => 8,
                 ],
-            ],
-        ];
+            ];
+        }
 
-        if ($analysis['date_field']) {
+        if (isset($analysis['enabled_charts']['trend']) && $analysis['date_field']) {
             $items['trend'] = [
                 'name' => "{$screenName} 趋势",
                 'dataset_type' => 'table_aggregate',
@@ -407,7 +521,7 @@ class ScreenLogic extends BaseLogic
             ];
         }
 
-        if ($analysis['label_field']) {
+        if (isset($analysis['enabled_charts']['rank']) && $analysis['label_field']) {
             $items['rank'] = [
                 'name' => "{$screenName} 排行",
                 'dataset_type' => 'table_aggregate',
@@ -424,7 +538,11 @@ class ScreenLogic extends BaseLogic
             ];
         }
 
-        if ($analysis['category_field'] && $analysis['category_field'] !== $analysis['label_field']) {
+        if (
+            isset($analysis['enabled_charts']['distribution'])
+            && $analysis['category_field']
+            && $analysis['category_field'] !== $analysis['label_field']
+        ) {
             $items['distribution'] = [
                 'name' => "{$screenName} 分布",
                 'dataset_type' => 'table_aggregate',
@@ -466,7 +584,10 @@ class ScreenLogic extends BaseLogic
     ): array {
         $components = [
             $this->autoDecorTitle($name, $table),
-            $this->autoDataComponent(
+        ];
+
+        if (isset($templates['count'])) {
+            $components[] = $this->autoDataComponent(
                 'auto_total',
                 'stat-number',
                 '记录总数',
@@ -474,8 +595,8 @@ class ScreenLogic extends BaseLogic
                 $templates['count']['id'],
                 ['valueField' => 'total'],
                 ['unit' => '条', 'decimals' => 0]
-            ),
-        ];
+            );
+        }
 
         if (isset($templates['trend'])) {
             $components[] = $this->autoDataComponent(
@@ -513,21 +634,23 @@ class ScreenLogic extends BaseLogic
             );
         }
 
-        $components[] = $this->autoDataComponent(
-            'auto_table',
-            'data-table',
-            '最新明细',
-            ['x' => isset($templates['rank']) ? 800 : 40, 'y' => 512, 'w' => isset($templates['rank']) ? 1080 : 1840, 'h' => 500, 'z' => 2],
-            $templates['raw']['id'],
-            [
-                'tableFields' => $analysis['raw_fields'],
-                'tableColumns' => array_map(
-                    fn (string $field) => ['field' => $field, 'label' => $this->humanizeAutoName($field), 'align' => 'left'],
-                    $analysis['raw_fields']
-                ),
-            ],
-            ['showIndex' => true, 'rowStripe' => true, 'maxRows' => 8]
-        );
+        if (isset($templates['raw'])) {
+            $components[] = $this->autoDataComponent(
+                'auto_table',
+                'data-table',
+                '最新明细',
+                ['x' => isset($templates['rank']) ? 800 : 40, 'y' => 512, 'w' => isset($templates['rank']) ? 1080 : 1840, 'h' => 500, 'z' => 2],
+                $templates['raw']['id'],
+                [
+                    'tableFields' => $analysis['raw_fields'],
+                    'tableColumns' => array_map(
+                        fn (string $field) => ['field' => $field, 'label' => $this->humanizeAutoName($field), 'align' => 'left'],
+                        $analysis['raw_fields']
+                    ),
+                ],
+                ['showIndex' => true, 'rowStripe' => true, 'maxRows' => 8]
+            );
+        }
 
         return [
             'canvas' => ['width' => $width, 'height' => $height],

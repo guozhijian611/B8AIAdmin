@@ -149,6 +149,13 @@ class ScreenController extends AbstractCrudController
     #[Apidoc\Param('name', type: 'string', require: false, desc: '大屏名称')]
     #[Apidoc\Param('width', type: 'int', require: false, desc: '设计宽度')]
     #[Apidoc\Param('height', type: 'int', require: false, desc: '设计高度')]
+    #[Apidoc\Param('chart_types', type: 'array', require: false, desc: '生成模块：count/trend/rank/distribution/raw')]
+    #[Apidoc\Param('date_field', type: 'string', require: false, desc: '趋势时间字段')]
+    #[Apidoc\Param('metric_field', type: 'string', require: false, desc: '聚合指标字段，留空为计数')]
+    #[Apidoc\Param('label_field', type: 'string', require: false, desc: '排行维度字段')]
+    #[Apidoc\Param('category_field', type: 'string', require: false, desc: '分布维度字段')]
+    #[Apidoc\Param('order_field', type: 'string', require: false, desc: '明细排序字段')]
+    #[Apidoc\Param('raw_fields', type: 'array', require: false, desc: '明细表字段，最多8个')]
     #[Permission('从数据表生成大屏', 'saiboard:screen:generateFromTable')]
     public function generateFromTable(Request $request): Response
     {
