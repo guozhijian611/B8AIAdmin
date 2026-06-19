@@ -29,34 +29,34 @@ class Screen extends BaseModel
         $query->where('is_public', $value);
     }
 
-    public function getBgConfigAttr($value): array
+    public function getBgConfigAttr(mixed $value, array $data = []): array
     {
-        return json_decode((string) $value, true) ?: [];
+        return $this->decodeJsonArray($value, $data, 'bg_config');
     }
 
-    public function setBgConfigAttr($value): string
+    public function setBgConfigAttr(mixed $value): string
     {
         return $this->encodeJson($value);
     }
 
-    public function getDraftLayoutAttr($value): array
+    public function getDraftLayoutAttr(mixed $value, array $data = []): array
     {
-        return json_decode((string) $value, true) ?: $this->defaultLayout();
+        return $this->decodeJsonArray($value, $data, 'draft_layout', $this->defaultLayout());
     }
 
-    public function setDraftLayoutAttr($value): string
+    public function setDraftLayoutAttr(mixed $value): string
     {
-        return $this->encodeJson($value ?: $this->defaultLayout());
+        return $this->encodeJson($value, $this->defaultLayout());
     }
 
-    public function getLayoutAttr($value): array
+    public function getLayoutAttr(mixed $value, array $data = []): array
     {
-        return json_decode((string) $value, true) ?: $this->defaultLayout();
+        return $this->decodeJsonArray($value, $data, 'layout', $this->defaultLayout());
     }
 
-    public function setLayoutAttr($value): string
+    public function setLayoutAttr(mixed $value): string
     {
-        return $this->encodeJson($value ?: $this->defaultLayout());
+        return $this->encodeJson($value, $this->defaultLayout());
     }
 
     private function defaultLayout(): array
@@ -67,13 +67,32 @@ class Screen extends BaseModel
         ];
     }
 
-    private function encodeJson(mixed $value): string
+    private function decodeJsonArray(mixed $value, array $data, string $field, array $default = []): array
+    {
+        if ($value === null && array_key_exists($field, $data)) {
+            $value = $data[$field];
+        }
+        if (is_array($value)) {
+            return $value ?: $default;
+        }
+        if (is_string($value) && trim($value) !== '') {
+            $decoded = json_decode($value, true);
+            return is_array($decoded) && $decoded !== [] ? $decoded : $default;
+        }
+
+        return $default;
+    }
+
+    private function encodeJson(mixed $value, array $default = []): string
     {
         if (is_string($value)) {
             $decoded = json_decode($value, true);
             $value = json_last_error() === JSON_ERROR_NONE && is_array($decoded) ? $decoded : [];
         }
+        if (!is_array($value)) {
+            $value = [];
+        }
 
-        return json_encode($value ?: [], JSON_UNESCAPED_UNICODE);
+        return json_encode($value ?: $default, JSON_UNESCAPED_UNICODE);
     }
 }

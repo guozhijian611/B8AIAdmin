@@ -26,7 +26,7 @@ class DataSourceExecutor
     {
         return match ((string) $datasource->type) {
             'mysql' => $this->testMysql($datasource->config),
-            'http' => $this->executeHttp($datasource->config, ['dataset_type' => 'http_passthrough', 'config' => []]),
+            'http' => $this->executeHttp($datasource->config, ['dataset_type' => 'http_passthrough', 'config' => []], true),
             default => throw new InvalidArgumentException('数据源类型不支持'),
         };
     }
@@ -334,7 +334,17 @@ LUA;
     {
         $pdo = $this->pdo($config);
         $row = $pdo->query('SELECT 1 AS ok')->fetch(PDO::FETCH_ASSOC);
-        return ['rows' => [$row], 'total' => 1];
+        return [
+            'rows' => [$row],
+            'total' => 1,
+            'diagnostics' => [
+                'type' => 'mysql',
+                'host' => (string) ($config['host'] ?? ''),
+                'port' => (int) ($config['port'] ?? 3306),
+                'database' => (string) ($config['database'] ?? ''),
+                'message' => '连接成功',
+            ],
+        ];
     }
 
     private function executeMysql(
@@ -389,27 +399,30 @@ LUA;
         );
     }
 
-    private function executeHttp(array $datasourceConfig, array $template): array
+    private function executeHttp(array $datasourceConfig, array $template, bool $withDiagnostics = false): array
     {
         $templateConfig = is_array($template['config'] ?? null) ? $template['config'] : [];
         $url = $this->buildHttpUrl($datasourceConfig, $templateConfig);
         $this->assertPublicHttpUrl($url);
         $headers = $this->normalizeHeaders($datasourceConfig['headers'] ?? []);
-        $payload = $this->requestJson($url, $headers);
+        [$payload, $diagnostics] = $this->requestJson($url, $headers);
 
         if (isset($payload['rows']) && is_array($payload['rows'])) {
-            return [
+            $result = [
                 'rows' => $payload['rows'],
                 'total' => (int) ($payload['total'] ?? count($payload['rows'])),
             ];
+            return $withDiagnostics ? $result + ['diagnostics' => $diagnostics] : $result;
         }
 
         $data = $payload['data'] ?? $payload;
         if (is_array($data) && array_is_list($data)) {
-            return ['rows' => $data, 'total' => count($data)];
+            $result = ['rows' => $data, 'total' => count($data)];
+            return $withDiagnostics ? $result + ['diagnostics' => $diagnostics] : $result;
         }
 
-        return ['rows' => [$data], 'total' => 1];
+        $result = ['rows' => [$data], 'total' => 1];
+        return $withDiagnostics ? $result + ['diagnostics' => $diagnostics] : $result;
     }
 
     private function buildHttpUrl(array $datasourceConfig, array $templateConfig): string
@@ -422,8 +435,8 @@ LUA;
         $path = trim((string) ($templateConfig['path'] ?? ''));
         $url = $path === '' ? $baseUrl : rtrim($baseUrl, '/') . '/' . ltrim($path, '/');
         $params = array_merge(
-            is_array($datasourceConfig['params'] ?? null) ? $datasourceConfig['params'] : [],
-            is_array($templateConfig['params'] ?? null) ? $templateConfig['params'] : []
+            $this->normalizeObject($datasourceConfig['params'] ?? [], 'HTTP 数据源默认参数'),
+            $this->normalizeObject($templateConfig['params'] ?? [], 'HTTP 查询模板请求参数')
         );
         if ($params !== []) {
             $url .= (str_contains($url, '?') ? '&' : '?') . http_build_query($params);
@@ -438,10 +451,10 @@ LUA;
         $scheme = strtolower((string) ($parts['scheme'] ?? ''));
         $host = strtolower((string) ($parts['host'] ?? ''));
         if (!in_array($scheme, ['http', 'https'], true) || $host === '') {
-            throw new InvalidArgumentException('HTTP 数据源 URL 不正确');
+            throw new InvalidArgumentException('HTTP 数据源 URL 不正确，只允许 http/https');
         }
         if (in_array($host, ['localhost', 'localhost.localdomain'], true)) {
-            throw new InvalidArgumentException('HTTP 数据源不允许访问本机地址');
+            throw new InvalidArgumentException("HTTP 数据源不允许访问本机地址：{$host}");
         }
 
         $ips = [];
@@ -459,21 +472,19 @@ LUA;
             }
         }
         if ($ips === []) {
-            throw new InvalidArgumentException('HTTP 数据源域名无法解析');
+            throw new InvalidArgumentException("HTTP 数据源域名无法解析：{$host}");
         }
 
         foreach ($ips as $ip) {
             if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
-                throw new InvalidArgumentException('HTTP 数据源不允许访问内网或保留地址');
+                throw new InvalidArgumentException("HTTP 数据源不允许访问内网或保留地址：{$host}");
             }
         }
     }
 
     private function normalizeHeaders(mixed $headers): array
     {
-        if (!is_array($headers)) {
-            return [];
-        }
+        $headers = $this->normalizeObject($headers, 'HTTP 请求头');
 
         $result = [];
         foreach ($headers as $name => $value) {
@@ -489,6 +500,14 @@ LUA;
 
     private function requestJson(string $url, array $headers): array
     {
+        $host = (string) (parse_url($url, PHP_URL_HOST) ?: '');
+        $diagnostics = [
+            'type' => 'http',
+            'host' => $host,
+            'status' => 0,
+            'message' => '请求成功',
+        ];
+
         if (function_exists('curl_init')) {
             $curl = curl_init($url);
             curl_setopt_array($curl, [
@@ -502,10 +521,18 @@ LUA;
             $error = curl_error($curl);
             $status = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
             curl_close($curl);
-            if ($body === false || $status >= 400) {
-                throw new InvalidArgumentException($error ?: 'HTTP 数据源请求失败');
+            $diagnostics['status'] = $status;
+            if ($body === false) {
+                throw new InvalidArgumentException('HTTP 数据源请求失败：' . ($error ?: '网络错误'));
+            }
+            if ($status >= 400) {
+                throw new InvalidArgumentException("HTTP 数据源请求失败，状态码 {$status}");
+            }
+            if ($status === 0) {
+                throw new InvalidArgumentException('HTTP 数据源请求失败，未收到有效响应');
             }
         } else {
+            $httpResponseHeader = [];
             $body = file_get_contents($url, false, stream_context_create([
                 'http' => [
                     'method' => 'GET',
@@ -514,17 +541,48 @@ LUA;
                     'ignore_errors' => true,
                 ],
             ]));
+            $httpResponseHeader = $http_response_header ?? [];
+            $status = $this->statusCodeFromHeaders($httpResponseHeader);
+            $diagnostics['status'] = $status;
             if ($body === false) {
                 throw new InvalidArgumentException('HTTP 数据源请求失败');
+            }
+            if ($status >= 400) {
+                throw new InvalidArgumentException("HTTP 数据源请求失败，状态码 {$status}");
             }
         }
 
         $payload = json_decode((string) $body, true);
         if (!is_array($payload)) {
-            throw new InvalidArgumentException('HTTP 数据源返回内容不是 JSON');
+            $status = (int) ($diagnostics['status'] ?? 0);
+            $suffix = $status > 0 ? "，状态码 {$status}" : '';
+            throw new InvalidArgumentException("HTTP 数据源返回内容不是 JSON{$suffix}");
         }
 
-        return $payload;
+        return [$payload, $diagnostics];
+    }
+
+    private function normalizeObject(mixed $value, string $label): array
+    {
+        if ($value === null || $value === '') {
+            return [];
+        }
+        if (!is_array($value) || ($value !== [] && array_is_list($value))) {
+            throw new InvalidArgumentException("{$label}必须是 JSON 对象");
+        }
+
+        return $value;
+    }
+
+    private function statusCodeFromHeaders(array $headers): int
+    {
+        foreach ($headers as $header) {
+            if (preg_match('/^HTTP\/\S+\s+(\d{3})\b/i', (string) $header, $matches)) {
+                return (int) $matches[1];
+            }
+        }
+
+        return 0;
     }
 
     private function cacheKey(QueryTemplate $template, Datasource $datasource, array $runtimeParams = []): string
@@ -574,7 +632,26 @@ LUA;
 
     private function safeError(string $message): string
     {
+        $message = $this->friendlyError($message);
         $message = preg_replace('/(password|token|secret|authorization|cookie)([^,;\s]*)/i', '$1=***', $message) ?: '执行失败';
         return mb_substr($message, 0, 500);
+    }
+
+    private function friendlyError(string $message): string
+    {
+        if (preg_match("/Unknown database '([^']+)'/i", $message, $matches)) {
+            return 'MySQL 数据库不存在：' . $matches[1];
+        }
+        if (str_contains($message, '[1045]')) {
+            return 'MySQL 用户名或密码不正确';
+        }
+        if (str_contains($message, '[2002]')) {
+            return 'MySQL 主机或端口无法连接';
+        }
+        if (str_contains($message, '[2003]')) {
+            return 'MySQL 连接被拒绝，请检查主机和端口';
+        }
+
+        return $message;
     }
 }

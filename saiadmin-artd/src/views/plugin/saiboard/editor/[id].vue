@@ -100,47 +100,55 @@
 
       <main ref="canvasShellRef" class="canvas-shell">
         <div
-          class="canvas"
+          class="canvas-frame"
           :style="{
-            ...canvasStyle,
-            width: layout.canvas.width + 'px',
-            height: layout.canvas.height + 'px',
-            transform: `scale(${effectiveZoom})`
+            width: scaledCanvasSize.width + 'px',
+            height: scaledCanvasSize.height + 'px'
           }"
-          @mousedown.self="clearSelection"
         >
-          <DraggableItem
-            v-for="component in layout.components"
-            :key="component.id"
-            :component="component"
-            :rows="componentRows(component)"
-            :error="componentError(component)"
-            :selected="selectedIds.includes(component.id)"
-            :resizable="selectedComponents.length <= 1"
-            @select="selectComponent"
-            @resize-start="startComponentResize"
-            @update="updateComponent"
-          />
-          <Vue3DraggableResizable
-            v-if="selectionBox"
-            :x="selectionBox.x"
-            :y="selectionBox.y"
-            :w="selectionBox.w"
-            :h="selectionBox.h"
-            :z="10000"
-            :active="true"
-            :parent="true"
-            :draggable="true"
-            :resizable="true"
-            :min-w="selectionResizeMin.w"
-            :min-h="selectionResizeMin.h"
-            class-name="saiboard-selection-box"
-            class-name-active="saiboard-selection-box-active"
-            @resize-start="startSelectionResize"
-            @dragging="dragSelectionBox"
-            @resizing="resizeSelectionBox"
-            @resize-end="finishSelectionResize"
-          />
+          <div
+            class="canvas"
+            :style="{
+              ...canvasStyle,
+              width: layout.canvas.width + 'px',
+              height: layout.canvas.height + 'px',
+              transform: `scale(${effectiveZoom})`
+            }"
+            @mousedown.self="clearSelection"
+          >
+            <DraggableItem
+              v-for="component in layout.components"
+              :key="component.id"
+              :component="component"
+              :rows="componentRows(component)"
+              :error="componentError(component)"
+              :selected="selectedIds.includes(component.id)"
+              :resizable="selectedComponents.length <= 1"
+              @select="selectComponent"
+              @resize-start="startComponentResize"
+              @update="updateComponent"
+            />
+            <Vue3DraggableResizable
+              v-if="selectionBox"
+              :x="selectionBox.x"
+              :y="selectionBox.y"
+              :w="selectionBox.w"
+              :h="selectionBox.h"
+              :z="10000"
+              :active="true"
+              :parent="true"
+              :draggable="true"
+              :resizable="true"
+              :min-w="selectionResizeMin.w"
+              :min-h="selectionResizeMin.h"
+              class-name="saiboard-selection-box"
+              class-name-active="saiboard-selection-box-active"
+              @resize-start="startSelectionResize"
+              @dragging="dragSelectionBox"
+              @resizing="resizeSelectionBox"
+              @resize-end="finishSelectionResize"
+            />
+          </div>
         </div>
       </main>
 
@@ -1011,6 +1019,10 @@
   const effectiveZoom = computed(() =>
     zoom.value === 'auto' ? autoZoom.value : Number(zoom.value)
   )
+  const scaledCanvasSize = computed(() => ({
+    width: Math.max(1, Math.round(Number(layout.canvas.width || 1920) * effectiveZoom.value)),
+    height: Math.max(1, Math.round(Number(layout.canvas.height || 1080) * effectiveZoom.value))
+  }))
   const canvasStyle = computed(() => boardCanvasStyle(screen.bg_config))
 
   const loadData = async () => {
@@ -2421,12 +2433,17 @@
     background-size: 24px 24px;
   }
 
+  .canvas-frame {
+    position: relative;
+    margin: 32px auto;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgb(0 0 0 / 32%);
+  }
+
   .canvas {
     position: relative;
-    margin: 32px;
     overflow: hidden;
     transform-origin: left top;
-    box-shadow: 0 20px 60px rgb(0 0 0 / 32%);
   }
 
   :global(.saiboard-selection-box) {

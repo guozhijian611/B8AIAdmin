@@ -92,10 +92,20 @@
             ><ElInput v-model="form.config.url"
           /></ElFormItem>
           <ElFormItem label="请求头">
-            <ElInput v-model="headersText" type="textarea" :rows="4" />
+            <ElInput
+              v-model="headersText"
+              type="textarea"
+              :rows="4"
+              placeholder='例如 {"Authorization":"Bearer xxx"}'
+            />
           </ElFormItem>
           <ElFormItem label="默认参数">
-            <ElInput v-model="paramsText" type="textarea" :rows="4" />
+            <ElInput
+              v-model="paramsText"
+              type="textarea"
+              :rows="4"
+              placeholder='例如 {"range":"7d"}'
+            />
           </ElFormItem>
         </template>
         <ElFormItem label="缓存秒"
@@ -198,8 +208,8 @@
     paramsText.value = '{}'
     if (row) {
       Object.assign(form, { ...row, config: { ...(row.config || {}) } })
-      headersText.value = JSON.stringify(row.config?.headers || {}, null, 2)
-      paramsText.value = JSON.stringify(row.config?.params || {}, null, 2)
+      headersText.value = stringifyJsonObject(row.config?.headers)
+      paramsText.value = stringifyJsonObject(row.config?.params)
     }
     dialogVisible.value = true
   }
@@ -207,8 +217,8 @@
   const buildPayload = () => {
     const config = { ...(form.config || {}) }
     if (form.type === 'http') {
-      config.headers = parseJson(headersText.value)
-      config.params = parseJson(paramsText.value)
+      config.headers = parseJsonObject(headersText.value, '请求头')
+      config.params = parseJsonObject(paramsText.value, '默认参数')
       config.method = 'GET'
     }
     return { ...form, config }
@@ -241,8 +251,9 @@
       testLoading.value = true
     }
     try {
-      await api.test(isFormTesting ? buildPayload() : { id: row.id })
-      ElMessage.success('连接成功')
+      const result = await api.test(isFormTesting ? buildPayload() : { id: row.id })
+      ElMessage.success(testSuccessMessage(result))
+      if (!isFormTesting) loadData()
     } finally {
       if (isFormTesting) testLoading.value = false
     }
@@ -261,13 +272,35 @@
     loadData()
   }
 
-  function parseJson(text: string) {
+  function parseJsonObject(text: string, label: string) {
     try {
-      return JSON.parse(text || '{}')
+      const value = JSON.parse(text || '{}')
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new Error(`${label}必须是 JSON 对象`)
+      }
+      return value
     } catch {
-      ElMessage.error('JSON 格式不正确')
-      throw new Error('JSON 格式不正确')
+      ElMessage.error(`${label}必须是 JSON 对象`)
+      throw new Error(`${label}必须是 JSON 对象`)
     }
+  }
+
+  function testSuccessMessage(result: any) {
+    const diagnostics = result?.diagnostics || {}
+    const parts: string[] = []
+    const total = Number(result?.total ?? result?.rows?.length ?? 0)
+    if (Number.isFinite(total)) parts.push(`返回 ${total} 行`)
+    if (diagnostics.host) parts.push(`主机 ${diagnostics.host}`)
+    if (diagnostics.status) parts.push(`状态码 ${diagnostics.status}`)
+    return parts.length ? `连接成功（${parts.join('，')}）` : '连接成功'
+  }
+
+  function stringifyJsonObject(value: any) {
+    const objectValue =
+      value && typeof value === 'object' && (!Array.isArray(value) || value.length === 0)
+        ? value
+        : {}
+    return JSON.stringify(Array.isArray(objectValue) ? {} : objectValue, null, 2)
   }
 
   onMounted(loadData)

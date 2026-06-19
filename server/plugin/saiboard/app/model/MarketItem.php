@@ -34,22 +34,42 @@ class MarketItem extends BaseModel
         $query->where('status', $value);
     }
 
-    public function getContentAttr($value): array
+    public function getContentAttr(mixed $value, array $data = []): array
     {
+        return $this->decodeJsonArray($value, $data, 'content');
+    }
+
+    public function setContentAttr(mixed $value): string
+    {
+        return $this->encodeJsonArray($value);
+    }
+
+    private function decodeJsonArray(mixed $value, array $data, string $field): array
+    {
+        if ($value === null && array_key_exists($field, $data)) {
+            $value = $data[$field];
+        }
         if (is_array($value)) {
             return $value;
         }
+        if (is_string($value) && trim($value) !== '') {
+            $decoded = json_decode($value, true);
+            return is_array($decoded) ? $decoded : [];
+        }
 
-        return json_decode((string) $value, true) ?: [];
+        return [];
     }
 
-    public function setContentAttr($value): string
+    private function encodeJsonArray(mixed $value): string
     {
         if (is_string($value)) {
             $decoded = json_decode($value, true);
             $value = json_last_error() === JSON_ERROR_NONE && is_array($decoded) ? $decoded : [];
         }
+        if (!is_array($value)) {
+            $value = [];
+        }
 
-        return json_encode($value ?: [], JSON_UNESCAPED_UNICODE);
+        return json_encode($value, JSON_UNESCAPED_UNICODE);
     }
 }

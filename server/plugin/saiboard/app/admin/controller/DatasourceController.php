@@ -176,7 +176,7 @@ class DatasourceController extends AbstractCrudController
             if ($url === '') {
                 throw new InvalidArgumentException('HTTP 数据源 URL 必须填写');
             }
-            if (!is_array($config['headers'] ?? []) || !is_array($config['params'] ?? [])) {
+            if (!$this->isObjectConfig($config['headers'] ?? []) || !$this->isObjectConfig($config['params'] ?? [])) {
                 throw new InvalidArgumentException('HTTP 请求头和默认参数必须是 JSON 对象');
             }
         }
@@ -184,7 +184,31 @@ class DatasourceController extends AbstractCrudController
 
     private function safeTestError(string $message): string
     {
+        $message = $this->friendlyTestError($message);
         $message = preg_replace('/(password|token|secret|authorization|cookie)([^,;\s]*)/i', '$1=***', $message) ?: '连接失败';
         return mb_substr($message, 0, 500);
+    }
+
+    private function isObjectConfig(mixed $value): bool
+    {
+        return is_array($value) && ($value === [] || !array_is_list($value));
+    }
+
+    private function friendlyTestError(string $message): string
+    {
+        if (preg_match("/Unknown database '([^']+)'/i", $message, $matches)) {
+            return 'MySQL 数据库不存在：' . $matches[1];
+        }
+        if (str_contains($message, '[1045]')) {
+            return 'MySQL 用户名或密码不正确';
+        }
+        if (str_contains($message, '[2002]')) {
+            return 'MySQL 主机或端口无法连接';
+        }
+        if (str_contains($message, '[2003]')) {
+            return 'MySQL 连接被拒绝，请检查主机和端口';
+        }
+
+        return $message;
     }
 }

@@ -98,6 +98,14 @@
             />
           </ElSelect>
         </ElFormItem>
+        <ElAlert
+          class="dataset-type-help"
+          type="info"
+          show-icon
+          :closable="false"
+          :title="datasetTypeHelp.title"
+          :description="datasetTypeHelp.description"
+        />
 
         <template v-if="isMysqlTemplate">
           <ElFormItem label="数据表">
@@ -258,6 +266,14 @@
           </template>
 
           <ElFormItem label="参数">
+            <ElAlert
+              class="param-help"
+              type="info"
+              show-icon
+              :closable="false"
+              title="参数类型说明"
+              :description="paramTypeDescription"
+            />
             <div class="config-list">
               <div v-for="(param, index) in form.config.params" :key="index" class="param-row">
                 <ElInput v-model="param.name" placeholder="参数名，例如 pay_method" />
@@ -466,7 +482,12 @@
             />
           </ElFormItem>
           <ElFormItem label="请求参数">
-            <ElInput v-model="paramsText" type="textarea" :rows="6" />
+            <ElInput
+              v-model="paramsText"
+              type="textarea"
+              :rows="6"
+              placeholder='例如 {"range":"7d"}'
+            />
           </ElFormItem>
         </template>
 
@@ -620,6 +641,30 @@
     { label: '表聚合', value: 'table_aggregate' }
   ]
   const httpDatasetTypes = [{ label: 'HTTP 透传', value: 'http_passthrough' }]
+  const datasetTypeHelpMap: Record<string, { title: string; description: string }> = {
+    table_raw: {
+      title: '表原始行',
+      description:
+        '按字段、条件和排序读取明细行，返回 rows 列表；适合表格、排行榜、折线/柱状图的原始明细数据。'
+    },
+    table_count: {
+      title: '表计数',
+      description:
+        '只返回一行 total 计数，返回结构为 rows[0].total；适合指标卡、总数统计和告警数量。'
+    },
+    table_aggregate: {
+      title: '表聚合',
+      description:
+        '按维度字段分组，输出 label 加一个或多个聚合指标；适合柱状图、环图、趋势和多指标对比。'
+    },
+    http_passthrough: {
+      title: 'HTTP 透传',
+      description:
+        '请求数据源 URL 加模板路径和参数，接口返回 rows/total 时直接使用，否则会把 data 或根对象转换为 rows。'
+    }
+  }
+  const paramTypeDescription =
+    '文本会按字符串绑定；数字必须是数值；日期格式为 YYYY-MM-DD；日期时间格式为 YYYY-MM-DD HH:mm:ss；时间范围可用 today、last_7_days 等预设。条件值写成 :参数名 时，会优先取运行时传入值，没有传入则使用默认值。'
 
   const currentDatasource = computed(() =>
     datasourceOptions.value.find((item) => Number(item.id) === Number(form.datasource_id))
@@ -627,6 +672,9 @@
   const isMysqlTemplate = computed(() => currentDatasource.value?.type !== 'http')
   const datasetTypeOptions = computed(() =>
     currentDatasource.value?.type === 'http' ? httpDatasetTypes : mysqlDatasetTypes
+  )
+  const datasetTypeHelp = computed(
+    () => datasetTypeHelpMap[form.dataset_type] || datasetTypeHelpMap.table_raw
   )
   const numericColumnOptions = computed(() =>
     columnOptions.value.filter((item) => item.kind === 'number')
@@ -705,7 +753,7 @@
       next.metrics = normalizeAggregateMetrics(next.metrics, false, next)
     }
     if (type === 'http_passthrough') {
-      paramsText.value = JSON.stringify(next.params || {}, null, 2)
+      paramsText.value = stringifyJsonObject(next.params)
     }
     return next
   }
@@ -802,7 +850,7 @@
   const buildConfig = (strict = true) => {
     const config = JSON.parse(JSON.stringify(form.config || {}))
     if (form.dataset_type === 'http_passthrough') {
-      config.params = parseJson(paramsText.value, strict)
+      config.params = parseJsonObject(paramsText.value, '请求参数', strict)
       return config
     }
 
@@ -1184,16 +1232,28 @@
     return value && aliases.has(value) ? value : 'label'
   }
 
-  function parseJson(text: string, strict = true) {
+  function parseJsonObject(text: string, label: string, strict = true) {
     try {
-      return JSON.parse(text || '{}')
+      const value = JSON.parse(text || '{}')
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new Error(`${label}必须是 JSON 对象`)
+      }
+      return value
     } catch {
       if (strict) {
-        ElMessage.error('请求参数 JSON 格式不正确')
-        throw new Error('请求参数 JSON 格式不正确')
+        ElMessage.error(`${label}必须是 JSON 对象`)
+        throw new Error(`${label}必须是 JSON 对象`)
       }
       return {}
     }
+  }
+
+  function stringifyJsonObject(value: any) {
+    const objectValue =
+      value && typeof value === 'object' && (!Array.isArray(value) || value.length === 0)
+        ? value
+        : {}
+    return JSON.stringify(Array.isArray(objectValue) ? {} : objectValue, null, 2)
   }
 
   onMounted(async () => {
@@ -1205,6 +1265,15 @@
 <style scoped lang="scss">
   .config-list {
     width: 100%;
+  }
+
+  .dataset-type-help {
+    margin-bottom: 18px;
+  }
+
+  .param-help {
+    width: 100%;
+    margin-bottom: 10px;
   }
 
   .config-row {
