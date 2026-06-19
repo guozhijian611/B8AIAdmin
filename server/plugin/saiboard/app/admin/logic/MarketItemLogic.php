@@ -47,6 +47,7 @@ class MarketItemLogic extends BaseLogic
             throw new ApiException('模板不存在或无权访问');
         }
 
+        $model->content = $this->normalizeContent((string) $model->type, $model->content);
         return $model;
     }
 
@@ -201,7 +202,7 @@ class MarketItemLogic extends BaseLogic
     private function sanitizeComponent(array $component): array
     {
         $dataset = is_array($component['dataset'] ?? null) ? $component['dataset'] : [];
-        unset($dataset['queryTemplateId'], $dataset['query_template_id']);
+        unset($dataset['queryTemplateId'], $dataset['query_template_id'], $dataset['params'], $dataset['runtimeParams']);
 
         return [
             'id' => (string) ($component['id'] ?? ''),

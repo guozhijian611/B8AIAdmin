@@ -9,9 +9,9 @@ export default {
     })
   },
   data(params: Record<string, any>) {
-    return request.get<any>({
+    return request.post<any>({
       url: '/app/saiboard/api/data',
-      params,
+      data: params,
       showErrorMessage: false
     })
   }

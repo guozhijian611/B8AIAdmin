@@ -219,6 +219,7 @@ saiadmin-artd/src/views/plugin/saiboard/
       "dataset": {
         "queryTemplateId": 5,
         "refresh": 30,
+        "params": { "tenant": "b8", "range": "7d" },
         "mapping": {
           "labelField": "label",
           "valueField": "value",
@@ -238,6 +239,7 @@ saiadmin-artd/src/views/plugin/saiboard/
 - `type` 直接对应 `widgets/` 注册表里的组件名，编辑器与运行时都靠它 `<component :is>` 渲染。
 - `id`（如 `w_1`）是组件在大屏内的稳定标识，**取数接口以 `code + id` 为键**，不接受前端传任意 `queryTemplateId`（见安全设计）。
 - `dataset.mapping` 是组件级字段映射：图表类用 `labelField` / `valueField`，表格用 `tableFields` 控制列顺序，并可用 `tableColumns[]` 配置列显示名、宽度和对齐；未配置时运行时按 `label/value/total` 等常用字段自动兜底。
+- `dataset.params` 是组件级运行参数，编辑器预览和公开运行时都会传给查询模板；运行时 URL 参数仍可作为全局参数，同名时组件级参数优先。`code` / `cid` / `token` / `admin_preview` 是系统保留字段，不能作为模板运行参数。
 - 保存时 `draft_layout` 整体入库（拖拽是原子操作）；发布时拷贝到 `layout`。
 - 运行时下发 `layout` 时保留 `queryTemplateId`，但**剥离所有数据源连接信息**，前端拿不到密钥。
 
@@ -327,7 +329,7 @@ getScreen / data 接口入口：
 - 复用 `widgets/` 同一套组件，外层只读容器；按 `screen.width/height` 设计稿做运行时适配（监听 resize）。
 - `bg_config.fit_mode` 支持 `contain` / `cover` / `stretch`：`contain` 完整显示设计稿并居中留边，`cover` 等比铺满视口并允许边缘裁切，`stretch` 按视口宽高分别拉伸，适合固定比例投屏。
 - `bg_config` 支持 `theme` 主题预设、背景色、背景图 URL 和 `image_fit`（铺满裁切 / 完整显示 / 拉伸 / 平铺）；编辑器和运行时复用同一套样式生成逻辑。
-- 按各数据组件 `dataset.refresh` 轮询 `/data`，公开运行时最小 10 秒；纯装饰组件不绑定查询模板、不触发运行时取数。
+- 按各数据组件 `dataset.refresh` 轮询 `/data`，公开运行时最小 10 秒；运行时默认用 POST 传递组件级复杂参数，后端保留 GET 兼容；纯装饰组件不绑定查询模板、不触发运行时取数。
 
 ### 数据源管理页 `/plugin/saiboard/datasource`
 
@@ -350,7 +352,7 @@ getScreen / data 接口入口：
 - 大屏编辑器顶部提供「模板市场」和「保存为模板」入口；左侧组件面板提供「组件市场」入口；右侧属性 / 批量操作区支持把当前选中组件保存为组件模板。
 - `index` / `options` 只返回模板摘要；完整 `content` 必须通过 `read` 权限读取，避免列表权限直接暴露模板 JSON。
 - 套用大屏模板会替换当前草稿画布、背景和组件，并进入撤销历史；插入组件模板会复用当前复制 / 粘贴链路的 ID 重建、组 ID 重映射、边界钳制和数据预览刷新。
-- 模板内容只保留组件视觉和字段映射，不保留查询模板绑定；插入后需重新选择当前用户可访问的查询模板。
+- 模板内容只保留组件视觉和字段映射，不保留查询模板绑定或组件级运行参数；插入后需重新选择当前用户可访问的查询模板并按需重新配置参数。
 
 时间范围条件示例：
 
@@ -596,7 +598,7 @@ php webman b8:migrate
 | 后端/前端 | MySQL 查询模板支持 `params[]` 参数白名单、`:param_name` 条件占位符、条件分组和组内 `AND / OR`；预览与公开运行时按白名单参数清洗后执行。 |
 | 后端/前端 | HTTP 查询模板支持路径、请求参数和 JSON Body 中的 `:param_name` 运行时占位符替换，缓存键只包含被模板实际引用的参数。 |
 | 前端 | `DraggableItem.vue`（封装 `vue3-draggable-resizable`）+ `widgets/` 注册表，复用 `art-*` 图表（柱/折线/横向柱/K线/仪表盘/漏斗/热力图/环形/雷达/散点 + 单值指标 / 表格 / 时间轴 / 点位地图）并提供 CSS 装饰边框 / 扫描线 / 标题装饰 / 分割线。 |
-| 前端 | 拖拽编辑器 + 编辑态真实数据预览 / 字段映射 + 查询模板表单化配置 + 对外运行时页（静态 `/screen/:code`、适配模式、is_public / token 鉴权）。 |
+| 前端 | 拖拽编辑器 + 编辑态真实数据预览 / 字段映射 / 组件级运行参数 + 查询模板表单化配置 + 对外运行时页（静态 `/screen/:code`、适配模式、is_public / token 鉴权）。 |
 | 前端 | 数据源新增/编辑态测试前先做表单校验；查询模板支持多指标聚合配置、HTTP GET / POST JSON 配置和取值类型说明；指标组件支持前缀 / 小数位 / 单位，表格支持最大行数 / 序号列 / 斑马纹，图表组件缩放后自动触发 resize。 |
 
 ### P1 能力增强（部分完成）

@@ -68,7 +68,7 @@ class BoardController
 
     #[Apidoc\Title('获取组件数据')]
     #[Apidoc\Url('/app/saiboard/api/data')]
-    #[Apidoc\Method('GET')]
+    #[Apidoc\Method('GET/POST')]
     #[Apidoc\Query('code', type: 'string', require: true, desc: '大屏编码')]
     #[Apidoc\Query('cid', type: 'string', require: true, desc: '组件ID')]
     #[Apidoc\Query('token', type: 'string', require: false, desc: '访问令牌')]
@@ -312,7 +312,7 @@ class BoardController
     {
         $reserved = ['code' => true, 'cid' => true, 'token' => true, 'admin_preview' => true];
         $params = $request->input('params', []);
-        $result = is_array($params) ? $params : [];
+        $result = is_array($params) ? array_diff_key($params, $reserved) : [];
 
         foreach ($request->all() as $key => $value) {
             $key = (string) $key;

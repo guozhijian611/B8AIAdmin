@@ -47,6 +47,7 @@
   const dataMap = reactive<Record<string, { rows: Record<string, any>[]; error: string }>>({})
   const minRefreshSeconds = 10
   const maxRefreshSeconds = 3600
+  const reservedParamNames = new Set(['code', 'cid', 'token', 'admin_preview'])
 
   const code = computed(() => String(route.params.code || ''))
   const token = computed(() => String(route.query.token || ''))
@@ -54,7 +55,7 @@
   const runtimeParams = computed(() => {
     const params: Record<string, any> = {}
     for (const [key, value] of Object.entries(route.query)) {
-      if (key === 'token' || key === 'admin_preview') continue
+      if (reservedParamNames.has(key)) continue
       params[key] = value
     }
     return params
@@ -90,7 +91,7 @@
       await Promise.all(
         layout.components
           .filter((component) => componentNeedsData(component))
-          .map((component) => loadComponentData(component.id))
+          .map((component) => loadComponentData(component))
       )
     } catch (err: any) {
       error.value = err?.message || '大屏加载失败'
@@ -102,17 +103,21 @@
     }
   }
 
-  const loadComponentData = async (cid: string) => {
+  const loadComponentData = async (component: BoardComponent) => {
     try {
       const result = await api.data({
-        code: code.value,
-        cid,
+        ...runtimeParams.value,
+        ...componentRuntimeParams(component),
         ...authParams(),
-        ...runtimeParams.value
+        code: code.value,
+        cid: component.id
       })
-      dataMap[cid] = { rows: result.rows || [], error: '' }
+      dataMap[component.id] = { rows: result.rows || [], error: '' }
     } catch (err: any) {
-      dataMap[cid] = { rows: dataMap[cid]?.rows || [], error: err?.message || '取数失败' }
+      dataMap[component.id] = {
+        rows: dataMap[component.id]?.rows || [],
+        error: err?.message || '取数失败'
+      }
     }
   }
 
@@ -121,7 +126,7 @@
     for (const component of layout.components) {
       if (!componentNeedsData(component)) continue
       const seconds = normalizeRefresh(component.dataset?.refresh)
-      timers.push(window.setInterval(() => loadComponentData(component.id), seconds * 1000))
+      timers.push(window.setInterval(() => loadComponentData(component), seconds * 1000))
     }
   }
 
@@ -129,6 +134,20 @@
     ...(token.value ? { token: token.value } : {}),
     ...(adminPreview.value ? { admin_preview: 1 } : {})
   })
+
+  const componentRuntimeParams = (component: BoardComponent) => {
+    const params = component.dataset?.params
+    if (!params || typeof params !== 'object' || Array.isArray(params)) return {}
+
+    const result: Record<string, any> = {}
+    for (const [key, value] of Object.entries(params)) {
+      if (!reservedParamNames.has(key)) {
+        result[key] = value
+      }
+    }
+
+    return result
+  }
 
   const updateScale = () => {
     const el = viewportRef.value
@@ -179,7 +198,7 @@
   watch(runtimeParams, () => {
     layout.components
       .filter((component) => componentNeedsData(component))
-      .forEach((component) => loadComponentData(component.id))
+      .forEach((component) => loadComponentData(component))
   })
 
   onBeforeUnmount(() => {

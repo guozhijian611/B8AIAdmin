@@ -197,6 +197,15 @@
             <ElFormItem v-if="requiresDataset" label="刷新秒">
               <ElInputNumber v-model="selectedComponent.dataset.refresh" :min="10" :max="3600" />
             </ElFormItem>
+            <ElFormItem v-if="requiresDataset" label="查询参数">
+              <ElInput
+                v-model="datasetParamsText"
+                type="textarea"
+                :rows="4"
+                placeholder='{"tenant":"b8","range":"7d"}'
+                @blur="applySelectedDatasetParams"
+              />
+            </ElFormItem>
             <ElFormItem v-if="supportsFieldMapping" label="类目字段">
               <ElSelect
                 v-model="selectedComponent.dataset.mapping!.labelField"
@@ -1261,6 +1270,7 @@
   const canvasShellRef = ref<HTMLElement>()
   const selectedId = ref('')
   const selectedIds = ref<string[]>([])
+  const datasetParamsText = ref('{}')
   const copiedComponents = ref<BoardComponent[]>([])
   const marketVisible = ref(false)
   const marketLoading = ref(false)
@@ -1278,6 +1288,7 @@
   let suppressHistory = false
   let historyTimer = 0
   let selectionResizeState: SelectionResizeState | undefined
+  let syncingDatasetParamsText = false
   const historyLimit = 50
   const screen = reactive<any>({
     id: 0,
@@ -1489,6 +1500,39 @@
     return result
   }
 
+  const normalizeDatasetParams = (value: unknown, depth = 0): Record<string, any> => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+
+    const result: Record<string, any> = {}
+    const reserved = new Set(['code', 'cid', 'token', 'admin_preview'])
+    for (const [key, rawValue] of Object.entries(value as Record<string, any>).slice(0, 50)) {
+      const name = key.trim()
+      if (!/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(name)) continue
+      if (reserved.has(name)) continue
+      const normalized = normalizeDatasetParamValue(rawValue, depth)
+      if (normalized !== undefined) {
+        result[name] = normalized
+      }
+    }
+
+    return result
+  }
+
+  const normalizeDatasetParamValue = (value: unknown, depth = 0): any => {
+    if (value === null || typeof value === 'string' || typeof value === 'number') return value
+    if (typeof value === 'boolean') return value
+    if (Array.isArray(value)) {
+      if (depth >= 4) return []
+      return value.slice(0, 100).map((item) => normalizeDatasetParamValue(item, depth + 1))
+    }
+    if (typeof value === 'object') {
+      if (depth >= 4) return {}
+      return normalizeDatasetParams(value, depth + 1)
+    }
+
+    return undefined
+  }
+
   const normalizeDataset = (dataset: any = {}) => {
     const rawColumns = normalizeTableColumns(dataset?.mapping?.tableColumns)
     const rawTableFields = normalizeTableFields(dataset?.mapping?.tableFields)
@@ -1500,6 +1544,7 @@
       queryTemplateId:
         Number(dataset?.queryTemplateId || dataset?.query_template_id || 0) || undefined,
       refresh: normalizeRefresh(dataset?.refresh),
+      params: normalizeDatasetParams(dataset?.params || dataset?.runtimeParams || {}),
       mapping: {
         labelField: dataset?.mapping?.labelField || dataset?.fieldMap?.label || '',
         valueField: dataset?.mapping?.valueField || dataset?.fieldMap?.value || '',
@@ -1758,6 +1803,41 @@
 
   const clonePlain = <T,>(value: T): T => JSON.parse(JSON.stringify(value))
 
+  const formatDatasetParams = (params: unknown) =>
+    JSON.stringify(normalizeDatasetParams(params), null, 2)
+
+  const syncDatasetParamsText = (component = selectedComponent.value) => {
+    syncingDatasetParamsText = true
+    datasetParamsText.value = formatDatasetParams(component?.dataset?.params || {})
+    nextTick(() => {
+      syncingDatasetParamsText = false
+    })
+  }
+
+  const parseDatasetParamsText = (showError = false): Record<string, any> | undefined => {
+    try {
+      const parsed = datasetParamsText.value.trim() ? JSON.parse(datasetParamsText.value) : {}
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('params must be object')
+      }
+
+      return normalizeDatasetParams(parsed)
+    } catch {
+      if (showError) ElMessage.error('查询参数必须是 JSON 对象')
+      return undefined
+    }
+  }
+
+  const applySelectedDatasetParams = () => {
+    if (!selectedComponent.value || !requiresDataset.value) return true
+    const params = parseDatasetParamsText(true)
+    if (!params) return false
+    selectedComponent.value.dataset.params = params
+    syncDatasetParamsText(selectedComponent.value)
+    queueLayoutHistory()
+    return true
+  }
+
   const serializeLayout = () =>
     JSON.stringify({
       canvas: clonePlain(layout.canvas),
@@ -1874,7 +1954,10 @@
       loading: true
     }
     try {
-      const result = await templateApi.preview({ id: queryTemplateId })
+      const result = await templateApi.preview({
+        id: queryTemplateId,
+        params: normalizeDatasetParams(component.dataset.params || {})
+      })
       previewMap[component.id] = {
         rows: result.rows || [],
         error: '',
@@ -1917,6 +2000,7 @@
 
   const previewSelectedData = async () => {
     if (!selectedComponent.value) return
+    if (!applySelectedDatasetParams()) return
     await refreshComponentData(selectedComponent.value)
   }
 
@@ -2579,12 +2663,14 @@
   }
 
   const saveLayout = async () => {
+    if (!applySelectedDatasetParams()) return
     await persistDraftLayout()
     ElMessage.success('保存成功')
     await loadData()
   }
 
   const publish = async () => {
+    if (!applySelectedDatasetParams()) return
     await persistDraftLayout()
     await api.publish({ id: screen.id })
     ElMessage.success('发布成功')
@@ -2609,7 +2695,10 @@
   watch(selectedComponent, (component) => {
     if (component) {
       ensureDataset(component)
+      syncDatasetParamsText(component)
       if (component.type === 'data-table') syncTableColumnConfigs(component)
+    } else {
+      syncDatasetParamsText()
     }
   })
 
@@ -2618,12 +2707,21 @@
     () => {
       if (selectedComponent.value) {
         ensureDataset(selectedComponent.value)
+        syncDatasetParamsText(selectedComponent.value)
         if (selectedComponent.value.type === 'data-table') {
           syncTableColumnConfigs(selectedComponent.value)
         }
       }
     }
   )
+
+  watch(datasetParamsText, () => {
+    if (syncingDatasetParamsText || !selectedComponent.value || !requiresDataset.value) return
+    const params = parseDatasetParamsText(false)
+    if (!params) return
+    selectedComponent.value.dataset.params = params
+    queueLayoutHistory()
+  })
 
   watch(layout, queueLayoutHistory, { deep: true })
 

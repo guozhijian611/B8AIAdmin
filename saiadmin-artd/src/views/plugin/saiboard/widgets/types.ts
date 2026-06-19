@@ -16,6 +16,7 @@ export interface BoardTableColumn {
 export interface BoardDataset {
   queryTemplateId?: number
   refresh?: number
+  params?: Record<string, any>
   mapping?: {
     labelField?: string
     valueField?: string

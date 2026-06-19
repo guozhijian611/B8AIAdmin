@@ -42,4 +42,5 @@ Route::group('/app/saiboard/admin', function () {
 Route::group('/app/saiboard/api', function () {
     Route::get('/screen/{code}', [BoardController::class, 'getScreen']);
     Route::get('/data', [BoardController::class, 'data']);
+    Route::post('/data', [BoardController::class, 'data']);
 });
