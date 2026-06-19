@@ -291,7 +291,7 @@ saiadmin-artd/src/views/plugin/saiboard/
 | SQL 注入 | 预置模板 + 参数化 SELECT + 表/字段白名单；生产只读账号兜底。 |
 | 越权取数（IDOR） | `data` 接口以 `code + cid` 为键，组件绑定的 `queryTemplateId` 由服务端从该大屏 `layout` 解析，**前端不能指定任意模板/数据源 id**；运行时还会校验模板、数据源与大屏创建者一致，兜底拦截历史异常 layout。 |
 | 后台数据越权 | 大屏、数据源、查询模板 Logic 显式开启 `scope`，按 `created_by` 与角色数据权限过滤；数据源测试 / 表结构、查询模板预览、layout 绑定模板、运行统计等自定义入口也走归属校验。 |
-| SSRF（HTTP 数据源） | 后端代发 HTTP 请求前解析目标域名 → 拒绝内网 / 环回 / 链路本地地址（`127.0.0.0/8`、`10/8`、`172.16/12`、`192.168/16`、`169.254/16`、`::1` 等）与云元数据地址；可选出网域名白名单。 |
+| SSRF（HTTP 数据源） | 后端代发 HTTP 请求前解析目标域名 → 拒绝内网 / 环回 / 链路本地地址（`127.0.0.0/8`、`10/8`、`172.16/12`、`192.168/16`、`169.254/16`、`::1` 等）与云元数据地址；支持 `SAIBOARD_HTTP_ALLOWED_HOSTS` 出网域名白名单，并在 curl 请求中固定已校验 DNS 结果，降低 DNS 重绑定风险。 |
 | 密钥泄露 | 数据源 `config`（DB 密码、请求头 token）只在后端持有，`getScreen` 下发时剥离；大屏子令牌只保存哈希，明文仅创建 / 重置后显示一次。 |
 | 公开大屏被刷 | `cache_ttl` 通过 Webman Cache 缓存结果；公开运行时下发 layout 时强制 `dataset.refresh` 不低于 10 秒；按 IP / 大屏 / 创建人维度做固定窗口限流；缓存 miss 优先使用 Redis 原子锁互斥回源，锁竞争时返回“数据缓存刷新中”，异常时可回退 stale 缓存。 |
 | 日志脱敏 | 连接配置、token、Bearer 在日志/调试页脱敏，仅 `last_error` 存非敏感错误摘要。 |
@@ -512,12 +512,24 @@ getScreen / data 接口入口：
 - `response_path` / `total_path` 使用点号路径，例如 `data.items`、`result.total`；`response_path` 留空时优先识别根对象 `rows`，其次识别 `data`，最后把根对象当单行。
 - 响应路径命中数组时转为多行；命中对象时转为单行；命中标量时转为 `{ "value": 标量 }`。
 
+### HTTP 出网白名单
+
+默认 `SAIBOARD_HTTP_ALLOWED_HOSTS` 留空时，HTTP 数据源仍会拒绝 localhost、内网、链路本地、保留地址和无法 DNS 解析的域名，但不限制公网域名。生产环境建议按实际第三方接口收紧，例如：
+
+```env
+SAIBOARD_HTTP_ALLOWED_HOSTS=api.example.com,*.trusted.example
+```
+
+- `api.example.com` 只允许精确域名。
+- `*.trusted.example` 只允许子域名，例如 `order.trusted.example`，不包含根域 `trusted.example`。
+- 自定义 `Host` 请求头会被忽略，后端会使用 URL 中的目标域名；curl 可用时会通过 `CURLOPT_RESOLVE` 固定到已校验公网 IP，避免校验后再次解析到内网地址。
+
 ### 数据源测试返回
 
 后台「数据源管理」新增或编辑时可以直接点击测试。测试接口会使用当前表单里的未保存配置，不要求先保存。
 
 - MySQL 测试执行 `SELECT 1 AS ok`，成功返回 `rows` / `total` 和脱敏诊断信息 `diagnostics.type=mysql`、`host`、`port`、`database`。
-- HTTP 测试只允许公网 `http/https`，拒绝 localhost、内网地址、保留地址和无法 DNS 解析的域名；成功返回 `rows` / `total` 和 `diagnostics.host`、`diagnostics.method`、`diagnostics.status`。
+- HTTP 测试只允许公网 `http/https`，拒绝 localhost、内网地址、保留地址和无法 DNS 解析的域名；配置出网白名单后，域名还必须命中白名单；成功返回 `rows` / `total` 和 `diagnostics.host`、`diagnostics.method`、`diagnostics.status`。
 - HTTP `headers`、`params` 必须是 JSON 对象，例如 `{ "Authorization": "Bearer xxx" }`，不能填数组。
 - HTTP 数据源表单里的「测试配置」只用于当前测试请求，不会保存到数据源；可临时填写 `path`、`method`、`params`、`body`、`response_path`、`total_path` 来模拟后续查询模板的真实请求。
 - 常见 MySQL 连接错误会转成可读提示：数据库不存在、用户名或密码不正确、主机或端口无法连接。
@@ -636,12 +648,12 @@ php webman b8:migrate
 
 1. **拖拽交互完善度**：`vue3-draggable-resizable` 已提供拖动 + 缩放 + 对齐线 + 父级边界；图表缩放后已通过组件容器 `ResizeObserver` 触发 resize。多选、组合等增量在 P1 视需要补，避免一开始过度设计。
 2. **生产数据源只读账号**：预置模板已能防注入，但强烈建议生产 MySQL 数据源配只读账号作为第二道防线，需在文档和部署指引中强制说明。
-3. **SSRF 防护清单**：HTTP 数据源已拒绝 localhost、内网和保留地址；实际部署如需进一步收紧，可加出网域名白名单。
+3. **SSRF 防护清单**：HTTP 数据源已拒绝 localhost、内网和保留地址；生产可通过 `SAIBOARD_HTTP_ALLOWED_HOSTS` 收紧公网出网域名。curl 可用时会固定已校验 DNS 结果；若运行环境没有 curl，会使用 stream fallback 固定到首个已校验公网 IP 并设置原始 Host / SNI。
 4. **缓存与限流边界**：P1 已支持运行时轮询下限、IP / 大屏 / 创建人限流、Redis 原子锁优先的互斥回源、单机文件锁兜底、stale 缓存兜底和后台运行统计；多副本生产部署应配置 Redis，Redis 不可用时的 Cache 降级限流和指标递增是弱原子语义，`CACHE_MODE=file` 只适合单机或开发环境。
 
 ## 排障
 
 - 运行时 401：检查大屏是否公开；如为 token 模式，对外访问 `/screen/:code?token=...` 或请求头传递 `X-Saiboard-Token`；多访问令牌只在创建 / 重置时显示一次，后台列表只能看到前缀。后台管理端发布预览私有大屏会自动追加 `admin_preview=1`；草稿预览还会追加 `draft=1`，两者都需要当前后台登录态具备大屏读取权限并通过数据范围校验。
 - SQL 白名单拦截：确认查询模板里的 `table`、`fields`、`conditions.field`、`order.field` 都是目标数据源真实存在的表和字段。
-- HTTP 数据源失败：确认 URL 是公网 `http/https` 地址；localhost、内网 IP、保留地址和无法 DNS 解析的域名会被 SSRF 防护拦截。
+- HTTP 数据源失败：确认 URL 是公网 `http/https` 地址；localhost、内网 IP、保留地址和无法 DNS 解析的域名会被 SSRF 防护拦截；若配置了 `SAIBOARD_HTTP_ALLOWED_HOSTS`，还需确认目标域名命中白名单。
 - 数据不刷新：检查数据源 `cache_ttl` 和组件 `dataset.refresh`；预览接口会强制绕过缓存，运行时接口会按 `cache_ttl` 复用结果，公开运行时轮询下限为 10 秒。

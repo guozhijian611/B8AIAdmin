@@ -505,13 +505,14 @@ LUA;
 
         $parts = parse_url($url);
         $scheme = strtolower((string) ($parts['scheme'] ?? ''));
-        $host = strtolower((string) ($parts['host'] ?? ''));
+        $host = $this->normalizeHttpHost($parts['host'] ?? '');
         if (!in_array($scheme, ['http', 'https'], true) || $host === '') {
             throw new InvalidArgumentException('HTTP 数据源 URL 不正确，只允许 http/https');
         }
         if (in_array($host, ['localhost', 'localhost.localdomain'], true)) {
             throw new InvalidArgumentException("HTTP 数据源不允许访问本机地址：{$host}");
         }
+        $this->assertAllowedHttpHost($host);
         if (filter_var($host, FILTER_VALIDATE_IP)
             && !filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
             throw new InvalidArgumentException("HTTP 数据源不允许访问内网或保留地址：{$host}");
@@ -527,13 +528,14 @@ LUA;
     {
         $templateConfig = is_array($template['config'] ?? null) ? $template['config'] : [];
         $request = $this->buildHttpRequest($datasourceConfig, $templateConfig, $runtimeParams);
-        $this->assertPublicHttpUrl($request['url']);
+        $target = $this->assertPublicHttpUrl($request['url']);
         $headers = $this->normalizeHeaders($datasourceConfig['headers'] ?? []);
         [$payload, $diagnostics] = $this->requestJson(
             $request['url'],
             $headers,
             $request['method'],
-            $request['body']
+            $request['body'],
+            $target
         );
 
         $result = $this->normalizeHttpPayload($payload, $templateConfig);
@@ -712,17 +714,19 @@ LUA;
         }
     }
 
-    private function assertPublicHttpUrl(string $url): void
+    private function assertPublicHttpUrl(string $url): array
     {
         $parts = parse_url($url);
         $scheme = strtolower((string) ($parts['scheme'] ?? ''));
-        $host = strtolower((string) ($parts['host'] ?? ''));
+        $urlHost = strtolower((string) ($parts['host'] ?? ''));
+        $host = $this->normalizeHttpHost($urlHost);
         if (!in_array($scheme, ['http', 'https'], true) || $host === '') {
             throw new InvalidArgumentException('HTTP 数据源 URL 不正确，只允许 http/https');
         }
         if (in_array($host, ['localhost', 'localhost.localdomain'], true)) {
             throw new InvalidArgumentException("HTTP 数据源不允许访问本机地址：{$host}");
         }
+        $this->assertAllowedHttpHost($host);
 
         $ips = [];
         if (filter_var($host, FILTER_VALIDATE_IP)) {
@@ -747,6 +751,98 @@ LUA;
                 throw new InvalidArgumentException("HTTP 数据源不允许访问内网或保留地址：{$host}");
             }
         }
+
+        return [
+            'scheme' => $scheme,
+            'host' => $host,
+            'url_host' => $urlHost,
+            'port' => $this->httpPort($scheme, $parts['port'] ?? null),
+            'ips' => array_values(array_unique($ips)),
+        ];
+    }
+
+    private function normalizeHttpHost(mixed $host): string
+    {
+        return rtrim(strtolower(trim((string) $host)), '.');
+    }
+
+    private function httpPort(string $scheme, mixed $port): int
+    {
+        $port = (int) $port;
+        if ($port > 0 && $port <= 65535) {
+            return $port;
+        }
+
+        return $scheme === 'https' ? 443 : 80;
+    }
+
+    private function assertAllowedHttpHost(string $host): void
+    {
+        $allowedHosts = $this->allowedHttpHosts();
+        if ($allowedHosts === []) {
+            return;
+        }
+
+        foreach ($allowedHosts as $pattern) {
+            if ($this->httpHostMatches($host, $pattern)) {
+                return;
+            }
+        }
+
+        throw new InvalidArgumentException("HTTP 数据源域名不在出网白名单：{$host}");
+    }
+
+    private function allowedHttpHosts(): array
+    {
+        $hosts = config('plugin.saiboard.app.http.allowed_hosts', []);
+        if (is_string($hosts)) {
+            $hosts = explode(',', $hosts);
+        }
+        if (!is_array($hosts)) {
+            return [];
+        }
+
+        $result = [];
+        foreach ($hosts as $host) {
+            $pattern = $this->normalizeAllowedHttpHost($host);
+            if ($pattern !== '') {
+                $result[$pattern] = $pattern;
+            }
+        }
+
+        return array_values($result);
+    }
+
+    private function normalizeAllowedHttpHost(mixed $host): string
+    {
+        $host = strtolower(trim((string) $host));
+        if ($host === '') {
+            return '';
+        }
+        if (str_contains($host, '://')) {
+            $parts = parse_url($host);
+            $host = strtolower((string) ($parts['host'] ?? ''));
+        }
+
+        if (str_starts_with($host, '*.')) {
+            $suffix = $this->normalizeHttpHost(substr($host, 2));
+            return $suffix !== '' ? '*.' . $suffix : '';
+        }
+
+        return $this->normalizeHttpHost($host);
+    }
+
+    private function httpHostMatches(string $host, string $pattern): bool
+    {
+        if ($host === $pattern) {
+            return true;
+        }
+        if (!str_starts_with($pattern, '*.')) {
+            return false;
+        }
+
+        $suffix = substr($pattern, 2);
+        return $host !== $suffix && str_ends_with($host, '.' . $suffix);
     }
 
     private function normalizeHeaders(mixed $headers): array
@@ -759,13 +855,22 @@ LUA;
             if ($name === '' || preg_match('/[\r\n:]/', $name)) {
                 continue;
             }
+            if (strtolower($name) === 'host') {
+                continue;
+            }
             $result[] = $name . ': ' . str_replace(["\r", "\n"], '', (string) $value);
         }
 
         return $result;
     }
 
-    private function requestJson(string $url, array $headers, string $method = 'GET', array $body = []): array
+    private function requestJson(
+        string $url,
+        array $headers,
+        string $method = 'GET',
+        array $body = [],
+        array $target = []
+    ): array
     {
         $host = (string) (parse_url($url, PHP_URL_HOST) ?: '');
         $diagnostics = [
@@ -794,6 +899,10 @@ LUA;
                 CURLOPT_CUSTOMREQUEST => $method,
                 CURLOPT_HTTPHEADER => $headers,
             ];
+            $resolve = $this->curlResolveEntries($target);
+            if ($resolve !== []) {
+                $options[CURLOPT_RESOLVE] = $resolve;
+            }
             if ($jsonBody !== null) {
                 $options[CURLOPT_POSTFIELDS] = $jsonBody;
             }
@@ -814,6 +923,7 @@ LUA;
             }
         } else {
             $httpResponseHeader = [];
+            [$requestUrl, $headers, $sslOptions] = $this->pinnedStreamRequest($url, $headers, $target);
             $contextOptions = [
                 'method' => $method,
                 'timeout' => 10,
@@ -823,8 +933,9 @@ LUA;
             if ($jsonBody !== null) {
                 $contextOptions['content'] = $jsonBody;
             }
-            $body = file_get_contents($url, false, stream_context_create([
+            $body = file_get_contents($requestUrl, false, stream_context_create([
                 'http' => $contextOptions,
+                'ssl' => $sslOptions,
             ]));
             $httpResponseHeader = $http_response_header ?? [];
             $status = $this->statusCodeFromHeaders($httpResponseHeader);
@@ -845,6 +956,53 @@ LUA;
         }
 
         return [$payload, $diagnostics];
+    }
+
+    private function curlResolveEntries(array $target): array
+    {
+        if (!defined('CURLOPT_RESOLVE')) {
+            return [];
+        }
+
+        $host = (string) ($target['url_host'] ?? $target['host'] ?? '');
+        $port = (int) ($target['port'] ?? 0);
+        $ips = is_array($target['ips'] ?? null) ? $target['ips'] : [];
+        if ($host === '' || $port <= 0 || $ips === []) {
+            return [];
+        }
+
+        return array_map(static fn (string $ip) => "{$host}:{$port}:{$ip}", $ips);
+    }
+
+    private function pinnedStreamRequest(string $url, array $headers, array $target): array
+    {
+        $ips = is_array($target['ips'] ?? null) ? $target['ips'] : [];
+        if ($ips === []) {
+            return [$url, $headers, []];
+        }
+
+        $parts = parse_url($url);
+        $scheme = strtolower((string) ($target['scheme'] ?? $parts['scheme'] ?? 'http'));
+        $host = (string) ($target['host'] ?? $parts['host'] ?? '');
+        $urlHost = (string) ($target['url_host'] ?? $host);
+        $port = (int) ($target['port'] ?? $this->httpPort($scheme, $parts['port'] ?? null));
+        $ip = (string) $ips[0];
+        $requestHost = filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) ? "[{$ip}]" : $ip;
+        $portPart = isset($parts['port']) ? ':' . (int) $parts['port'] : '';
+        $path = (string) ($parts['path'] ?? '/');
+        $query = isset($parts['query']) ? '?' . $parts['query'] : '';
+        $requestUrl = "{$scheme}://{$requestHost}{$portPart}{$path}{$query}";
+        $headers = $this->replaceHeader($headers, 'Host', $urlHost . ($portPart !== '' ? ":{$port}" : ''));
+        $sslOptions = [];
+        if ($scheme === 'https' && $host !== '') {
+            $sslOptions = [
+                'peer_name' => $host,
+                'SNI_enabled' => true,
+                'SNI_server_name' => $host,
+            ];
+        }
+
+        return [$requestUrl, $headers, $sslOptions];
     }
 
     private function normalizeHttpPayload(array $payload, array $templateConfig): array
@@ -952,6 +1110,20 @@ LUA;
 
         $headers[] = $name . ': ' . $value;
         return $headers;
+    }
+
+    private function replaceHeader(array $headers, string $name, string $value): array
+    {
+        $prefix = strtolower($name) . ':';
+        $result = [];
+        foreach ($headers as $header) {
+            if (!str_starts_with(strtolower((string) $header), $prefix)) {
+                $result[] = $header;
+            }
+        }
+
+        $result[] = $name . ': ' . $value;
+        return $result;
     }
 
     private function statusCodeFromHeaders(array $headers): int
