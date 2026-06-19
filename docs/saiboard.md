@@ -565,6 +565,7 @@ HTTP 模板不自动透传所有 URL 参数，只替换配置里明确写出的 
 - 编辑器画布用了 CSS `transform: scale(...)`，`DraggableItem.vue` 和多选框会把拖拽 / 缩放事件的屏幕像素差值除以 `effectiveZoom`，再写回设计稿坐标，保证在 auto / 50% / 75% 下编辑后发布不发生坐标漂移。
 - 运行页使用大屏背景配置里的 `fit_mode`：`contain` 完整显示设计稿并居中留边，`cover` 等比铺满视口并允许上下或左右裁切，`stretch` 按视口宽高分别拉伸。
 - 编辑器是设计态，需要保留滚动和操作空间；运行页是展示态，会把画布绝对定位到窗口中。若顶部或底部被裁掉，优先检查该大屏是否设置了 `cover`。
+- 修改 `widgets/fit.ts` 后需在 `saiadmin-artd/` 执行 `pnpm verify:saiboard-fit`，覆盖 `contain` / `cover` / `stretch` / `maxScale` / `padding` / 异常尺寸的数值回归。
 
 ## 安装和迁移（已落地）
 
