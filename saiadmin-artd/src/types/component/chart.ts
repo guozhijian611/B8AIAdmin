@@ -13,6 +13,7 @@
  * - K线图类型定义
  * - 仪表盘类型定义
  * - 漏斗图类型定义
+ * - 热力图类型定义
  * - 散点图类型定义
  * - 地图图表类型定义
  * - 双向堆叠柱状图类型定义
@@ -272,6 +273,30 @@ export interface FunnelChartProps extends BaseChartProps, InteractionProps {
   maxSize?: string
   /** 间距 */
   gap?: number
+}
+
+// 热力图数据项接口
+export interface HeatmapDataItem {
+  /** 坐标和值 [xIndex, yIndex, value] */
+  value: [number, number, number]
+}
+
+// 热力图 Props 接口 - 统一热力图配置
+export interface HeatmapChartProps extends BaseChartProps, AxisDisplayProps {
+  /** 图表数据 */
+  data?: HeatmapDataItem[]
+  /** X轴标签数据 */
+  xAxisData?: string[]
+  /** Y轴标签数据 */
+  yAxisData?: string[]
+  /** 是否显示格子标签 */
+  showLabel?: boolean
+  /** 是否显示视觉映射 */
+  showVisualMap?: boolean
+  /** 最小值 */
+  min?: number
+  /** 最大值 */
+  max?: number
 }
 
 // 散点图数据项接口

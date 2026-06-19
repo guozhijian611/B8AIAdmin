@@ -32,6 +32,7 @@ export type WidgetType =
   | 'art-k-line-chart'
   | 'art-gauge-chart'
   | 'art-funnel-chart'
+  | 'art-heatmap-chart'
   | 'art-ring-chart'
   | 'art-radar-chart'
   | 'art-scatter-chart'

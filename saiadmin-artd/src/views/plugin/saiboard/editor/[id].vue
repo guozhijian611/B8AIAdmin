@@ -588,6 +588,72 @@
                 <ElInput v-model="selectedComponent.option!.maxSize" placeholder="例如 82%" />
               </ElFormItem>
             </template>
+            <template v-if="selectedComponent.type === 'art-heatmap-chart'">
+              <ElFormItem label="X字段">
+                <ElSelect
+                  v-model="selectedComponent.option!.xField"
+                  clearable
+                  filterable
+                  placeholder="自动识别"
+                  :disabled="!fieldOptions.length"
+                >
+                  <ElOption
+                    v-for="field in fieldOptions"
+                    :key="field"
+                    :label="field"
+                    :value="field"
+                  />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="Y字段">
+                <ElSelect
+                  v-model="selectedComponent.option!.yField"
+                  clearable
+                  filterable
+                  placeholder="自动识别"
+                  :disabled="!fieldOptions.length"
+                >
+                  <ElOption
+                    v-for="field in fieldOptions"
+                    :key="field"
+                    :label="field"
+                    :value="field"
+                  />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="显示数值">
+                <ElSwitch v-model="selectedComponent.option!.showLabel" />
+              </ElFormItem>
+              <ElFormItem label="颜色标尺">
+                <ElSwitch v-model="selectedComponent.option!.showVisualMap" />
+              </ElFormItem>
+              <ElFormItem label="坐标标签">
+                <ElSwitch v-model="selectedComponent.option!.showAxisLabel" />
+              </ElFormItem>
+              <ElFormItem label="坐标轴线">
+                <ElSwitch v-model="selectedComponent.option!.showAxisLine" />
+              </ElFormItem>
+              <ElFormItem label="分割线">
+                <ElSwitch v-model="selectedComponent.option!.showSplitLine" />
+              </ElFormItem>
+              <ElFormItem label="取值范围">
+                <ElSpace wrap>
+                  <ElInputNumber
+                    v-model="selectedComponent.option!.min"
+                    :min="-999999999"
+                    :max="999999999"
+                    :step="1"
+                  />
+                  <ElInputNumber
+                    v-model="selectedComponent.option!.max"
+                    :min="-999999999"
+                    :max="999999999"
+                    :step="1"
+                    placeholder="自动"
+                  />
+                </ElSpace>
+              </ElFormItem>
+            </template>
             <template v-if="selectedComponent.type === 'image-carousel'">
               <ElFormItem label="图片字段">
                 <ElSelect
@@ -1125,6 +1191,7 @@
     'art-scatter-chart',
     'art-gauge-chart',
     'art-funnel-chart',
+    'art-heatmap-chart',
     'stat-number',
     'data-table',
     'image-carousel',

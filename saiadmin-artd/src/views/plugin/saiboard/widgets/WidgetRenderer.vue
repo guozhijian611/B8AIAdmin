@@ -64,6 +64,17 @@
         :data="ringData"
         v-bind="component.option"
       />
+      <ArtHeatmapChart
+        v-else-if="component.type === 'art-heatmap-chart' && heatmapReady"
+        height="100%"
+        :data="heatmapData"
+        :x-axis-data="heatmapXAxisData"
+        :y-axis-data="heatmapYAxisData"
+        v-bind="component.option"
+      />
+      <div v-else-if="component.type === 'art-heatmap-chart'" class="chart-empty">
+        {{ heatmapEmptyText }}
+      </div>
       <ArtRingChart
         v-else-if="component.type === 'art-ring-chart'"
         height="100%"
@@ -181,12 +192,13 @@
   import ArtFunnelChart from '@/components/core/charts/art-funnel-chart/index.vue'
   import ArtGaugeChart from '@/components/core/charts/art-gauge-chart/index.vue'
   import ArtHBarChart from '@/components/core/charts/art-h-bar-chart/index.vue'
+  import ArtHeatmapChart from '@/components/core/charts/art-heatmap-chart/index.vue'
   import ArtKLineChart from '@/components/core/charts/art-k-line-chart/index.vue'
   import ArtLineChart from '@/components/core/charts/art-line-chart/index.vue'
   import ArtRadarChart from '@/components/core/charts/art-radar-chart/index.vue'
   import ArtRingChart from '@/components/core/charts/art-ring-chart/index.vue'
   import ArtScatterChart from '@/components/core/charts/art-scatter-chart/index.vue'
-  import type { KLineDataItem } from '@/types/component/chart'
+  import type { HeatmapDataItem, KLineDataItem } from '@/types/component/chart'
   import type { BoardComponent, BoardTableColumn } from './types'
 
   type TableColumnAlign = NonNullable<BoardTableColumn['align']>
@@ -208,6 +220,7 @@
     'art-k-line-chart',
     'art-gauge-chart',
     'art-funnel-chart',
+    'art-heatmap-chart',
     'art-ring-chart',
     'art-radar-chart',
     'art-scatter-chart'
@@ -237,6 +250,25 @@
     { time: '周三', open: 104, close: 116, high: 120, low: 103 },
     { time: '周四', open: 116, close: 121, high: 128, low: 113 },
     { time: '周五', open: 121, close: 118, high: 126, low: 115 }
+  ]
+  const sampleHeatmapXAxisData = ['周一', '周二', '周三', '周四', '周五']
+  const sampleHeatmapYAxisData = ['浏览', '下单', '支付']
+  const sampleHeatmapData: HeatmapDataItem[] = [
+    { value: [0, 0, 120] },
+    { value: [1, 0, 180] },
+    { value: [2, 0, 150] },
+    { value: [3, 0, 220] },
+    { value: [4, 0, 260] },
+    { value: [0, 1, 42] },
+    { value: [1, 1, 58] },
+    { value: [2, 1, 46] },
+    { value: [3, 1, 74] },
+    { value: [4, 1, 88] },
+    { value: [0, 2, 18] },
+    { value: [1, 2, 26] },
+    { value: [2, 2, 21] },
+    { value: [3, 2, 32] },
+    { value: [4, 2, 39] }
   ]
 
   const tableRows = computed(() => {
@@ -436,6 +468,83 @@
       if (label) return label
     }
     return props.component.title || '指标'
+  })
+  const heatmapXKey = computed(() =>
+    findDimensionKey(props.component.option?.xField, [
+      'x',
+      'date',
+      'day',
+      'time',
+      'hour',
+      'label',
+      'category',
+      '日期',
+      '时间'
+    ])
+  )
+  const heatmapYKey = computed(() =>
+    findDimensionKey(
+      props.component.option?.yField,
+      ['y', 'type', 'status', 'group', 'series', 'channel', 'category2', 'dimension', '类型'],
+      [heatmapXKey.value]
+    )
+  )
+  const heatmapValueKey = computed(
+    () =>
+      findOptionalKey(mapping.value.valueField, [
+        'value',
+        'count',
+        'total',
+        'amount',
+        'num',
+        '数量'
+      ]) ||
+      valueKeys.value.find((key) => key !== heatmapXKey.value && key !== heatmapYKey.value) ||
+      valueKey.value
+  )
+  const heatmapXAxisData = computed(() => {
+    if (!tableRows.value.length) return hasBoundDataset.value ? [] : sampleHeatmapXAxisData
+    if (!heatmapXKey.value) return []
+    return uniqueStringValues(tableRows.value, heatmapXKey.value)
+  })
+  const heatmapYAxisData = computed(() => {
+    if (!tableRows.value.length) return hasBoundDataset.value ? [] : sampleHeatmapYAxisData
+    if (!heatmapYKey.value) return []
+    return uniqueStringValues(tableRows.value, heatmapYKey.value)
+  })
+  const heatmapData = computed<HeatmapDataItem[]>(() => {
+    if (!tableRows.value.length) return hasBoundDataset.value ? [] : sampleHeatmapData
+    if (!heatmapXKey.value || !heatmapYKey.value) return []
+
+    const xIndexMap = new Map(heatmapXAxisData.value.map((name, index) => [name, index]))
+    const yIndexMap = new Map(heatmapYAxisData.value.map((name, index) => [name, index]))
+    const valueMap = new Map<string, number>()
+
+    for (const row of tableRows.value) {
+      const xName = String(row[heatmapXKey.value] ?? '').trim()
+      const yName = String(row[heatmapYKey.value] ?? '').trim()
+      const xIndex = xIndexMap.get(xName)
+      const yIndex = yIndexMap.get(yName)
+      if (xIndex === undefined || yIndex === undefined) continue
+      const key = `${xIndex}:${yIndex}`
+      valueMap.set(key, (valueMap.get(key) || 0) + toFiniteNumber(row[heatmapValueKey.value]))
+    }
+
+    return Array.from(valueMap.entries()).map(([key, value]) => {
+      const [x, y] = key.split(':').map(Number)
+      return { value: [x, y, value] }
+    })
+  })
+  const heatmapReady = computed(
+    () =>
+      heatmapXAxisData.value.length > 0 &&
+      heatmapYAxisData.value.length > 0 &&
+      heatmapData.value.length > 0
+  )
+  const heatmapEmptyText = computed(() => {
+    if (!hasBoundDataset.value || !tableRows.value.length) return '暂无热力图数据'
+    if (!heatmapXKey.value || !heatmapYKey.value) return '请配置 X/Y 字段'
+    return '暂无有效热力图数据'
   })
 
   const ringData = computed(() => {
@@ -648,6 +757,19 @@
     return value === 'center' || value === 'right' ? value : 'left'
   }
 
+  function uniqueStringValues(rows: Record<string, any>[], field: string, limit = 80) {
+    const values: string[] = []
+    const seen = new Set<string>()
+    for (const row of rows) {
+      const value = String(row[field] ?? '').trim()
+      if (!value || seen.has(value)) continue
+      seen.add(value)
+      values.push(value)
+      if (values.length >= limit) break
+    }
+    return values
+  }
+
   function normalizeCarouselSlides() {
     if (!tableRows.value.length) return []
 
@@ -817,6 +939,27 @@
     const first = tableRows.value[0] || {}
     if (mapped && mapped in first) return mapped
     return preferred.find((key) => key in first) || ''
+  }
+
+  function findDimensionKey(
+    mapped: string | undefined,
+    preferred: string[],
+    exclude: string[] = []
+  ) {
+    const first = tableRows.value[0] || {}
+    const excluded = new Set(exclude.filter(Boolean))
+    if (mapped && mapped in first && !excluded.has(mapped)) return mapped
+
+    for (const key of preferred) {
+      if (key in first && !excluded.has(key)) return key
+    }
+
+    return (
+      Object.keys(first).find(
+        (key) =>
+          !excluded.has(key) && tableRows.value.some((row) => !Number.isFinite(Number(row[key])))
+      ) || ''
+    )
   }
 
   function findNumberKeys(mapped: string | undefined, preferred: string[]) {

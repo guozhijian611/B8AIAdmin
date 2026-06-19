@@ -84,6 +84,23 @@ export const widgetRegistry: WidgetMeta[] = [
     }
   },
   {
+    type: 'art-heatmap-chart',
+    name: '热力图',
+    icon: 'ri:grid-line',
+    defaultRect: { x: 860, y: 1120, w: 560, h: 340, z: 1 },
+    defaultOption: {
+      xField: '',
+      yField: '',
+      showLabel: false,
+      showVisualMap: true,
+      showAxisLabel: true,
+      showAxisLine: true,
+      showSplitLine: true,
+      min: 0,
+      max: undefined
+    }
+  },
+  {
     type: 'art-ring-chart',
     name: '环形图',
     icon: 'ri:donut-chart-line',

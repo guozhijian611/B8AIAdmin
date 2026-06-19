@@ -21,7 +21,8 @@ import {
   MapChart,
   CandlestickChart,
   GaugeChart,
-  FunnelChart
+  FunnelChart,
+  HeatmapChart
 } from 'echarts/charts'
 
 // 导入组件
@@ -54,6 +55,7 @@ echarts.use([
   CandlestickChart,
   GaugeChart,
   FunnelChart,
+  HeatmapChart,
 
   // 组件
   TitleComponent,
