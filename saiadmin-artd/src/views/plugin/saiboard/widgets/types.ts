@@ -39,6 +39,7 @@ export type WidgetType =
   | 'art-scatter-chart'
   | 'stat-number'
   | 'data-table'
+  | 'progress-rank'
   | 'image-carousel'
   | 'event-timeline'
   | 'alarm-list'

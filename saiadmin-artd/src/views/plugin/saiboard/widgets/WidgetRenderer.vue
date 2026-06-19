@@ -121,6 +121,37 @@
           show-overflow-tooltip
         />
       </ElTable>
+      <div
+        v-else-if="component.type === 'progress-rank'"
+        class="progress-rank"
+        :style="progressRankStyleVars"
+      >
+        <template v-if="progressRankItems.length">
+          <div
+            v-for="item in progressRankItems"
+            :key="`${item.label}-${item.index}`"
+            class="progress-rank__item"
+            :class="`is-${item.tone}`"
+          >
+            <span v-if="component.option?.showRank !== false" class="progress-rank__index">
+              {{ item.rank }}
+            </span>
+            <div class="progress-rank__main">
+              <div class="progress-rank__head">
+                <span class="progress-rank__label">{{ item.label }}</span>
+                <span v-if="item.status" class="progress-rank__status">{{ item.status }}</span>
+              </div>
+              <div class="progress-rank__bar">
+                <span class="progress-rank__fill" :style="progressRankBarStyle(item)"></span>
+              </div>
+            </div>
+            <span v-if="component.option?.showValue !== false" class="progress-rank__value">
+              {{ item.valueText }}
+            </span>
+          </div>
+        </template>
+        <div v-else class="progress-rank__empty">{{ progressRankEmptyText }}</div>
+      </div>
       <div v-else-if="component.type === 'image-carousel'" class="image-carousel">
         <ElCarousel
           v-if="carouselSlides.length"
@@ -324,6 +355,17 @@
     timestamp: number
     index: number
   }
+  interface ProgressRankItem {
+    rank: number
+    label: string
+    value: number
+    target?: number
+    progress: number
+    valueText: string
+    status: string
+    tone: StatusTone
+    index: number
+  }
 
   const chartTypes = new Set([
     'art-bar-chart',
@@ -438,6 +480,41 @@
       status: '待处理',
       tone: 'primary',
       timestamp: 1,
+      index: 2
+    }
+  ]
+  const sampleProgressRankItems: ProgressRankItem[] = [
+    {
+      rank: 1,
+      label: '华东订单履约',
+      value: 96,
+      target: 100,
+      progress: 96,
+      valueText: '96%',
+      status: '领先',
+      tone: 'success',
+      index: 0
+    },
+    {
+      rank: 2,
+      label: '售后工单 SLA',
+      value: 82,
+      target: 100,
+      progress: 82,
+      valueText: '82%',
+      status: '正常',
+      tone: 'primary',
+      index: 1
+    },
+    {
+      rank: 3,
+      label: '核心库存水位',
+      value: 58,
+      target: 100,
+      progress: 58,
+      valueText: '58%',
+      status: '关注',
+      tone: 'warning',
       index: 2
     }
   ]
@@ -969,6 +1046,95 @@
   const alarmStyleVars = computed(() => ({
     '--alarm-accent': String(props.component.option?.accent || 'var(--saiboard-accent, #ffcf5a)')
   }))
+  const progressRankLabelKey = computed(() =>
+    findOptionalKey(props.component.option?.labelField, [
+      'label',
+      'name',
+      'title',
+      'category',
+      'channel',
+      'project',
+      'task',
+      'department',
+      'region',
+      '名称',
+      '标题'
+    ])
+  )
+  const progressRankValueKey = computed(() =>
+    findOptionalKey(props.component.option?.valueField || mapping.value.valueField, [
+      'value',
+      'progress',
+      'percent',
+      'rate',
+      'current',
+      'actual',
+      'done',
+      'completed',
+      'count',
+      'total',
+      'amount',
+      'score',
+      '完成率',
+      '进度',
+      '数值'
+    ])
+  )
+  const progressRankTargetKey = computed(() =>
+    findOptionalKey(props.component.option?.targetField, [
+      'target',
+      'goal',
+      'quota',
+      'plan',
+      'max',
+      'target_value',
+      '目标',
+      '计划',
+      '总量'
+    ])
+  )
+  const progressRankStatusKey = computed(() =>
+    findOptionalKey(props.component.option?.statusField, [
+      'status',
+      'state',
+      'level',
+      'result',
+      'risk',
+      '状态',
+      '级别'
+    ])
+  )
+  const progressRankItems = computed<ProgressRankItem[]>(() => {
+    if (!hasBoundDataset.value && !(props.rows || []).length) return sampleProgressRankItems
+    if (!progressRankLabelKey.value || !progressRankValueKey.value) return []
+
+    const items = (props.rows || [])
+      .map((row, index) => createProgressRankItem(row, index))
+      .filter(Boolean) as ProgressRankItem[]
+
+    const sortOrder = String(props.component.option?.sortOrder || 'desc')
+    const sorted =
+      sortOrder === 'none'
+        ? items
+        : items.slice().sort((a, b) => {
+            return sortOrder === 'asc' ? a.progress - b.progress : b.progress - a.progress
+          })
+    const maxRows = normalizeTimelineMaxRows(props.component.option?.maxRows)
+    return (maxRows > 0 ? sorted.slice(0, maxRows) : sorted).map((item, index) => ({
+      ...item,
+      rank: index + 1
+    }))
+  })
+  const progressRankEmptyText = computed(() => {
+    if (!hasBoundDataset.value || !(props.rows || []).length) return '暂无进度'
+    if (!progressRankLabelKey.value || !progressRankValueKey.value) return '请配置名称/数值字段'
+    return '暂无有效进度'
+  })
+  const progressRankStyleVars = computed(() => ({
+    '--progress-rank-accent': String(
+      props.component.option?.accent || 'var(--saiboard-accent, #23d8ff)'
+    )
+  }))
   const geoPoints = computed(() => {
     const points = normalizeGeoPoints()
     if (points.length) return points
@@ -1257,6 +1423,78 @@
       tone: timelineTone(status),
       timestamp: rawTime ? parseTimelineTimestamp(rawTime) : Number.NaN,
       index
+    }
+  }
+
+  function createProgressRankItem(row: Record<string, any>, index: number) {
+    const label = String(row[progressRankLabelKey.value] ?? '').trim()
+    const value = toOptionalNumber(row[progressRankValueKey.value])
+    if (!label || value === undefined) return undefined
+
+    const target = progressRankTargetKey.value
+      ? toOptionalNumber(row[progressRankTargetKey.value])
+      : undefined
+    const progress = normalizeProgressRankPercent(value, target)
+    const status = progressRankStatusKey.value
+      ? String(row[progressRankStatusKey.value] ?? '').trim()
+      : ''
+
+    return {
+      rank: index + 1,
+      label,
+      value,
+      target,
+      progress,
+      valueText: progressRankValueText(value, target),
+      status,
+      tone: status ? timelineTone(status) : progressRankTone(progress),
+      index
+    }
+  }
+
+  function normalizeProgressRankPercent(value: number, target?: number) {
+    const raw =
+      target !== undefined && target > 0
+        ? (value / target) * 100
+        : value > 0 && value <= 1
+          ? value * 100
+          : value
+    if (!Number.isFinite(raw)) return 0
+    return Math.min(100, Math.max(0, raw))
+  }
+
+  function progressRankValueText(value: number, target?: number) {
+    const decimals = normalizeDecimals(props.component.option?.decimals)
+    const unit = String(props.component.option?.unit ?? '%')
+    if (target !== undefined && target > 0 && unit === '%') {
+      return `${formatProgressRankNumber(normalizeProgressRankPercent(value, target), decimals)}%`
+    }
+
+    const normalizedValue = unit === '%' && value > 0 && value <= 1 ? value * 100 : value
+    const valueText = formatProgressRankNumber(normalizedValue, decimals)
+    if (target !== undefined && target > 0 && unit !== '%') {
+      return `${valueText}/${formatProgressRankNumber(target, decimals)}${unit}`
+    }
+    return `${valueText}${unit}`
+  }
+
+  function formatProgressRankNumber(value: number, decimals: number) {
+    return value.toLocaleString(undefined, {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals
+    })
+  }
+
+  function progressRankTone(progress: number): StatusTone {
+    if (progress >= 90) return 'success'
+    if (progress >= 70) return 'primary'
+    if (progress >= 45) return 'warning'
+    return 'danger'
+  }
+
+  function progressRankBarStyle(item: ProgressRankItem) {
+    return {
+      width: `${item.progress}%`
     }
   }
 
@@ -1900,6 +2138,136 @@
   }
 
   .alarm-list__empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: rgb(215 231 255 / 72%);
+    background: rgb(255 255 255 / 4%);
+    border: 1px dashed rgb(255 255 255 / 16%);
+    border-radius: 4px;
+  }
+
+  .progress-rank {
+    height: 100%;
+    min-height: 0;
+    overflow: auto;
+  }
+
+  .progress-rank__item {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    min-height: 45px;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+    color: #d7e7ff;
+    background: rgb(255 255 255 / 4%);
+    border: 1px solid rgb(104 166 255 / 12%);
+    border-radius: 4px;
+  }
+
+  .progress-rank__item:last-child {
+    margin-bottom: 0;
+  }
+
+  .progress-rank__item.is-success {
+    --progress-rank-accent: #14deba;
+  }
+
+  .progress-rank__item.is-warning {
+    --progress-rank-accent: #ffaf20;
+  }
+
+  .progress-rank__item.is-danger {
+    --progress-rank-accent: #fa8a6c;
+  }
+
+  .progress-rank__item.is-info {
+    --progress-rank-accent: #a8b4c6;
+  }
+
+  .progress-rank__index {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #06111f;
+    background: var(--progress-rank-accent);
+    border-radius: 4px;
+    box-shadow: 0 0 14px color-mix(in srgb, var(--progress-rank-accent) 38%, transparent);
+  }
+
+  .progress-rank__main {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .progress-rank__head {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: space-between;
+    min-width: 0;
+    margin-bottom: 6px;
+  }
+
+  .progress-rank__label {
+    min-width: 0;
+    overflow: hidden;
+    font-size: 13px;
+    font-weight: 700;
+    color: #f8fbff;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .progress-rank__status {
+    flex: 0 0 auto;
+    max-width: 72px;
+    overflow: hidden;
+    font-size: 12px;
+    color: var(--progress-rank-accent);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .progress-rank__bar {
+    height: 7px;
+    overflow: hidden;
+    background: rgb(255 255 255 / 8%);
+    border-radius: 999px;
+  }
+
+  .progress-rank__fill {
+    display: block;
+    width: 0;
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--progress-rank-accent) 58%, transparent),
+      var(--progress-rank-accent)
+    );
+    border-radius: inherit;
+    box-shadow: 0 0 12px color-mix(in srgb, var(--progress-rank-accent) 42%, transparent);
+    transition: width 0.24s ease;
+  }
+
+  .progress-rank__value {
+    min-width: 48px;
+    overflow: hidden;
+    font-size: 13px;
+    font-weight: 700;
+    color: #f8fbff;
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .progress-rank__empty {
     display: flex;
     align-items: center;
     justify-content: center;

@@ -136,6 +136,25 @@ export const widgetRegistry: WidgetMeta[] = [
     defaultOption: { showIndex: false, rowStripe: false, maxRows: 0 }
   },
   {
+    type: 'progress-rank',
+    name: '进度排行',
+    icon: 'ri:list-check-3',
+    defaultRect: { x: 920, y: 1120, w: 520, h: 360, z: 1 },
+    defaultOption: {
+      labelField: '',
+      valueField: '',
+      targetField: '',
+      statusField: '',
+      maxRows: 8,
+      sortOrder: 'desc',
+      unit: '%',
+      decimals: 0,
+      showRank: true,
+      showValue: true,
+      accent: '#23d8ff'
+    }
+  },
+  {
     type: 'image-carousel',
     name: '图片轮播',
     icon: 'ri:image-line',

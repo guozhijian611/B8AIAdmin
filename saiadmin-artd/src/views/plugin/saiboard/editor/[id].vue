@@ -853,6 +853,109 @@
                 <ElColorPicker v-model="selectedComponent.option!.accent" />
               </ElFormItem>
             </template>
+            <template v-if="selectedComponent.type === 'progress-rank'">
+              <ElFormItem label="名称字段">
+                <ElSelect
+                  v-model="selectedComponent.option!.labelField"
+                  clearable
+                  filterable
+                  placeholder="自动识别"
+                  :disabled="!fieldOptions.length"
+                >
+                  <ElOption
+                    v-for="field in fieldOptions"
+                    :key="field"
+                    :label="field"
+                    :value="field"
+                  />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="数值字段">
+                <ElSelect
+                  v-model="selectedComponent.option!.valueField"
+                  clearable
+                  filterable
+                  placeholder="自动识别"
+                  :disabled="!fieldOptions.length"
+                >
+                  <ElOption
+                    v-for="field in fieldOptions"
+                    :key="field"
+                    :label="field"
+                    :value="field"
+                  />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="目标字段">
+                <ElSelect
+                  v-model="selectedComponent.option!.targetField"
+                  clearable
+                  filterable
+                  placeholder="可选"
+                  :disabled="!fieldOptions.length"
+                >
+                  <ElOption
+                    v-for="field in fieldOptions"
+                    :key="field"
+                    :label="field"
+                    :value="field"
+                  />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="状态字段">
+                <ElSelect
+                  v-model="selectedComponent.option!.statusField"
+                  clearable
+                  filterable
+                  placeholder="可选"
+                  :disabled="!fieldOptions.length"
+                >
+                  <ElOption
+                    v-for="field in fieldOptions"
+                    :key="field"
+                    :label="field"
+                    :value="field"
+                  />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="排序">
+                <ElSelect v-model="selectedComponent.option!.sortOrder">
+                  <ElOption label="进度倒序" value="desc" />
+                  <ElOption label="进度正序" value="asc" />
+                  <ElOption label="原始顺序" value="none" />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem label="最大条数">
+                <ElInputNumber
+                  v-model="selectedComponent.option!.maxRows"
+                  :min="0"
+                  :max="50"
+                  :step="1"
+                  step-strictly
+                />
+              </ElFormItem>
+              <ElFormItem label="单位">
+                <ElInput v-model="selectedComponent.option!.unit" placeholder="例如 %、单、件" />
+              </ElFormItem>
+              <ElFormItem label="小数位">
+                <ElInputNumber
+                  v-model="selectedComponent.option!.decimals"
+                  :min="0"
+                  :max="6"
+                  :step="1"
+                  step-strictly
+                />
+              </ElFormItem>
+              <ElFormItem label="显示排名">
+                <ElSwitch v-model="selectedComponent.option!.showRank" />
+              </ElFormItem>
+              <ElFormItem label="显示数值">
+                <ElSwitch v-model="selectedComponent.option!.showValue" />
+              </ElFormItem>
+              <ElFormItem label="强调色">
+                <ElColorPicker v-model="selectedComponent.option!.accent" />
+              </ElFormItem>
+            </template>
             <template v-if="selectedComponent.type === 'image-carousel'">
               <ElFormItem label="图片字段">
                 <ElSelect
@@ -1514,6 +1617,7 @@
   const kLineFieldOptionKeys = ['timeField', 'openField', 'closeField', 'highField', 'lowField']
   const timelineFieldOptionKeys = ['timeField', 'titleField', 'contentField', 'statusField']
   const alarmFieldOptionKeys = ['timeField', 'titleField', 'contentField', 'levelField']
+  const progressRankFieldOptionKeys = ['labelField', 'valueField', 'targetField', 'statusField']
   const decorTypes = decorWidgetTypes
   const componentNeedsData = (component: BoardComponent) => !decorTypes.has(component.type)
   const componentGroupId = (component?: BoardComponent) => String(component?.option?.groupId || '')
@@ -2130,7 +2234,7 @@
   const componentRows = (component: BoardComponent) => {
     if (!componentNeedsData(component)) return []
     if (!component.dataset?.queryTemplateId) {
-      return component.type === 'alarm-list' ? [] : sampleRows
+      return ['alarm-list', 'progress-rank'].includes(component.type) ? [] : sampleRows
     }
     return previewMap[component.id]?.rows || []
   }
@@ -2199,6 +2303,9 @@
     if (selectedComponent.value.type === 'alarm-list') {
       resetOptionFields(selectedComponent.value, alarmFieldOptionKeys)
     }
+    if (selectedComponent.value.type === 'progress-rank') {
+      resetOptionFields(selectedComponent.value, progressRankFieldOptionKeys)
+    }
     await refreshComponentData(selectedComponent.value)
   }
 
@@ -2239,6 +2346,9 @@
     }
     if (component.type === 'alarm-list') {
       resetOptionFields(component, alarmFieldOptionKeys, fields)
+    }
+    if (component.type === 'progress-rank') {
+      resetOptionFields(component, progressRankFieldOptionKeys, fields)
     }
   }
 
