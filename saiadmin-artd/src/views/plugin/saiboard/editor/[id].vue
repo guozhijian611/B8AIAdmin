@@ -124,6 +124,7 @@
               :error="componentError(component)"
               :selected="selectedIds.includes(component.id)"
               :resizable="selectedComponents.length <= 1"
+              :zoom="effectiveZoom"
               @select="selectComponent"
               @resize-start="startComponentResize"
               @update="updateComponent"
@@ -143,8 +144,10 @@
               :min-h="selectionResizeMin.h"
               class-name="saiboard-selection-box"
               class-name-active="saiboard-selection-box-active"
+              @drag-start="startSelectionDrag"
               @resize-start="startSelectionResize"
               @dragging="dragSelectionBox"
+              @drag-end="finishSelectionDrag"
               @resizing="resizeSelectionBox"
               @resize-end="finishSelectionResize"
             />
@@ -1205,6 +1208,7 @@
   import api from '../api/screen'
   import templateApi from '../api/query-template'
   import DraggableItem from '../widgets/DraggableItem.vue'
+  import { normalizeBoardScale, resolveBoardFit } from '../widgets/fit'
   import {
     createDefaultComponent,
     decorWidgetTypes,
@@ -1254,6 +1258,8 @@
     }>
   }
 
+  type SelectionMoveState = SelectionResizeState
+
   interface LayoutHistoryState {
     past: string[]
     future: string[]
@@ -1287,6 +1293,7 @@
   let canvasResizeObserver: ResizeObserver | undefined
   let suppressHistory = false
   let historyTimer = 0
+  let selectionMoveState: SelectionMoveState | undefined
   let selectionResizeState: SelectionResizeState | undefined
   let syncingDatasetParamsText = false
   const historyLimit = 50
@@ -1434,7 +1441,7 @@
     selectedComponents.value.some((component) => Boolean(componentGroupId(component)))
   )
   const effectiveZoom = computed(() =>
-    zoom.value === 'auto' ? autoZoom.value : Number(zoom.value)
+    normalizeBoardScale(zoom.value === 'auto' ? autoZoom.value : zoom.value)
   )
   const scaledCanvasSize = computed(() => ({
     width: Math.max(1, Math.round(Number(layout.canvas.width || 1920) * effectiveZoom.value)),
@@ -1557,12 +1564,16 @@
   const updateAutoZoom = () => {
     const shell = canvasShellRef.value
     if (!shell) return
-    const availableWidth = Math.max(1, shell.clientWidth - 64)
-    const availableHeight = Math.max(1, shell.clientHeight - 64)
-    const canvasWidth = Math.max(1, Number(layout.canvas.width || 1920))
-    const canvasHeight = Math.max(1, Number(layout.canvas.height || 1080))
-    const nextZoom = Math.min(1, availableWidth / canvasWidth, availableHeight / canvasHeight)
-    autoZoom.value = Number.isFinite(nextZoom) && nextZoom > 0 ? nextZoom : 0.75
+    const fit = resolveBoardFit({
+      viewportWidth: shell.clientWidth,
+      viewportHeight: shell.clientHeight,
+      canvasWidth: layout.canvas.width,
+      canvasHeight: layout.canvas.height,
+      mode: 'contain',
+      padding: 32,
+      maxScale: 1
+    })
+    autoZoom.value = fit.scaleX
   }
 
   const observeCanvasShell = () => {
@@ -1587,6 +1598,7 @@
   const clearSelection = () => {
     selectedId.value = ''
     selectedIds.value = []
+    selectionMoveState = undefined
     selectionResizeState = undefined
   }
 
@@ -1651,13 +1663,36 @@
   }
 
   const startComponentResize = () => {
+    selectionMoveState = undefined
     selectionResizeState = undefined
+  }
+
+  const startSelectionDrag = () => {
+    const bounds = selectedBounds()
+    if (!bounds || selectedComponents.value.length < 2) return
+    flushLayoutHistory()
+    selectionMoveState = {
+      bounds,
+      components: selectedComponents.value.map((component) => ({
+        id: component.id,
+        rect: clonePlain(component.rect)
+      }))
+    }
+    suppressHistory = true
+  }
+
+  const finishSelectionDrag = () => {
+    if (!selectionMoveState) return
+    selectionMoveState = undefined
+    suppressHistory = false
+    recordLayoutHistory()
   }
 
   const startSelectionResize = () => {
     const bounds = selectedBounds()
     if (!bounds || selectedComponents.value.length < 2) return
     flushLayoutHistory()
+    selectionMoveState = undefined
     selectionResizeState = {
       bounds,
       components: selectedComponents.value.map((component) => ({
@@ -1676,9 +1711,22 @@
   }
 
   const dragSelectionBox = (payload: DragPayload) => {
-    const bounds = selectedBounds()
-    if (!bounds) return
-    moveSelectedBy(Number(payload.x || 0) - bounds.left, Number(payload.y || 0) - bounds.top)
+    if (!selectionMoveState) startSelectionDrag()
+    if (!selectionMoveState) return
+    const scale = normalizeBoardScale(effectiveZoom.value)
+    const rawX = Math.round(Number(payload.x || selectionMoveState.bounds.left))
+    const rawY = Math.round(Number(payload.y || selectionMoveState.bounds.top))
+    const desiredDeltaX = (rawX - selectionMoveState.bounds.left) / scale
+    const desiredDeltaY = (rawY - selectionMoveState.bounds.top) / scale
+    const delta = clampComponentDelta(selectionMoveState.components, desiredDeltaX, desiredDeltaY)
+
+    for (const item of selectionMoveState.components) {
+      const component = layout.components.find((target) => target.id === item.id)
+      if (!component) continue
+      component.rect.x = item.rect.x + delta.x
+      component.rect.y = item.rect.y + delta.y
+      clampComponentRect(component)
+    }
   }
 
   const resizeSelectionBox = (payload: ResizePayload) => {
@@ -1709,10 +1757,19 @@
   ): SelectionBounds => {
     const canvasWidth = Math.max(1, Number(layout.canvas.width || 0))
     const canvasHeight = Math.max(1, Number(layout.canvas.height || 0))
-    const rawLeft = Math.round(Number(payload.x || 0))
-    const rawTop = Math.round(Number(payload.y || 0))
-    const rawWidth = Math.round(Number(payload.w || state.bounds.width))
-    const rawHeight = Math.round(Number(payload.h || state.bounds.height))
+    const scale = normalizeBoardScale(effectiveZoom.value)
+    const rawLeft = Math.round(
+      state.bounds.left + (Number(payload.x || state.bounds.left) - state.bounds.left) / scale
+    )
+    const rawTop = Math.round(
+      state.bounds.top + (Number(payload.y || state.bounds.top) - state.bounds.top) / scale
+    )
+    const rawWidth = Math.round(
+      state.bounds.width + (Number(payload.w || state.bounds.width) - state.bounds.width) / scale
+    )
+    const rawHeight = Math.round(
+      state.bounds.height + (Number(payload.h || state.bounds.height) - state.bounds.height) / scale
+    )
     const rawRight = rawLeft + rawWidth
     const rawBottom = rawTop + rawHeight
     const minWidth = Math.round(state.bounds.width * minSelectionScale('x', state.components))
@@ -2490,7 +2547,7 @@
 
   const moveSelectedBy = (deltaX: number, deltaY: number) => {
     const selected = new Set(selectedIds.value)
-    const delta = clampSelectedDelta(deltaX, deltaY)
+    const delta = clampComponentDelta(selectedComponents.value, deltaX, deltaY)
     if (delta.x === 0 && delta.y === 0) return
 
     for (const component of layout.components) {
@@ -2501,8 +2558,11 @@
     }
   }
 
-  const clampSelectedDelta = (deltaX: number, deltaY: number) => {
-    const components = selectedComponents.value
+  const clampComponentDelta = (
+    components: Array<{ rect: BoardRect }>,
+    deltaX: number,
+    deltaY: number
+  ) => {
     if (!components.length) return { x: 0, y: 0 }
 
     const minDeltaX = Math.max(...components.map((component) => -Number(component.rect.x || 0)))

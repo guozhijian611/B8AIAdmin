@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'vue'
+import { normalizeBoardFitMode } from './fit'
 import type { BoardBgConfig } from './types'
 
 export const boardThemeOptions = [
@@ -56,8 +57,7 @@ export const normalizeBgConfig = (config: BoardBgConfig = {}) =>
   }) satisfies BoardBgConfig
 
 export const normalizeFitMode = (mode: unknown) => {
-  const value = String(mode || '')
-  return ['contain', 'cover', 'stretch'].includes(value) ? value : 'contain'
+  return normalizeBoardFitMode(mode)
 }
 
 export const boardCanvasStyle = (config: BoardBgConfig = {}) => {

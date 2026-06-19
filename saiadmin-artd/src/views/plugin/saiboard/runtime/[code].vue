@@ -31,6 +31,7 @@
 <script setup lang="ts">
   import api from '../api/runtime'
   import WidgetRenderer from '../widgets/WidgetRenderer.vue'
+  import { resolveBoardFit } from '../widgets/fit'
   import { decorWidgetTypes } from '../widgets/registry'
   import { boardCanvasStyle, normalizeBgConfig, normalizeFitMode } from '../widgets/theme'
   import type { BoardComponent, BoardLayout } from '../widgets/types'
@@ -154,28 +155,15 @@
     if (!el) return
     const canvasWidth = Math.max(1, Number(layout.canvas.width || 1920))
     const canvasHeight = Math.max(1, Number(layout.canvas.height || 1080))
-    const viewportWidth = el.clientWidth
-    const viewportHeight = el.clientHeight
-    const scaleX = viewportWidth / canvasWidth
-    const scaleY = viewportHeight / canvasHeight
-    if (fitMode.value === 'stretch') {
-      fit.scaleX = validScale(scaleX)
-      fit.scaleY = validScale(scaleY)
-      fit.x = 0
-      fit.y = 0
-      return
-    }
-
-    const nextScale =
-      fitMode.value === 'cover' ? Math.max(scaleX, scaleY) : Math.min(scaleX, scaleY)
-    const scale = validScale(nextScale)
-    fit.scaleX = scale
-    fit.scaleY = scale
-    fit.x = (viewportWidth - canvasWidth * scale) / 2
-    fit.y = (viewportHeight - canvasHeight * scale) / 2
+    const nextFit = resolveBoardFit({
+      viewportWidth: el.clientWidth,
+      viewportHeight: el.clientHeight,
+      canvasWidth,
+      canvasHeight,
+      mode: fitMode.value
+    })
+    Object.assign(fit, nextFit)
   }
-
-  const validScale = (value: number) => (Number.isFinite(value) && value > 0 ? value : 1)
 
   const normalizeRefresh = (refresh: unknown) => {
     const seconds = Number(refresh || 30)
@@ -199,6 +187,10 @@
     layout.components
       .filter((component) => componentNeedsData(component))
       .forEach((component) => loadComponentData(component))
+  })
+
+  watch(fitMode, () => {
+    nextTick(updateScale)
   })
 
   onBeforeUnmount(() => {
