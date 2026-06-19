@@ -145,7 +145,7 @@ class DataSourceExecutor
                 'http' => $this->executeHttp($datasource->config, [
                     'dataset_type' => (string) $template->dataset_type,
                     'config' => $template->config,
-                ]),
+                ], false, $runtimeParams),
                 default => throw new InvalidArgumentException('数据源类型不支持'),
             };
 
@@ -403,10 +403,15 @@ LUA;
         );
     }
 
-    private function executeHttp(array $datasourceConfig, array $template, bool $withDiagnostics = false): array
+    private function executeHttp(
+        array $datasourceConfig,
+        array $template,
+        bool $withDiagnostics = false,
+        array $runtimeParams = []
+    ): array
     {
         $templateConfig = is_array($template['config'] ?? null) ? $template['config'] : [];
-        $request = $this->buildHttpRequest($datasourceConfig, $templateConfig);
+        $request = $this->buildHttpRequest($datasourceConfig, $templateConfig, $runtimeParams);
         $this->assertPublicHttpUrl($request['url']);
         $headers = $this->normalizeHeaders($datasourceConfig['headers'] ?? []);
         [$payload, $diagnostics] = $this->requestJson(
@@ -420,26 +425,33 @@ LUA;
         return $withDiagnostics ? $result + ['diagnostics' => $diagnostics] : $result;
     }
 
-    private function buildHttpRequest(array $datasourceConfig, array $templateConfig): array
+    private function buildHttpRequest(array $datasourceConfig, array $templateConfig, array $runtimeParams = []): array
     {
         $baseUrl = trim((string) ($datasourceConfig['url'] ?? ''));
         if ($baseUrl === '') {
             throw new InvalidArgumentException('HTTP 数据源 URL 必须填写');
         }
 
-        $path = trim((string) ($templateConfig['path'] ?? ''));
+        $path = trim((string) $this->replaceHttpRuntimeParams(
+            (string) ($templateConfig['path'] ?? ''),
+            $runtimeParams,
+            true
+        ));
         $url = $path === '' ? $baseUrl : rtrim($baseUrl, '/') . '/' . ltrim($path, '/');
-        $params = array_merge(
+        $params = $this->replaceHttpRuntimeParams(array_merge(
             $this->normalizeObject($datasourceConfig['params'] ?? [], 'HTTP 数据源默认参数'),
             $this->normalizeObject($templateConfig['params'] ?? [], 'HTTP 查询模板请求参数')
-        );
+        ), $runtimeParams);
         if ($params !== []) {
             $url .= (str_contains($url, '?') ? '&' : '?') . http_build_query($params);
         }
 
         $method = $this->normalizeHttpMethod($templateConfig['method'] ?? $datasourceConfig['method'] ?? 'GET');
         $body = $method === 'POST'
-            ? $this->normalizeObject($templateConfig['body'] ?? [], 'HTTP 查询模板 JSON Body')
+            ? $this->replaceHttpRuntimeParams(
+                $this->normalizeObject($templateConfig['body'] ?? [], 'HTTP 查询模板 JSON Body'),
+                $runtimeParams
+            )
             : [];
 
         return [
@@ -460,6 +472,80 @@ LUA;
         }
 
         return $method;
+    }
+
+    private function replaceHttpRuntimeParams(mixed $value, array $runtimeParams, bool $urlEncode = false): mixed
+    {
+        if (is_array($value)) {
+            foreach ($value as $key => $item) {
+                $value[$key] = $this->replaceHttpRuntimeParams($item, $runtimeParams, $urlEncode);
+            }
+
+            return $value;
+        }
+        if (!is_string($value) || !str_contains($value, ':')) {
+            return $value;
+        }
+
+        if (preg_match('/^:([A-Za-z][A-Za-z0-9_]*)$/', $value, $matches)) {
+            $name = $matches[1];
+            if (!array_key_exists($name, $runtimeParams)) {
+                return $value;
+            }
+
+            $runtimeValue = $this->normalizeHttpRuntimeValue($runtimeParams[$name]);
+            if ($urlEncode) {
+                if (!is_scalar($runtimeValue)) {
+                    throw new InvalidArgumentException("HTTP 查询模板路径参数 {$name} 必须是标量");
+                }
+
+                return rawurlencode((string) $runtimeValue);
+            }
+
+            return $runtimeValue;
+        }
+
+        return preg_replace_callback('/\:([A-Za-z][A-Za-z0-9_]*)/', function (array $matches) use ($runtimeParams, $urlEncode): string {
+            $name = $matches[1];
+            if (!array_key_exists($name, $runtimeParams)) {
+                return $matches[0];
+            }
+
+            $runtimeValue = $this->normalizeHttpRuntimeValue($runtimeParams[$name]);
+            if (!is_scalar($runtimeValue)) {
+                if ($urlEncode) {
+                    throw new InvalidArgumentException("HTTP 查询模板路径参数 {$name} 必须是标量");
+                }
+
+                return $matches[0];
+            }
+
+            $replacement = (string) $runtimeValue;
+            return $urlEncode ? rawurlencode($replacement) : $replacement;
+        }, $value) ?? $value;
+    }
+
+    private function normalizeHttpRuntimeValue(mixed $value): mixed
+    {
+        if (is_array($value)) {
+            if (count($value) > 100) {
+                throw new InvalidArgumentException('HTTP 查询参数最多支持 100 个值');
+            }
+
+            foreach ($value as $key => $item) {
+                $value[$key] = $this->normalizeHttpRuntimeValue($item);
+            }
+
+            return $value;
+        }
+        if (is_bool($value) || is_int($value) || is_float($value)) {
+            return $value;
+        }
+        if (!is_scalar($value)) {
+            throw new InvalidArgumentException('HTTP 查询参数值不正确');
+        }
+
+        return mb_substr(trim((string) $value), 0, 500);
     }
 
     private function assertPublicHttpUrl(string $url): void
@@ -721,12 +807,39 @@ LUA;
             'datasource' => $datasource->config,
             'template' => $template->config,
             'type' => $template->dataset_type,
-            'params' => $this->cacheableRuntimeParams($template->config, $runtimeParams),
+            'params' => $this->cacheableRuntimeParams(
+                (string) $template->dataset_type,
+                $template->config,
+                $runtimeParams,
+                $datasource->config
+            ),
         ], JSON_UNESCAPED_UNICODE));
     }
 
-    private function cacheableRuntimeParams(array $config, array $runtimeParams): array
+    private function cacheableRuntimeParams(
+        string $datasetType,
+        array $config,
+        array $runtimeParams,
+        array $datasourceConfig = []
+    ): array
     {
+        if ($datasetType === 'http_passthrough') {
+            $names = $this->httpRuntimeParamNames([
+                'datasource_params' => $datasourceConfig['params'] ?? [],
+                'path' => $config['path'] ?? '',
+                'params' => $config['params'] ?? [],
+                'body' => $config['body'] ?? [],
+            ]);
+            $result = [];
+            foreach ($names as $name) {
+                if (array_key_exists($name, $runtimeParams)) {
+                    $result[$name] = $runtimeParams[$name];
+                }
+            }
+            ksort($result);
+            return $result;
+        }
+
         $definitions = $config['params'] ?? [];
         if (!is_array($definitions) || !array_is_list($definitions)) {
             return [];
@@ -745,6 +858,23 @@ LUA;
 
         ksort($result);
         return $result;
+    }
+
+    private function httpRuntimeParamNames(mixed $value): array
+    {
+        $names = [];
+        if (is_array($value)) {
+            foreach ($value as $item) {
+                $names = array_merge($names, $this->httpRuntimeParamNames($item));
+            }
+
+            return array_values(array_unique($names));
+        }
+        if (is_string($value) && preg_match_all('/\:([A-Za-z][A-Za-z0-9_]*)/', $value, $matches)) {
+            return array_values(array_unique($matches[1]));
+        }
+
+        return [];
     }
 
     private function columnKind(string $type): string

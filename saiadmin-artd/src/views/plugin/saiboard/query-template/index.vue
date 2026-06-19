@@ -519,7 +519,7 @@
           <ElFormItem label="请求路径">
             <ElInput
               v-model="form.config.path"
-              placeholder="例如 /metrics/orders，可留空直接请求数据源 URL"
+              placeholder="例如 /metrics/:tenant/orders，可留空直接请求数据源 URL"
             />
           </ElFormItem>
           <ElFormItem label="请求参数">
@@ -527,7 +527,7 @@
               v-model="paramsText"
               type="textarea"
               :rows="6"
-              placeholder='例如 {"range":"7d"}'
+              placeholder='例如 {"range":":range","tenant":":tenant"}'
             />
           </ElFormItem>
           <ElFormItem v-if="form.config.method === 'POST'" label="JSON Body">
@@ -535,6 +535,14 @@
               v-model="bodyText"
               type="textarea"
               :rows="6"
+              placeholder='例如 {"range":":range","tenant":":tenant"}'
+            />
+          </ElFormItem>
+          <ElFormItem label="预览参数">
+            <ElInput
+              v-model="previewParamsText"
+              type="textarea"
+              :rows="4"
               placeholder='例如 {"range":"7d","tenant":"b8"}'
             />
           </ElFormItem>
@@ -642,6 +650,7 @@
   const previewText = ref('')
   const paramsText = ref('{}')
   const bodyText = ref('{}')
+  const previewParamsText = ref('{}')
   const formRef = ref<FormInstance>()
   const search = reactive({ name: '', datasource_id: undefined as number | undefined })
   const form = reactive<any>({
@@ -881,6 +890,7 @@
     })
     paramsText.value = '{}'
     bodyText.value = '{}'
+    previewParamsText.value = '{}'
     tableOptions.value = []
     columnOptions.value = []
     if (row) {
@@ -898,6 +908,7 @@
     const nextType = currentDatasource.value?.type === 'http' ? 'http_passthrough' : 'table_raw'
     form.dataset_type = nextType
     form.config = normalizeConfig(nextType)
+    previewParamsText.value = '{}'
     tableOptions.value = []
     columnOptions.value = []
     await loadSchema()
@@ -905,6 +916,7 @@
 
   const onDatasetTypeChange = async () => {
     form.config = normalizeConfig(form.dataset_type)
+    previewParamsText.value = '{}'
     await loadSchema()
   }
 
@@ -1012,7 +1024,9 @@
 
   const preview = async (row: any) => {
     const payload =
-      row === form ? buildDraftPreviewPayload() : { id: row.id, params: previewParams(row.config) }
+      row === form
+        ? buildDraftPreviewPayload()
+        : { id: row.id, params: previewParams(row.config, row.dataset_type, false) }
     const result = await api.preview(payload)
     previewText.value = JSON.stringify(result, null, 2)
     previewVisible.value = true
@@ -1021,7 +1035,7 @@
   const buildDraftPreviewPayload = () => {
     const payload = buildPayload()
     delete payload.id
-    payload.params = previewParams(payload.config)
+    payload.params = previewParams(payload.config, payload.dataset_type, true)
     return payload
   }
 
@@ -1251,7 +1265,15 @@
     return ['string', 'number', 'date', 'datetime', 'time_range'].includes(value) ? value : 'string'
   }
 
-  function previewParams(config: Record<string, any>) {
+  function previewParams(
+    config: Record<string, any>,
+    datasetType = form.dataset_type,
+    useDraftHttpParams = true
+  ) {
+    if (datasetType === 'http_passthrough') {
+      return useDraftHttpParams ? parseJsonObject(previewParamsText.value, '预览参数') : {}
+    }
+
     const result: Record<string, string> = {}
     for (const item of normalizeParamRows(config?.params, true)) {
       if (item.default !== '') {

@@ -341,7 +341,7 @@ getScreen / data 接口入口：
 - 条件支持 `= / != / > / >= / < / <= / like / in / between / time_range`，并支持条件组内 `AND / OR` 组合；顶层条件按 `AND` 合并，老的平铺条件数组继续兼容。`time_range` 只允许日期 / 时间字段，`value` 可用 `today`、`yesterday`、`last_7_days`、`last_30_days`、`this_week`、`this_month`、`last_month`、`this_year`。
 - MySQL 查询模板支持 `params[]` 参数白名单；条件值可写 `:param_name`，预览和公开运行时传入的同名参数会按 `string` / `number` / `date` / `datetime` / `time_range` 类型清洗后再进入参数绑定。未声明参数、非法参数名、类型不匹配或必填参数缺失都会被拒绝；URL 上的未知参数会被忽略。
 - `table_raw.field_aliases` 用真实字段名映射输出字段名；`computed_fields` 支持数值字段、数字、括号、`+ - * /` 四则运算，以及 `round` / `abs` / `ceil` / `floor` 安全函数白名单，不开放裸 SQL、任意函数、子查询或条件表达式。
-- HTTP 数据源使用 `http_passthrough`，支持配置 GET / POST JSON、路径、请求参数 JSON、JSON Body、响应数据路径和总数路径。
+- HTTP 数据源使用 `http_passthrough`，支持配置 GET / POST JSON、路径、请求参数 JSON、JSON Body、响应数据路径和总数路径；路径、请求参数和 JSON Body 里的 `:param_name` 会按运行时同名参数替换。
 
 ### 模板市场 `/plugin/saiboard/market`
 
@@ -532,6 +532,8 @@ K线图需要把数据行映射为 `time`、`open`、`close`、`high`、`low` �
 
 MySQL 模板支持 `params[]` 定义运行时参数，条件值里写 `:参数名` 即可绑定。运行时传入值优先，没有传入时使用默认值；必填参数没有值会拒绝执行。
 
+HTTP 模板不自动透传所有 URL 参数，只替换配置里明确写出的 `:参数名`。例如路径 `/metrics/:tenant/orders`、数据源默认参数 / 模板请求参数 `{ "range": ":range" }`、JSON Body `{ "tenant": ":tenant" }` 会读取运行时 `/screen/demo?tenant=b8&range=7d` 或查询模板页「预览参数」里的同名值；未写成占位符的 URL 参数会被忽略。路径占位符只接受标量值并会 URL 编码，数组或对象只能用于请求参数 / JSON Body 的整值占位。
+
 | 参数类型 | 说明 | 示例 |
 | --- | --- | --- |
 | `string` 文本 | 按字符串绑定，最长按后端限制截断。 | `pay_method=wechat` |
@@ -591,6 +593,7 @@ php webman b8:migrate
 | 后端 | `table_aggregate` 支持 `metrics[]` 多指标聚合和可选第二维度聚合，指标 alias 白名单化、最多 8 项，排序只允许维度、第二维度或已校验指标。 |
 | 后端 | `table_raw.computed_fields` 支持 `round` / `abs` / `ceil` / `floor` 安全函数白名单，仍禁止裸 SQL、任意函数、子查询和条件表达式。 |
 | 后端/前端 | MySQL 查询模板支持 `params[]` 参数白名单、`:param_name` 条件占位符、条件分组和组内 `AND / OR`；预览与公开运行时按白名单参数清洗后执行。 |
+| 后端/前端 | HTTP 查询模板支持路径、请求参数和 JSON Body 中的 `:param_name` 运行时占位符替换，缓存键只包含被模板实际引用的参数。 |
 | 前端 | `DraggableItem.vue`（封装 `vue3-draggable-resizable`）+ `widgets/` 注册表，复用 `art-*` 图表（柱/折线/横向柱/K线/仪表盘/漏斗/热力图/环形/雷达/散点 + 单值指标 / 表格 / 时间轴 / 点位地图）并提供 CSS 装饰边框 / 扫描线 / 标题装饰 / 分割线。 |
 | 前端 | 拖拽编辑器 + 编辑态真实数据预览 / 字段映射 + 查询模板表单化配置 + 对外运行时页（静态 `/screen/:code`、适配模式、is_public / token 鉴权）。 |
 | 前端 | 数据源新增/编辑态测试前先做表单校验；查询模板支持多指标聚合配置、HTTP GET / POST JSON 配置和取值类型说明；指标组件支持前缀 / 小数位 / 单位，表格支持最大行数 / 序号列 / 斑马纹，图表组件缩放后自动触发 resize。 |
