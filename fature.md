@@ -16,7 +16,7 @@ B8 新框架不是简单重做一个后台管理模板，而是基于 Webman 的
 
 - 分层清晰：Controller 不写业务，Logic 负责业务用例，Repository 负责数据访问，Service 负责跨模块能力，Validate 负责场景化校验。
 - 事件驱动：业务事实通过事件分发，跨模块联动优先走事件，不在 Logic 中硬编码串联。
-- Hook 可扩展：为插件预留明确扩展点，允许插件以 Action 或 Filter 方式插入逻辑，但不允许无边界修改任意运行中方法。
+- Hook 可扩展：为插件预留明确扩展点，只允许插件接收声明的输入 payload，在契约范围内修改并返回输出 payload，不允许无边界修改任意运行中方法。
 - 元数据驱动：模型注释、字段注解、表关系、字典、表单、列表、权限、模拟数据和 OpenAPI 都从统一元数据生成。
 - AI 可理解：框架默认提供 docs、skills 和 `.ai` 结构化上下文，让 AI 能基于真实运行信息开发，而不是猜测。
 - 可观测优先：请求、SQL、业务 span、trace_id、队列、任务、插件安装、Hook 执行都要可追踪。
@@ -33,8 +33,7 @@ B8 Framework
 ├── b8-plugin          插件生命周期、依赖解析、Hook 注册、事件监听
 ├── b8-marketplace     插件商城、授权、下载、签名、版本治理
 ├── b8-event           领域事件、系统事件、异步事件、事件订阅
-├── b8-hook            Action Hook、Filter Hook、Hook 契约和调试
-├── b8-aop             事务、trace、缓存、权限等框架级切面
+├── b8-hook            Hook Pipe、Hook Point 契约、Hook 调试和可观测
 ├── b8-meta            模型元数据、字段注解、表关系、数据字典
 ├── b8-faker           模拟数据、场景数据、演示数据、幂等清理
 ├── b8-generator       CRUD、迁移、OpenAPI、前端页面、插件骨架生成
@@ -195,7 +194,7 @@ b8_tenant_context()
 
 `trace_id` 只有在当前请求存在有效 trace 上下文时追加。
 
-## 6. Event、Hook 和 AOP
+## 6. Event 和 Hook
 
 ### Event
 
@@ -227,19 +226,53 @@ Event::dispatchAsync(new OrderPaid($order));
 
 Hook 是插件扩展点，类似 WordPress 的插件注入机制，但必须可声明、可审计、可调试。
 
-Hook 分两类：
+Hook 只采用单一 Pipe 模型：
 
 ```text
-Action Hook  只执行副作用，不改变原值
-Filter Hook  接收原值，允许插件修改后返回
+Input Payload -> Hook Listener -> Output Payload
 ```
+
+核心约束：
+
+- Hook 只能接收框架声明的输入 payload。
+- Hook 可以在契约范围内修改 payload，并返回新的 output payload。
+- 上一个 Hook 的 output 是下一个 Hook 的 input。
+- Hook 不负责发送通知、写审计、清缓存、推队列等旁路动作，这类联动统一使用 Event。
+- Hook 不能任意拦截正在运行的方法，只能挂载到框架显式声明的 Hook Point。
+- Hook 必须声明输入类型、输出类型、优先级、插件来源、超时策略和是否允许短路。
+- 输入输出类型不匹配时直接失败，记录 trace，并阻断当前 Hook 链。
+- Hook 执行必须记录 before/after 摘要、插件名、耗时、是否修改、异常信息和 trace_id。
+- Hook 记录和调试输出必须脱敏 token、password、secret、cookie 等敏感字段。
+
+适合用 Hook 的场景：
+
+- 创建用户前修改待入库数据。
+- 查询列表前追加业务筛选条件。
+- 计算订单价格时调整优惠、折扣或服务费。
+- 返回详情前补充插件字段。
+- 导出数据前调整字段顺序或字段值。
+
+不适合用 Hook 的场景：
+
+- 用户注册后发送欢迎邮件。
+- 支付成功后开通权益。
+- 业务变更后写审计日志。
+- 插件启用后刷新菜单和权限缓存。
+
+这些已经发生后的联动应使用 Event。
 
 示例：
 
 ```php
-Hook::do('user.created.after', $user, $context);
+$data = Hook::pipe('user.create.data', $data, $context);
 
-$price = Hook::filter('order.price.calculated', $price, $order, $context);
+$payload = Hook::pipe(
+    'order.price.calculate',
+    new OrderPricePayload($order, $items),
+    $context
+);
+
+$query = Hook::pipe('order.search.query', $queryPayload, $context);
 ```
 
 插件通过 manifest 注册 Hook：
@@ -248,15 +281,11 @@ $price = Hook::filter('order.price.calculated', $price, $order, $context);
 {
   "hooks": [
     {
-      "point": "user.created.after",
-      "type": "action",
-      "listener": "plugin\\vip\\listener\\GrantTrialVip",
-      "priority": 100
-    },
-    {
-      "point": "order.price.calculated",
-      "type": "filter",
-      "listener": "plugin\\coupon\\listener\\ApplyCoupon",
+      "point": "order.price.calculate",
+      "mode": "pipe",
+      "listener": "plugin\\coupon\\hook\\ApplyCoupon",
+      "input": "app\\order\\payload\\OrderPricePayload",
+      "output": "app\\order\\payload\\OrderPricePayload",
       "priority": 50
     }
   ]
@@ -267,10 +296,10 @@ Hook Point 必须有契约：
 
 ```php
 #[HookPoint(
-    name: 'order.price.calculated',
-    type: 'filter',
-    payload: OrderPricePayload::class,
-    returns: Money::class
+    name: 'order.price.calculate',
+    mode: 'pipe',
+    input: OrderPricePayload::class,
+    output: OrderPricePayload::class
 )]
 ```
 
@@ -278,40 +307,16 @@ Hook Point 必须有契约：
 
 ```bash
 php webman b8:hook:list
-php webman b8:hook:inspect order.price.calculated
+php webman b8:hook:inspect order.price.calculate
 php webman b8:plugin:hooks coupon
-```
-
-### AOP
-
-AOP 用于框架级横切能力，不建议完全开放给普通第三方插件。
-
-适合 AOP 的场景：
-
-- 事务。
-- trace。
-- 权限检查。
-- 缓存。
-- 限流。
-- 日志。
-
-示例：
-
-```php
-#[Transactional]
-#[Trace]
-#[Permission('order:pay')]
-public function pay(int $orderId)
-{
-}
 ```
 
 设计边界：
 
 - Event 表示事情已经发生。
-- Hook 为插件预留业务扩展点。
-- AOP 为框架织入通用横切能力。
-- 第三方插件优先使用 Hook，不允许随便拦截任意运行中方法。
+- Hook 表示事情发生前后某个明确数据节点允许被插件按契约修改。
+- Hook 只处理输入和输出，不处理旁路动作。
+- 第三方插件只能使用框架公开的 Hook Point，不允许随便拦截任意运行中方法。
 
 ## 7. 插件体系和插件商城
 
@@ -1696,11 +1701,10 @@ Webman 是常驻进程：
 - 领域事件。
 - 系统事件。
 - 异步事件。
-- Action Hook。
-- Filter Hook。
+- Hook Pipe。
 - Hook Point 契约。
+- Hook 输入输出类型校验。
 - Hook 调试和可观测。
-- AOP 基础能力。
 
 ### Phase 5：B8 Plugin + Marketplace
 
