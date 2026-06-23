@@ -402,9 +402,7 @@ class AiFactory
 
     protected static function buildChatMessages(string $message, array $history = []): MessageBag
     {
-        $messages = [
-            Message::forSystem('你是一个中文 AI 助手，请用简洁、清晰、可执行的方式回答用户。'),
-        ];
+        $messages = [];
 
         foreach ($history as $item) {
             $role = (string) ($item['role'] ?? '');

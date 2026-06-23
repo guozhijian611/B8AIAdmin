@@ -101,7 +101,6 @@ class IndexController extends BaseController
             $agent = AiFactory::createAgent($type, $model, false);
 
             $messages = new MessageBag(
-                Message::forSystem('你是一个友好的AI助手，请用中文回答用户的问题。'),
                 Message::ofUser($userMessage)
             );
 
