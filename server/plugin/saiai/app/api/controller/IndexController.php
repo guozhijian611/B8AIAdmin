@@ -61,7 +61,7 @@ class IndexController extends BaseController
         $chatLogic = new ChatLogic();
         $chatLogic->saveChat($userId, 'user', $userMessage, $type, (string) $groupId);
 
-        $generator = $this->chat($userMessage, $type, $model);
+        $generator = $this->chat($userMessage, $type, $model, (string) $groupId);
         $fullContent = '';
 
         foreach ($generator as $chunk) {
@@ -95,7 +95,7 @@ class IndexController extends BaseController
         return $this->success($data);
     }
 
-    protected function chat(string $userMessage, string $type, ?string $model = null): \Generator
+    protected function chat(string $userMessage, string $type, ?string $model = null, ?string $sessionId = null): \Generator
     {
         try {
             $agent = AiFactory::createAgent($type, $model, false);
@@ -104,10 +104,15 @@ class IndexController extends BaseController
                 Message::ofUser($userMessage)
             );
 
-            $response = $agent->call($messages, [
+            $options = [
                 'temperature' => 0.7,
                 'stream' => true,
-            ]);
+            ];
+            if (strtolower(trim($type)) === 'generic' && trim((string) $sessionId) !== '') {
+                $options['sessionID'] = trim((string) $sessionId);
+            }
+
+            $response = $agent->call($messages, $options);
 
             foreach ($response->getContent() as $content) {
                 $text = $this->normalizeStreamContent($content);
