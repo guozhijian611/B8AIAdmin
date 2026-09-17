@@ -88,16 +88,18 @@ CREATE TABLE `sa_system_config`  (
   `delete_time` datetime(0) NULL DEFAULT NULL COMMENT '删除时间',
   PRIMARY KEY (`id`, `key`) USING BTREE,
   INDEX `group_id`(`group_id`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 302 COMMENT = '参数配置信息表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 304 COMMENT = '参数配置信息表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Records of sa_system_config
 -- ----------------------------
-INSERT INTO `sa_system_config` VALUES (1, 1, 'site_copyright', 'Copyright © 2024 saithink', '版权信息', 'textarea', NULL, 96, '', 1, 1, '2026-01-01 00:00:00', '2026-01-01 00:00:00', NULL);
-INSERT INTO `sa_system_config` VALUES (2, 1, 'site_desc', '基于vue3 + webman 的极速开发框架', '网站描述', 'textarea', NULL, 97, NULL, 1, 1, '2026-01-01 00:00:00', '2026-01-01 00:00:00', NULL);
-INSERT INTO `sa_system_config` VALUES (3, 1, 'site_keywords', '后台管理系统', '网站关键字', 'input', NULL, 98, NULL, 1, 1, '2026-01-01 00:00:00', '2026-01-01 00:00:00', NULL);
-INSERT INTO `sa_system_config` VALUES (4, 1, 'site_name', 'SaiAdmin', '网站名称', 'input', NULL, 99, NULL, 1, 1, '2026-01-01 00:00:00', '2026-01-01 00:00:00', NULL);
-INSERT INTO `sa_system_config` VALUES (5, 1, 'site_record_number', '9527', '网站备案号', 'input', NULL, 95, NULL, 1, 1, '2026-01-01 00:00:00', '2026-01-01 00:00:00', NULL);
+INSERT INTO `sa_system_config` VALUES (1, 1, 'site_copyright', 'Copyright © 2026 B8AIAdmin', '版权信息', 'textarea', NULL, 96, '', 1, 1, '2026-01-01 00:00:00', '2026-01-01 00:00:00', NULL);
+INSERT INTO `sa_system_config` VALUES (2, 1, 'site_desc', 'B8AIAdmin 可配置品牌的中后台管理系统', '网站描述', 'textarea', NULL, 97, NULL, 1, 1, '2026-01-01 00:00:00', '2026-01-01 00:00:00', NULL);
+INSERT INTO `sa_system_config` VALUES (3, 1, 'site_keywords', 'B8AIAdmin,后台管理系统', '网站关键字', 'input', NULL, 98, NULL, 1, 1, '2026-01-01 00:00:00', '2026-01-01 00:00:00', NULL);
+INSERT INTO `sa_system_config` VALUES (4, 1, 'site_name', 'B8AIAdmin', '网站名称', 'input', NULL, 99, NULL, 1, 1, '2026-01-01 00:00:00', '2026-01-01 00:00:00', NULL);
+INSERT INTO `sa_system_config` VALUES (5, 1, 'site_record_number', '', '网站备案号', 'input', NULL, 95, NULL, 1, 1, '2026-01-01 00:00:00', '2026-01-01 00:00:00', NULL);
+INSERT INTO `sa_system_config` VALUES (302, 1, 'site_logo', '', '站点Logo', 'uploadImage', NULL, 94, NULL, 1, 1, '2026-01-01 00:00:00', '2026-01-01 00:00:00', NULL);
+INSERT INTO `sa_system_config` VALUES (303, 1, 'site_favicon', '', '站点Favicon', 'uploadImage', NULL, 93, NULL, 1, 1, '2026-01-01 00:00:00', '2026-01-01 00:00:00', NULL);
 INSERT INTO `sa_system_config` VALUES (6, 2, 'upload_allow_file', 'txt,doc,docx,xls,xlsx,ppt,pptx,rar,zip,7z,gz,pdf,wps,md,jpg,png,jpeg,mp4,pem,crt', '文件类型', 'input', NULL, 0, NULL, 1, 1, '2026-01-01 00:00:00', '2026-01-01 00:00:00', NULL);
 INSERT INTO `sa_system_config` VALUES (7, 2, 'upload_allow_image', 'jpg,jpeg,png,gif,svg,bmp', '图片类型', 'input', NULL, 0, NULL, 1, 1, '2026-01-01 00:00:00', '2026-01-01 00:00:00', NULL);
 INSERT INTO `sa_system_config` VALUES (8, 2, 'upload_mode', '1', '上传模式', 'select', '[{\"label\":\"本地上传\",\"value\":\"1\"},{\"label\":\"阿里云OSS\",\"value\":\"2\"},{\"label\":\"七牛云\",\"value\":\"3\"},{\"label\":\"腾讯云COS\",\"value\":\"4\"},{\"label\":\"亚马逊S3\",\"value\":\"5\"}]', 99, NULL, 1, 1, '2026-01-01 00:00:00', '2026-01-01 00:00:00', NULL);
@@ -626,7 +628,7 @@ CREATE TABLE `sa_system_user`  (
 -- ----------------------------
 -- Records of sa_system_user
 -- ----------------------------
-INSERT INTO `sa_system_user` VALUES (1, 'admin', '$2y$10$wnixh48uDnaW/6D9EygDd.OHJK0vQY/4nHaTjMKBCVDBP2NiTatqS', '祭道之上', '2', 'https://ui-avatars.com/api/?name=b8Admin', 'saiadmin@admin.com', '15888888888', 'SaiAdmin是兼具设计美学与高效开发的后台系统!', 'statistics', 1, 1, 1, NULL, NULL, NULL, 1, 1, '2026-01-01 00:00:00', '2026-01-01 00:00:00', NULL);
+INSERT INTO `sa_system_user` VALUES (1, 'admin', '$2y$10$wnixh48uDnaW/6D9EygDd.OHJK0vQY/4nHaTjMKBCVDBP2NiTatqS', '祭道之上', '2', 'https://ui-avatars.com/api/?name=b8Admin', 'saiadmin@admin.com', '15888888888', 'B8AIAdmin 是兼具设计美学与高效开发的中后台管理系统!', 'statistics', 1, 1, 1, NULL, NULL, NULL, 1, 1, '2026-01-01 00:00:00', '2026-01-01 00:00:00', NULL);
 INSERT INTO `sa_system_user` VALUES (2, 'martin', '$2y$10$J3EkwRH8rNkveaanx1.j.ebRiBpnnVUGWa.i2MS3aNpb9ydAOolmm', '刘炽平', '2', 'https://ui-avatars.com/api/?name=b8Admin', 'martin@163.com', '15888888888', NULL, 'work', 1, 0, 1, '', NULL, NULL, 1, 1, '2026-01-01 00:00:00', '2026-01-01 00:00:00', NULL);
 INSERT INTO `sa_system_user` VALUES (3, 'allen', '$2y$10$H8d7riOjOiwPSopguEQ1fuKZz.fA0A54OvuzTqgJlbG1N3uOxEwM.', '张小龙', '', 'https://ui-avatars.com/api/?name=b8Admin', '', '15888888888', NULL, 'work', 10, 0, 1, '', NULL, NULL, 1, 1, '2026-01-01 00:00:00', '2026-01-01 00:00:00', NULL);
 INSERT INTO `sa_system_user` VALUES (4, 'mark', '$2y$10$sY/4StKVV.N/8Ock8J8kdeIOK4jS4tAUoYjkzvB8Tzy0fLh.wA2KS', '任宇昕', NULL, 'https://ui-avatars.com/api/?name=b8Admin', NULL, '15888888888', NULL, 'work', 11, 0, 1, NULL, NULL, NULL, 1, 1, '2026-01-01 00:00:00', '2026-01-01 00:00:00', NULL);
