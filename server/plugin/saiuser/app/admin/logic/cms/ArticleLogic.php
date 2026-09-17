@@ -17,6 +17,11 @@ use plugin\saiuser\app\model\cms\Article;
 class ArticleLogic extends BaseLogic
 {
     /**
+     * 域策略：业务数据按 created_by 做数据范围隔离（非 tenant 多租户）
+     */
+    protected bool $scope = true;
+
+    /**
      * 构造函数
      */
     public function __construct()

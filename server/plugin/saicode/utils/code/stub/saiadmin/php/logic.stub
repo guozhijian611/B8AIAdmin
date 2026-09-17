@@ -27,6 +27,11 @@ use OpenSpout\Reader\XLSX\Reader;
 class {{class_name}}Logic extends BaseLogic
 {
     /**
+     * 域策略默认开启数据范围（created_by）。全局/共享资源请显式改为 false。
+     */
+    protected bool $scope = true;
+
+    /**
      * 构造函数
      */
     public function __construct()
