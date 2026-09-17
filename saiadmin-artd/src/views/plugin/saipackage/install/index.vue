@@ -74,6 +74,14 @@
               <ElTag v-else-if="row.state === 4" type="warning">等待安装依赖</ElTag>
             </template>
 
+            <!-- 安装来源列 -->
+            <template #install_source="{ row }">
+              <span v-if="row.install_source === 'upstream'">上游</span>
+              <span v-else-if="row.install_source === 'b8_local'">本地</span>
+              <span v-else-if="row.install_source === 'b8_remote'">B8远程</span>
+              <span v-else>—</span>
+            </template>
+
             <!-- 前端依赖列 -->
             <template #npm="{ row }">
               <ElLink
@@ -513,6 +521,7 @@
     { prop: 'author', label: '作者', width: 120 },
     { prop: 'version', label: '版本', width: 100 },
     { prop: 'support', label: '框架兼容', width: 120, align: 'center' },
+    { prop: 'install_source', label: '安装来源', width: 110, useSlot: true },
     { prop: 'state', label: '插件状态', width: 100, useSlot: true },
     { prop: 'npm', label: '前端依赖', width: 100, useSlot: true },
     { prop: 'composer', label: '后端依赖', width: 100, useSlot: true },

@@ -23,3 +23,12 @@
 2. （可选）根据需要修改 `MARKET_UPSTREAM_BASE_URL`。
 3. 重启 Webman 服务（`php start.php restart` 或重载）以使配置生效。
 4. 刷新前端页面，“在线商店”Tab 即可出现，并能够正常访问上游市场资源。
+
+## 安装来源 install_source
+
+插件安装时，系统会在插件的 `info.ini`（位于 `runtime/saipackage/{app}/info.ini`）中记录安装来源标记 `install_source`。
+
+支持的三个值为：
+- `upstream`：上游在线商店下载安装。
+- `b8_local`：本地 zip 上传。默认所有本地上传的插件都会带有此标记。
+- `b8_remote`：远程 B8 市场（目前仅作预留）。

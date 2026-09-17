@@ -480,7 +480,7 @@ class InstallController extends BaseController
         try {
             // 调用 InstallLogic 处理
             $install = new InstallLogic();
-            $info = $install->uploadFromPath($tempZip);
+            $info = $install->uploadFromPath($tempZip, InstallLogic::INSTALL_SOURCE_UPSTREAM);
 
             return $this->success($info, '下载成功，请在插件列表中安装');
         } catch (Throwable $e) {

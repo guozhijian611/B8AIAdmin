@@ -21,6 +21,10 @@ class InstallLogic
     public const DEPENDENT_WAIT_INSTALL = 4;
     public const DIRECTORY_OCCUPIED = 5;
 
+    public const INSTALL_SOURCE_UPSTREAM = 'upstream';
+    public const INSTALL_SOURCE_B8_LOCAL = 'b8_local';
+    public const INSTALL_SOURCE_B8_REMOTE = 'b8_remote';
+
     /**
      * @var string 安装目录
      */
@@ -337,26 +341,32 @@ class InstallLogic
     /**
      * 从本地 zip 文件路径安装（用于在线下载后安装）
      * @param string $zipPath zip 文件完整路径
+     * @param string $installSource 安装来源标记
      * @return array 模块的基本信息
      * @throws Throwable
      */
-    public function uploadFromPath(string $zipPath): array
+    public function uploadFromPath(string $zipPath, string $installSource = self::INSTALL_SOURCE_B8_LOCAL): array
     {
         if (!is_file($zipPath)) {
             throw new ApiException('文件不存在');
         }
 
-        return $this->unpack($zipPath);
+        return $this->unpack($zipPath, $installSource);
     }
 
     /**
      * 解包并放入待安装状态
      * @param string $zipPath zip 文件完整路径，处理完会被删除
+     * @param string $installSource 安装来源标记
      * @return array 模块的基本信息
      * @throws Throwable
      */
-    protected function unpack(string $zipPath): array
+    protected function unpack(string $zipPath, string $installSource = self::INSTALL_SOURCE_B8_LOCAL): array
     {
+        if (!in_array($installSource, [self::INSTALL_SOURCE_UPSTREAM, self::INSTALL_SOURCE_B8_LOCAL, self::INSTALL_SOURCE_B8_REMOTE], true)) {
+            throw new ApiException('非法安装来源');
+        }
+
         // 解压
         $copyToDir = Filesystem::unzip($zipPath) . DIRECTORY_SEPARATOR;
 
@@ -420,7 +430,7 @@ class InstallLogic
             Filesystem::delDir($this->appDir);
         }
 
-        $newInfo = ['state' => self::WAIT_INSTALL];
+        $newInfo = ['state' => self::WAIT_INSTALL, 'install_source' => $installSource];
         if ($upgrade) {
             $newInfo['update'] = 1;
         }
