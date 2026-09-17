@@ -196,6 +196,32 @@ class InstallController extends BaseController
     // ========== 商店代理接口 ==========
 
     /**
+     * 获取上游状态
+     */
+    public function onlineStatus(): Response
+    {
+        return $this->success(['upstream_enabled' => $this->upstreamEnabled()]);
+    }
+
+    protected function upstreamEnabled(): bool
+    {
+        $enabled = config('plugin.saipackage.app.market_upstream_enabled', false);
+        if (is_bool($enabled)) return $enabled;
+        return in_array(strtolower((string)$enabled), ['true', '1', 'yes', 'on'], true);
+    }
+
+    protected function upstreamBaseUrl(): string
+    {
+        $base = config('plugin.saipackage.app.market_upstream_base_url') ?: 'https://saas.saithink.top/dev-api';
+        return rtrim((string) $base, '/');
+    }
+
+    protected function upstreamUrl(string $path): string
+    {
+        return $this->upstreamBaseUrl() . '/' . ltrim($path, '/');
+    }
+
+    /**
      * 代理请求封装
      */
     protected function proxyRequest(string $url, string $method = 'GET', ?string $token = null, ?array $postData = null, int $timeout = 10): array
@@ -265,6 +291,10 @@ class InstallController extends BaseController
      */
     public function appList(Request $request): Response
     {
+        if (!$this->upstreamEnabled()) {
+            return $this->fail('上游应用市场已关闭');
+        }
+
         $params = http_build_query([
             'page' => $request->input('page', 1),
             'limit' => $request->input('limit', 16),
@@ -273,7 +303,7 @@ class InstallController extends BaseController
             'keywords' => $request->input('keywords', ''),
         ]);
 
-        $result = $this->proxyRequest("https://saas.saithink.top/dev-api/app/saistore/api/store/appList?{$params}");
+        $result = $this->proxyRequest($this->upstreamUrl("app/saistore/api/store/appList?{$params}"));
 
         return $result['success']
             ? $this->success($result['data'])
@@ -285,7 +315,11 @@ class InstallController extends BaseController
      */
     public function storeCaptcha(): Response
     {
-        $result = $this->proxyRequest("https://saas.saithink.top/dev-api/app/saiuser/api/common/index/captcha");
+        if (!$this->upstreamEnabled()) {
+            return $this->fail('上游应用市场已关闭');
+        }
+
+        $result = $this->proxyRequest($this->upstreamUrl("app/saiuser/api/common/index/captcha"));
 
         return $result['success']
             ? $this->success($result['data'])
@@ -297,8 +331,12 @@ class InstallController extends BaseController
      */
     public function storeLogin(Request $request): Response
     {
+        if (!$this->upstreamEnabled()) {
+            return $this->fail('上游应用市场已关闭');
+        }
+
         $result = $this->proxyRequest(
-            "https://saas.saithink.top/dev-api/app/saiuser/api/common/index/accountLogin",
+            $this->upstreamUrl("app/saiuser/api/common/index/accountLogin"),
             'POST',
             null,
             [
@@ -319,13 +357,17 @@ class InstallController extends BaseController
      */
     public function storeUserInfo(Request $request): Response
     {
+        if (!$this->upstreamEnabled()) {
+            return $this->fail('上游应用市场已关闭');
+        }
+
         $token = $request->input('token');
         if (empty($token)) {
             return $this->fail('未登录');
         }
 
         $result = $this->proxyRequest(
-            "https://saas.saithink.top/dev-api/app/saiuser/api/user/user/userInfo",
+            $this->upstreamUrl("app/saiuser/api/user/user/userInfo"),
             'GET',
             $token
         );
@@ -340,13 +382,17 @@ class InstallController extends BaseController
      */
     public function storePurchasedApps(Request $request): Response
     {
+        if (!$this->upstreamEnabled()) {
+            return $this->fail('上游应用市场已关闭');
+        }
+
         $token = $request->input('token');
         if (empty($token)) {
             return $this->fail('未登录');
         }
 
         $result = $this->proxyRequest(
-            "https://saas.saithink.top/dev-api/app/saistore/api/StoreOrder/orderList?saiType=all",
+            $this->upstreamUrl("app/saistore/api/StoreOrder/orderList?saiType=all"),
             'GET',
             $token
         );
@@ -361,6 +407,10 @@ class InstallController extends BaseController
      */
     public function storeAppVersions(Request $request): Response
     {
+        if (!$this->upstreamEnabled()) {
+            return $this->fail('上游应用市场已关闭');
+        }
+
         $token = $request->input('token');
         $appId = $request->input('app_id');
 
@@ -369,7 +419,7 @@ class InstallController extends BaseController
         }
 
         $result = $this->proxyRequest(
-            "https://saas.saithink.top/dev-api/app/saistore/api/StoreOrder/appVersionList?app_id={$appId}",
+            $this->upstreamUrl("app/saistore/api/StoreOrder/appVersionList?app_id={$appId}"),
             'GET',
             $token
         );
@@ -384,6 +434,10 @@ class InstallController extends BaseController
      */
     public function storeDownloadApp(Request $request): Response
     {
+        if (!$this->upstreamEnabled()) {
+            return $this->fail('上游应用市场已关闭');
+        }
+
         $token = $request->input('token');
         $versionId = $request->input('id');
 
@@ -396,7 +450,7 @@ class InstallController extends BaseController
         }
 
         $result = $this->proxyRequest(
-            "https://saas.saithink.top/dev-api/app/saistore/api/StoreOrder/downloadVersion",
+            $this->upstreamUrl("app/saistore/api/StoreOrder/downloadVersion"),
             'POST',
             $token,
             ['version_id' => (int) $versionId],

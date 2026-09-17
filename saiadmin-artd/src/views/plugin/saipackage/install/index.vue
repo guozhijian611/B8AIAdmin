@@ -133,7 +133,7 @@
         </ElTabPane>
 
         <!-- 在线商店 Tab -->
-        <ElTabPane label="在线商店" name="online">
+        <ElTabPane v-if="upstreamEnabled" label="在线商店" name="online">
           <!-- 搜索栏 -->
           <div class="flex flex-wrap items-center gap-4 mb-4">
             <ElInput
@@ -419,6 +419,7 @@
 
   // ========== 基础状态 ==========
   const activeTab = ref('local')
+  const upstreamEnabled = ref(false)
   const version = ref<VersionInfo>({})
   const loading = ref(false)
   const installFormRef = ref()
@@ -742,8 +743,18 @@
     }
   })
 
+  const getOnlineStatus = async () => {
+    try {
+      const resp = await saipackageApi.getOnlineStatus()
+      upstreamEnabled.value = resp?.upstream_enabled || false
+    } catch {
+      // default false
+    }
+  }
+
   onMounted(() => {
     getList()
+    getOnlineStatus()
   })
 </script>
 

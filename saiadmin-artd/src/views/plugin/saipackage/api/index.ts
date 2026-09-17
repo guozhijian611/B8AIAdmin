@@ -113,6 +113,15 @@ export default {
   },
 
   /**
+   * 获取上游市场状态
+   */
+  getOnlineStatus() {
+    return request.get<{ upstream_enabled: boolean }>({
+      url: '/tool/install/online/status'
+    })
+  },
+
+  /**
    * 获取在线商店应用列表
    */
   getOnlineAppList(params: {

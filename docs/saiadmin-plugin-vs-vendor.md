@@ -88,3 +88,12 @@ Files server/plugin/saiadmin/utils/code/stub/saiadmin/sql/sql.stub and server/ve
 Files server/plugin/saiadmin/utils/code/stub/saiadmin/vue/edit-dialog.stub and server/vendor/saithink/saiadmin/src/plugin/saiadmin/utils/code/stub/saiadmin/vue/edit-dialog.stub differ
 Files server/plugin/saiadmin/utils/code/stub/saiadmin/vue/index.stub and server/vendor/saithink/saiadmin/src/plugin/saiadmin/utils/code/stub/saiadmin/vue/index.stub differ
 ```
+
+## `saipackage` SoT 保护
+
+与 `saiadmin` 类似，本项目的 `saipackage` 插件也受 SoT (Source of Truth) 保护。在执行 `composer install` 或 `composer update` 时，如果 `server/plugin/saipackage` 目录已存在，Composer 将自动跳过 `saithink/saipackage` 的安装/卸载脚本，以防止覆盖或删除本地定制。
+
+若需强制覆盖本地的 `saipackage`，可以在命令前设置环境变量：
+```bash
+FORCE_SAIPACKAGE_PLUGIN_INSTALL=1 composer update saithink/saipackage
+```
