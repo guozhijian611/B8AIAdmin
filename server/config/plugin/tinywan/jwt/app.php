@@ -7,13 +7,13 @@ return [
         'algorithms' => 'HS256',
 
         /** access令牌秘钥（安装时自动生成64位随机值） */
-        'access_secret_key' => '1586e6e19732ebd7cfb58f3a1a59f9d9b53d08a075a99bc6b405c40bd17ceeef',
+        'access_secret_key' => env('JWT_ACCESS_SECRET', ''),
 
         /** access令牌过期时间，单位：秒。默认 2 小时 */
         'access_exp' => 7200,
 
         /** refresh令牌秘钥（安装时自动生成64位随机值） */
-        'refresh_secret_key' => 'd6e61faa17952dccaf63b3b29b376757fefbc40c450dbabb35380aa9ca298d81',
+        'refresh_secret_key' => env('JWT_REFRESH_SECRET', ''),
 
         /** refresh令牌过期时间，单位：秒。默认 7 天 */
         'refresh_exp' => 604800,

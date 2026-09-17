@@ -48,15 +48,17 @@ server/config/plugin/tinywan/jwt/app.php
 
 ```php
 'algorithms' => 'HS256',
-'access_secret_key' => '...',
+'access_secret_key' => env('JWT_ACCESS_SECRET', ''),
 'access_exp' => 7200,
-'refresh_secret_key' => '...',
+'refresh_secret_key' => env('JWT_REFRESH_SECRET', ''),
 'refresh_exp' => 604800,
 'refresh_disable' => false,
 'is_single_device' => false,
 'cache_token_pre' => 'JWT:TOKEN:',
 'cache_refresh_token_pre' => 'JWT:REFRESH_TOKEN:',
 ```
+
+> 注：`access_secret_key` 与 `refresh_secret_key` 均已改为从 `.env` 读取 `JWT_ACCESS_SECRET` 与 `JWT_REFRESH_SECRET`，切勿将真实密钥硬编码在配置文件中或提交到仓库。
 
 注意：`server/plugin/saiadmin/config/saithink.php` 里的 `access_exp` 会在后台登录时覆盖 access token 有效期，当前后台登录逻辑优先读取：
 
