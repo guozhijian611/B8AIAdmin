@@ -1,6 +1,6 @@
 # 品牌配置说明 (Brand Config)
 
-本文档说明了 B8AIAdmin 的白标（White-Label）品牌配置方案，当前主要实现了 K1 阶段（后台可配置 + 种子默认中性化），并规划了 K2 阶段（公开品牌 API）。
+本文档说明了 B8AIAdmin 的白标（White-Label）品牌配置方案，当前主要实现了 K1 阶段（后台可配置 + 种子默认中性化），并已实现 K2 阶段（公开品牌 Bootstrap API）。
 
 ## K1: 品牌种子与配置就绪
 
@@ -28,11 +28,34 @@
 
 `sa_site_info` (id = 1) 的种子数据亦做了相应对齐。
 
-## K2: 公开品牌 API 需求清单 (规划)
+## K2: 公开品牌 API 需求清单 (已实现)
 
-为了使前台或登录页面能够在用户未登录时动态加载白标品牌，K2 需要开发一个免鉴权的公开品牌 API（如 `/api/v1/system/brand` 或在获取验证码/系统配置公开接口中集成）。
+为了使前台或登录页面能够在用户未登录时动态加载白标品牌，K2 开发了一个免鉴权的公开品牌 API。
 
-**需要暴露的字段清单如下**：
+### 接口详情
+
+- **URL**: `GET /core/system/brand`
+- **说明**: 返回系统的白标品牌配置。缺失键则返回空字符串。不包含敏感或未公开配置。
+
+**返回 JSON 示例**:
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "site_name": "B8AIAdmin",
+    "site_logo": "",
+    "site_favicon": "",
+    "site_desc": "B8AIAdmin 可配置品牌的中后台管理系统",
+    "site_keywords": "B8AIAdmin,后台管理系统",
+    "site_copyright": "Copyright © 2026 B8AIAdmin",
+    "site_record_number": ""
+  }
+}
+```
+
+**暴露字段说明**：
 
 1. **`site_name`**: 用于页面 `<title>` 和登录页主标题。
 2. **`site_logo`**: 用于左上角/登录页的品牌 Logo 图像 URL。
@@ -42,4 +65,4 @@
 6. **`site_copyright`**: 登录页底部的版权声明。
 7. **`site_record_number`**: 登录页底部的备案号展示及外链。
 
-*(注：K2 的 API 实现及 K3 的前端完整接线不包含在本次 K1 的范围中。)*
+*(注：K3 的前端完整接线不包含在本次 K1/K2 的范围中。)*

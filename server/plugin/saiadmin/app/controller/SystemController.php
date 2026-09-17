@@ -29,6 +29,29 @@ class SystemController extends BaseController
 {
 
     /**
+     * 不需要登录的方法
+     * @var array
+     */
+    protected array $noNeedLogin = ['brand'];
+
+    /**
+     * 获取系统品牌配置 (免登录)
+     */
+    public function brand(): Response
+    {
+        $siteConfig = getConfigGroup('site_config', true);
+        $keys = [
+            'site_name', 'site_logo', 'site_favicon', 'site_desc',
+            'site_keywords', 'site_copyright', 'site_record_number'
+        ];
+        $data = [];
+        foreach ($keys as $key) {
+            $data[$key] = $siteConfig[$key] ?? '';
+        }
+        return $this->success($data);
+    }
+
+    /**
      * 用户信息
      */
     public function userInfo(): Response
