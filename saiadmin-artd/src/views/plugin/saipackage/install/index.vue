@@ -578,7 +578,7 @@
   }
 
   const handleRegister = () => {
-    window.open('https://saas.saithink.top/register', '_blank')
+    ElMessage.info('当前环境未配置外部应用市场注册入口')
   }
 
   const handleLogout = () => {
@@ -680,7 +680,7 @@
   }
 
   const handleBuy = () => {
-    window.open('https://saas.saithink.top/apps', '_blank')
+    ElMessage.info('当前环境未配置外部应用市场')
   }
 
   const showPurchasedApps = async () => {
@@ -697,7 +697,7 @@
   }
 
   const viewDocs = (app: PurchasedApp) => {
-    window.open(`https://saas.saithink.top/docs/${app.appname}`, '_blank')
+    ElMessage.info('当前环境未配置应用文档入口')
   }
 
   const showVersions = async (app: PurchasedApp) => {

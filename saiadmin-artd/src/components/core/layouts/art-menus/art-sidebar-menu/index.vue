@@ -84,7 +84,7 @@
               opacity: !menuOpen ? 0 : 1
             }"
           >
-            {{ AppConfig.systemInfo.name }}
+            {{ brandStore.site_name }}
           </p>
         </div>
 
@@ -139,8 +139,11 @@
   import SidebarSubmenu from './widget/SidebarSubmenu.vue'
   import { useCommon } from '@/hooks/core/useCommon'
   import { useWindowSize, useTimeoutFn } from '@vueuse/core'
+  import { useBrandStore } from '@/store/modules/brand'
 
   defineOptions({ name: 'ArtSidebarMenu' })
+
+  const brandStore = useBrandStore()
 
   const MOBILE_BREAKPOINT = 800
   const ANIMATION_DELAY = 350

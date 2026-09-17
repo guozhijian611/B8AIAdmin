@@ -3,7 +3,7 @@
   <div class="login-left-view">
     <div class="logo">
       <ArtLogo class="icon" size="46" />
-      <h1 class="title">{{ AppConfig.systemInfo.name }}</h1>
+      <h1 class="title">{{ brandStore.site_name }}</h1>
     </div>
 
     <div class="left-img">
@@ -74,6 +74,9 @@
   import AppConfig from '@/config'
   import loginIcon from '@imgs/svg/login_icon.svg'
   import { themeAnimation } from '@/utils/ui/animation'
+  import { useBrandStore } from '@/store/modules/brand'
+
+  const brandStore = useBrandStore()
 
   // 定义 props
   defineProps<{

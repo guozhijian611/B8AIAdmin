@@ -1,7 +1,7 @@
 <!-- 系统logo -->
 <template>
   <div class="flex-cc">
-    <img :style="logoStyle" src="@imgs/common/logo.png" alt="logo" class="w-full h-full" />
+    <img :style="logoStyle" :src="logoSrc" alt="logo" class="w-full h-full" />
   </div>
 </template>
 
@@ -17,5 +17,10 @@
     size: 36
   })
 
-  const logoStyle = computed(() => ({ width: `${props.size}px` }))
+  import defaultLogo from '@/assets/img/common/logo.png'
+  import { useBrandStore } from '@/store/modules/brand'
+
+  const brandStore = useBrandStore()
+  const logoSrc = computed(() => brandStore.site_logo || defaultLogo)
+  const logoStyle = computed(() => ({ width: `${props.size}px`, objectFit: 'contain' as any }))
 </script>

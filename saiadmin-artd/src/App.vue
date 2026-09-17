@@ -13,7 +13,10 @@
   import { checkStorageCompatibility } from './utils/storage'
   import { initializeTheme } from './hooks/core/useTheme'
 
+  import { useBrandStore } from './store/modules/brand'
+
   const userStore = useUserStore()
+  const brandStore = useBrandStore()
   const { language } = storeToRefs(userStore)
 
   const locales = {
@@ -21,7 +24,8 @@
     en: en
   }
 
-  onBeforeMount(() => {
+  onBeforeMount(async () => {
+    await brandStore.loadBrand()
     toggleTransition(true)
     initializeTheme()
   })

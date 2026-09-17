@@ -6,7 +6,7 @@
     :style="{ zIndex: zIndex }"
   >
     <ElWatermark
-      :content="content"
+      :content="displayContent"
       :font="{ fontSize: fontSize, color: fontColor }"
       :rotate="rotate"
       :gap="[gapX, gapY]"
@@ -18,7 +18,6 @@
 </template>
 
 <script setup lang="ts">
-  import AppConfig from '@/config'
   import { useSettingStore } from '@/store/modules/setting'
 
   defineOptions({ name: 'ArtWatermark' })
@@ -49,8 +48,8 @@
     zIndex?: number
   }
 
-  withDefaults(defineProps<WatermarkProps>(), {
-    content: AppConfig.systemInfo.name,
+  const props = withDefaults(defineProps<WatermarkProps>(), {
+    content: undefined,
     visible: false,
     fontSize: 16,
     fontColor: 'rgba(128, 128, 128, 0.2)',
@@ -61,4 +60,8 @@
     offsetY: 50,
     zIndex: 3100
   })
+
+  import { useBrandStore } from '@/store/modules/brand'
+  const brandStore = useBrandStore()
+  const displayContent = computed(() => props.content ?? brandStore.site_name)
 </script>

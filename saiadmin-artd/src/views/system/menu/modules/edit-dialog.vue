@@ -68,7 +68,7 @@
         </el-col>
         <el-col :span="24" v-if="formData.type === 4">
           <el-form-item label="外链地址" prop="link_url">
-            <el-input v-model="formData.link_url" placeholder="如：https://saithink.top" />
+            <el-input v-model="formData.link_url" placeholder="如：https://www.example.com" />
           </el-form-item>
         </el-col>
         <el-col :span="12">

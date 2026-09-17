@@ -83,13 +83,18 @@
           </ElForm>
         </div>
       </div>
+      <div class="absolute bottom-4 w-full text-center text-sm text-gray-500">
+        <span v-if="brandStore.site_copyright">{{ brandStore.site_copyright }}</span>
+        <span v-if="brandStore.site_copyright && brandStore.site_record_number" class="mx-2">|</span>
+        <span v-if="brandStore.site_record_number">{{ brandStore.site_record_number }}</span>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-  import AppConfig from '@/config'
   import { useUserStore } from '@/store/modules/user'
+  import { useBrandStore } from '@/store/modules/brand'
   import { useI18n } from 'vue-i18n'
   import { HttpError } from '@/utils/http/error'
   import { fetchCaptcha, fetchLogin, fetchGetUserInfo } from '@/api/auth'
@@ -112,7 +117,8 @@
     'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
   )
 
-  const systemName = AppConfig.systemInfo.name
+  const brandStore = useBrandStore()
+  const systemName = computed(() => brandStore.site_name)
   const formRef = ref<FormInstance>()
 
   const formData = reactive({
@@ -199,7 +205,7 @@
         type: 'success',
         duration: 2500,
         zIndex: 10000,
-        message: `${t('login.success.message')}, ${systemName}!`
+        message: `${t('login.success.message')}, ${systemName.value}!`
       })
     }, 150)
   }

@@ -66,3 +66,14 @@
 7. **`site_record_number`**: 登录页底部的备案号展示及外链。
 
 *(注：K3 的前端完整接线不包含在本次 K1/K2 的范围中。)*
+
+## K3: 前端白标接线（已实现）
+
+管理端在 `App.vue` 的 `onBeforeMount` 请求 `GET /core/system/brand`，写入 Pinia `app-brand` store，用于：
+
+- 登录页 / 顶栏 / 侧栏系统名
+- 路由 `document.title`
+- Logo（`site_logo`）与 favicon（`site_favicon`）
+- 登录页底部 `site_copyright`、`site_record_number`
+
+失败时静默回退名称 `B8AIAdmin`，不阻断登录。字段名与公开 API 保持一致。
