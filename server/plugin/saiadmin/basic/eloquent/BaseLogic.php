@@ -16,6 +16,13 @@ use plugin\saiadmin\exception\ApiException;
 class BaseLogic extends AbstractLogic
 {
     /**
+     * 是否启用数据权限
+     * 安全要求：默认必须为 false，避免全局应用数据权限过滤。
+     * 若业务逻辑层需要数据权限（如仅能看本人或本部门的数据），必须在子类 Logic 中显式重写为 true。
+     * @var bool
+     */
+    protected bool $scope = false;
+    /**
      * 数据库事务操作
      * @param callable $closure
      * @param bool $isTran
@@ -65,6 +72,8 @@ class BaseLogic extends AbstractLogic
         }
         return $model;
     }
+
+
 
     /**
      * 删除数据

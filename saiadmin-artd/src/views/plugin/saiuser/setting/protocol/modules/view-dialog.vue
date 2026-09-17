@@ -11,7 +11,7 @@
         ><sa-dict :value="formData?.status" dict="data_status" render="span"
       /></el-descriptions-item>
       <el-descriptions-item label="协议内容"
-        ><div v-html="formData?.content"></div
+        ><div v-html="DOMPurify.sanitize(formData?.content || '')"></div
       ></el-descriptions-item>
       <el-descriptions-item label="创建时间"
         ><div v-text="formData?.create_time"></div
@@ -24,6 +24,7 @@
 </template>
 
 <script setup lang="ts">
+  import DOMPurify from 'dompurify'
   import api from '../../../api/setting/protocol'
   interface Props {
     modelValue: boolean

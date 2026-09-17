@@ -19,7 +19,7 @@
           <div v-text="formData?.describe"></div>
         </el-descriptions-item>
         <el-descriptions-item label="文章内容">
-          <div v-html="formData?.content"></div>
+          <div v-html="DOMPurify.sanitize(formData?.content || '')"></div>
         </el-descriptions-item>
         <el-descriptions-item label="浏览次数">
           <div v-text="formData?.views"></div>
@@ -43,6 +43,7 @@
 </template>
 
 <script setup lang="ts">
+  import DOMPurify from 'dompurify'
   import api from '../../../api/cms/article'
 
   interface Props {

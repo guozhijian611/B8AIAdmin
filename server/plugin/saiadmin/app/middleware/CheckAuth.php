@@ -46,7 +46,27 @@ class CheckAuth implements MiddlewareInterface
         // 2. 获取接口权限属性 (使用缓存类)
         $permissions = ReflectionCache::getPermissionAttributes($controller, $action);
 
-        if (!empty($permissions) && !empty($permissions['slug'])) {
+        if (empty($permissions)) {
+            // 已登录但业务上作为公共接口的白名单 (免 #[Permission] 校验)
+            // 避免在全面 fail-closed 时误伤公共接口
+            $publicActions = [
+                'SystemController' => ['userInfo', 'dictAll', 'menu', 'getLoginLogList', 'getOperationLogList', 'clearAllCache'],
+                'SystemDeptController' => ['accessDept'],
+                'DataBaseController' => ['source'],
+                'SystemPostController' => ['downloadTemplate', 'accessPost'],
+                'SystemMenuController' => ['accessMenu'],
+                'SystemRoleController' => ['accessRole'],
+                'SystemUserController' => ['updateInfo', 'modifyPassword'],
+            ];
+            $controllerName = class_basename($controller);
+            if (isset($publicActions[$controllerName]) && in_array($action, $publicActions[$controllerName])) {
+                return $handler($request);
+            }
+            
+            throw new SystemException('权限不足，接口未配置权限属性');
+        }
+
+        if (!empty($permissions['slug'])) {
             // 用户权限缓存
             $auth = UserAuthCache::getUserAuth($token['id']);
 

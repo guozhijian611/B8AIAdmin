@@ -82,6 +82,12 @@ const formatDateTime = (): string => {
 
 /**
  * 构建终端 WebSocket URL
+ * 安全提示：由于 EventSource API 原生不支持自定义 Header (如 Authorization)，
+ * 此处暂将长生命周期 JWT token 放入 query string (token=)。
+ * 风险缓解：
+ * 1. 确保后端接口对 token 获取有 CheckLogin 等鉴权过滤。
+ * 2. 禁止在后端访问日志或网关层记录完整 URL 导致 Token 泄露。
+ * 3. 推荐未来优化：后端提供专门签发短时、单次消耗的 Ticket 接口供终端使用。
  */
 const buildTerminalUrl = (commandKey: string, uuid: string, extend: string): string => {
   const env = import.meta.env

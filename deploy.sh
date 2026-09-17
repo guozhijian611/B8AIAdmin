@@ -27,13 +27,13 @@ LOCAL_DB_HOST="${LOCAL_DB_HOST:-127.0.0.1}"
 LOCAL_DB_PORT="${LOCAL_DB_PORT:-3306}"
 LOCAL_DB_NAME="${LOCAL_DB_NAME:-b8aiadmin}"
 LOCAL_DB_USER="${LOCAL_DB_USER:-root}"
-LOCAL_DB_PASS="${LOCAL_DB_PASS:-root}"
+LOCAL_DB_PASS="${LOCAL_DB_PASS:-change-me-local-db-pass}"
 
 REMOTE_DB_HOST="${REMOTE_DB_HOST:-127.0.0.1}"
 REMOTE_DB_PORT="${REMOTE_DB_PORT:-3306}"
 REMOTE_DB_NAME="${REMOTE_DB_NAME:-b8aiadmin}"
 REMOTE_DB_USER="${REMOTE_DB_USER:-b8aiadmin}"
-REMOTE_DB_PASS="${REMOTE_DB_PASS:-b8aiadmin}"
+REMOTE_DB_PASS="${REMOTE_DB_PASS:-change-me-remote-db-pass}"
 
 BUILD_ADMIN="${BUILD_ADMIN:-}"
 BUILD_H5="${BUILD_H5:-}"
@@ -183,6 +183,15 @@ require_command rsync
 
 if [[ "$SYNC_DB" == "1" && "$DRY_RUN" != "1" ]]; then
   require_command mysqldump
+  
+  if [[ -z "$LOCAL_DB_PASS" || "$LOCAL_DB_PASS" == "change-me-local-db-pass" ]]; then
+    echo "错误：请设置 LOCAL_DB_PASS 环境变量，避免使用默认或空密码！" >&2
+    exit 1
+  fi
+  if [[ -z "$REMOTE_DB_PASS" || "$REMOTE_DB_PASS" == "change-me-remote-db-pass" ]]; then
+    echo "错误：请设置 REMOTE_DB_PASS 环境变量，避免使用默认或空密码！" >&2
+    exit 1
+  fi
 fi
 
 if [[ "$CHECK_WEBMAN_DISABLED_FUNCTIONS" == "1" ]]; then

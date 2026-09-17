@@ -73,6 +73,16 @@ class InstallController extends OpenController
         $port = (int) $request->post('port') ?: 3306;
         $dataType = $request->post('dataType', 'demo');
 
+        if (!preg_match('/^[a-zA-Z0-9_\-\.]+$/', $host)) {
+            return $this->fail('Host 包含非法字符');
+        }
+        if (!preg_match('/^[a-zA-Z0-9_]+$/', $database)) {
+            return $this->fail('Database 包含非法字符');
+        }
+        if (!preg_match('/^[a-zA-Z0-9_]+$/', $user)) {
+            return $this->fail('Username 包含非法字符');
+        }
+
         try {
             $db = $this->getPdo($host, $user, $password, $port);
             $smt = $db->query("show databases like '$database'");
@@ -177,7 +187,7 @@ return [
             // 数据库用户名
             'username' => env('DB_USER', 'root'),
             // 数据库密码
-            'password' => env('DB_PASSWORD', '123456'),
+            'password' => env('DB_PASSWORD', ''),
             // 数据库连接端口
             'hostport' => env('DB_PORT', 3306),
             // 数据库连接参数
@@ -313,7 +323,7 @@ return [
             'port' => env('DB_PORT', 3306),
             'database' => env('DB_NAME', 'saiadmin'),
             'username' => env('DB_USER', 'root'),
-            'password' => env('DB_PASSWORD', '123456'),
+            'password' => env('DB_PASSWORD', ''),
             'charset' => env('DB_CHARSET', 'utf8mb4'),
             'collation' => env('DB_COLLATION', 'utf8mb4_general_ci'),
             'prefix' => env('DB_PREFIX', ''),

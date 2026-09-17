@@ -55,11 +55,11 @@ return [
         // （必须）权限认证配置
         'auth'               => [
             // 是否启用密码验证
-            'enable'     => false,
+            'enable'     => filter_var(env('APIDOC_AUTH_ENABLE', true), FILTER_VALIDATE_BOOLEAN),
             // 全局访问密码
-            'password'   => "123456",
+            'password'   => env('APIDOC_PASSWORD', 'change-me-apidoc-password'),
             // 密码加密盐
-            'secret_key' => "apidoc#hg_code",
+            'secret_key' => env('APIDOC_SECRET_KEY', 'change-me-apidoc-secret-key'),
             // 授权访问后的有效期
             'expire' => 24*60*60
         ],
