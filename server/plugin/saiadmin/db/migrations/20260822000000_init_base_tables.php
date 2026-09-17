@@ -256,7 +256,7 @@ final class InitBaseTables extends AbstractMigration
             ->addColumn('name', 'string', ['limit' => 64, 'null' => false, 'comment' => '角色名称'])
             ->addColumn('code', 'string', ['limit' => 64, 'null' => false, 'comment' => '角色标识(英文唯一)，如: hr_manager'])
             ->addColumn('level', 'integer', ['limit' => 11, 'null' => true, 'default' => 1, 'comment' => '角色级别(1-100)：用于行政控制，不可操作级别>=自己的角色'])
-            ->addColumn('data_scope', 'tinyinteger', ['limit' => 4, 'null' => true, 'default' => 1, 'comment' => '数据范围: 1全部, 2本部门及下属, 3本部门, 4仅本人, 5自定义'])
+            ->addColumn('data_scope', 'tinyinteger', ['limit' => 4, 'null' => true, 'default' => 1, 'comment' => '数据范围: 1全部, 2自定义, 3本部门, 4本部门及以下, 5本人'])
             ->addColumn('remark', 'string', ['limit' => 255, 'null' => true, 'comment' => '备注'])
             ->addColumn('sort', 'integer', ['limit' => 11, 'null' => true, 'default' => 100])
             ->addColumn('status', 'tinyinteger', ['limit' => 1, 'null' => true, 'default' => 1, 'comment' => '状态: 1启用, 0禁用'])

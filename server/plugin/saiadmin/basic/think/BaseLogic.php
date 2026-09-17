@@ -10,6 +10,7 @@ use support\think\Db;
 use plugin\saiadmin\app\cache\UserInfoCache;
 use plugin\saiadmin\basic\AbstractLogic;
 use plugin\saiadmin\exception\ApiException;
+use plugin\saiadmin\utils\DataScope;
 
 /**
  * ThinkORM 逻辑层基类
@@ -30,11 +31,12 @@ class BaseLogic extends AbstractLogic
      */
     public array $userIds = [];
 
-    public const ALL_SCOPE = 1;
-    public const CUSTOM_SCOPE = 2;
-    public const SELF_DEPT_SCOPE = 3;
-    public const DEPT_BELOW_SCOPE = 4;
-    public const SELF_SCOPE = 5;
+    /** @deprecated 请使用 DataScope::* ；保留别名避免外部引用断裂 */
+    public const ALL_SCOPE = DataScope::ALL;
+    public const CUSTOM_SCOPE = DataScope::CUSTOM;
+    public const SELF_DEPT_SCOPE = DataScope::SELF_DEPT;
+    public const DEPT_BELOW_SCOPE = DataScope::DEPT_BELOW;
+    public const SELF_SCOPE = DataScope::SELF;
 
     /**
      * 数据权限处理
@@ -50,35 +52,39 @@ class BaseLogic extends AbstractLogic
 
         $this->adminInfo = UserInfoCache::getUserInfo($info['id']);
         $this->userIds = [];
-        $dataScope = null;
-        $roleId = 0;
+        $scopes = [];
+        $customRoleIds = [];
 
         foreach ((array) ($this->adminInfo['roleList'] ?? []) as $role) {
             $scope = (int) ($role['data_scope'] ?? 0);
-            if ($scope <= 0) {
-                continue;
-            }
-            if ($dataScope === null || $scope > $dataScope) {
-                $dataScope = $scope;
-                $roleId = (int) ($role['id'] ?? 0);
+            if ($scope > 0) {
+                $scopes[] = $scope;
+                if ($scope === DataScope::CUSTOM) {
+                    $customRoleIds[] = (int) ($role['id'] ?? 0);
+                }
             }
         }
-        $dataScope ??= self::SELF_SCOPE;
+
+        $dataScope = DataScope::resolveWidest($scopes);
 
         switch ($dataScope) {
-            case self::ALL_SCOPE:
+            case DataScope::ALL:
                 return $query;
-            case self::CUSTOM_SCOPE:
-                $deptIds = Db::table('sa_system_role_dept')->where('role_id', $roleId)->column('dept_id');
-                $userIds = Db::table('sa_system_user')->where('dept_id', 'in', $deptIds)->column('id');
-                $this->userIds = array_merge($this->userIds, $userIds);
+            case DataScope::CUSTOM:
+                if (!empty($customRoleIds)) {
+                    $deptIds = Db::table('sa_system_role_dept')->where('role_id', 'in', $customRoleIds)->column('dept_id');
+                    if (!empty($deptIds)) {
+                        $userIds = Db::table('sa_system_user')->where('dept_id', 'in', $deptIds)->column('id');
+                        $this->userIds = array_merge($this->userIds, $userIds);
+                    }
+                }
                 break;
-            case self::SELF_DEPT_SCOPE:
+            case DataScope::SELF_DEPT:
                 $deptId = $this->adminInfo['dept_id'];
                 $userIds = Db::table('sa_system_user')->where('dept_id', $deptId)->column('id');
                 $this->userIds = array_merge($this->userIds, $userIds);
                 break;
-            case self::DEPT_BELOW_SCOPE:
+            case DataScope::DEPT_BELOW:
                 $deptId = $this->adminInfo['dept_id'];
                 $deptInfo = $this->adminInfo['deptList'];
                 $oldLevel = $deptInfo['level'] . $deptId . ',';
@@ -87,7 +93,7 @@ class BaseLogic extends AbstractLogic
                 $userIds = Db::table('sa_system_user')->where('dept_id', 'in', $deptIds)->column('id');
                 $this->userIds = array_merge($this->userIds, $userIds);
                 break;
-            case self::SELF_SCOPE:
+            case DataScope::SELF:
                 $this->userIds = array_merge($this->userIds, [(int) ($this->adminInfo['id'] ?? $info['id'])]);
                 break;
             default:

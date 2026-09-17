@@ -6,6 +6,8 @@
 // +----------------------------------------------------------------------
 namespace plugin\saiadmin\app\logic\system;
 
+use plugin\saiadmin\utils\DataScope;
+
 use plugin\saiadmin\app\cache\UserInfoCache;
 use plugin\saiadmin\app\cache\UserMenuCache;
 use plugin\saiadmin\app\model\system\SystemRole;
@@ -182,7 +184,7 @@ class SystemRoleLogic extends BaseLogic
             $role->data_scope = $data['data_scope'];
             $result = $role->save();
             $role->depts()->detach();
-            if ($result && $data['data_scope'] == 2 && !empty($data['dept_ids'])) {
+            if ($result && (int) $data['data_scope'] === DataScope::CUSTOM && !empty($data['dept_ids'])) {
                 $role->depts()->saveAll($data['dept_ids']);
             }
             UserInfoCache::clearUserInfoByRoleId($id);

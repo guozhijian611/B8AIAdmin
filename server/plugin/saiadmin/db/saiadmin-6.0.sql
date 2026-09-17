@@ -535,7 +535,7 @@ CREATE TABLE `sa_system_role`  (
   `name` varchar(64) NOT NULL COMMENT '角色名称',
   `code` varchar(64) NOT NULL COMMENT '角色标识(英文唯一)，如: hr_manager',
   `level` int(11) NULL DEFAULT 1 COMMENT '角色级别(1-100)：用于行政控制，不可操作级别>=自己的角色',
-  `data_scope` tinyint(4) NULL DEFAULT 1 COMMENT '数据范围: 1全部, 2本部门及下属, 3本部门, 4仅本人, 5自定义',
+  `data_scope` tinyint(4) NULL DEFAULT 1 COMMENT '数据范围: 1全部, 2自定义, 3本部门, 4本部门及以下, 5本人',
   `remark` varchar(255) NULL DEFAULT NULL COMMENT '备注',
   `sort` int(11) NULL DEFAULT 100,
   `status` tinyint(1) NULL DEFAULT 1 COMMENT '状态: 1启用, 0禁用',
@@ -553,10 +553,10 @@ CREATE TABLE `sa_system_role`  (
 -- ----------------------------
 INSERT INTO `sa_system_role` VALUES (1, '超级管理员', 'super_admin', 100, 1, '系统维护者，拥有所有权限', 100, 1, 1, 1, '2026-01-01 00:00:00', '2026-01-01 00:00:00', NULL);
 INSERT INTO `sa_system_role` VALUES (2, '集团总裁', 'ceo', 90, 1, '查看全集团数据', 100, 1, 1, 1, '2026-01-01 00:00:00', '2026-01-01 00:00:00', NULL);
-INSERT INTO `sa_system_role` VALUES (3, 'BG总裁', 'bg_president', 80, 2, '', 100, 1, 1, 1, '2026-01-01 00:00:00', '2026-01-01 00:00:00', NULL);
-INSERT INTO `sa_system_role` VALUES (4, '部门总经理', 'gm', 60, 2, '', 100, 1, 1, 1, '2026-01-01 00:00:00', '2026-01-01 00:00:00', NULL);
+INSERT INTO `sa_system_role` VALUES (3, 'BG总裁', 'bg_president', 80, 4, '', 100, 1, 1, 1, '2026-01-01 00:00:00', '2026-01-01 00:00:00', NULL);
+INSERT INTO `sa_system_role` VALUES (4, '部门总经理', 'gm', 60, 4, '', 100, 1, 1, 1, '2026-01-01 00:00:00', '2026-01-01 00:00:00', NULL);
 INSERT INTO `sa_system_role` VALUES (5, '组长', 'team_leader', 30, 3, '', 100, 1, 1, 1, '2026-01-01 00:00:00', '2026-01-01 00:00:00', NULL);
-INSERT INTO `sa_system_role` VALUES (6, '普通员工', 'staff', 10, 4, '', 100, 1, 1, 1, '2026-01-01 00:00:00', '2026-01-01 00:00:00', NULL);
+INSERT INTO `sa_system_role` VALUES (6, '普通员工', 'staff', 10, 5, '', 100, 1, 1, 1, '2026-01-01 00:00:00', '2026-01-01 00:00:00', NULL);
 
 -- ----------------------------
 -- Table structure for sa_system_role_dept

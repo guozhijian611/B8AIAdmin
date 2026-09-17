@@ -518,7 +518,7 @@ CREATE TABLE `sa_system_role`  (
   `name` varchar(64) NOT NULL COMMENT '角色名称',
   `code` varchar(64) NOT NULL COMMENT '角色标识(英文唯一)，如: hr_manager',
   `level` int(11) NULL DEFAULT 1 COMMENT '角色级别(1-100)：用于行政控制，不可操作级别>=自己的角色',
-  `data_scope` tinyint(4) NULL DEFAULT 1 COMMENT '数据范围: 1全部, 2本部门及下属, 3本部门, 4仅本人, 5自定义',
+  `data_scope` tinyint(4) NULL DEFAULT 1 COMMENT '数据范围: 1全部, 2自定义, 3本部门, 4本部门及以下, 5本人',
   `remark` varchar(255) NULL DEFAULT NULL COMMENT '备注',
   `sort` int(11) NULL DEFAULT 100,
   `status` tinyint(1) NULL DEFAULT 1 COMMENT '状态: 1启用, 0禁用',
