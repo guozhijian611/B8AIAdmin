@@ -16,6 +16,7 @@
 
 ## 目录边界
 - `server/`：Webman/SaiAdmin 后端，Composer 命令和 PHP 校验默认在此目录执行。
+- **SaiAdmin 运行时真源 (SoT)**：运行时与改动只面向 `server/plugin/saiadmin`；禁止改 `server/vendor/saithink/saiadmin` 当业务源；安装覆盖策略见 `docs/adr/0001-saiadmin-source-of-truth.md`。
 - `saiadmin-artd/`：SaiAdmin 管理端前端，pnpm 命令默认在此目录执行。
 - `uniapp/`：uni-app/unibest 移动端，pnpm 命令默认在此目录执行。
 - `packages/`：本仓库维护的扩展包或插件源码，修改后需确认是否通过 `server/vendor` 软链或 Composer 安装进入运行时。

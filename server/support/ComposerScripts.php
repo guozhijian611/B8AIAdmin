@@ -13,6 +13,10 @@ class ComposerScripts
     {
         static::ensureEnvFile($event);
 
+        if (static::shouldSkipSaiadminPlugin($event, 'install')) {
+            return;
+        }
+
         if (!static::loadWebmanPlugin()) {
             return;
         }
@@ -22,11 +26,47 @@ class ComposerScripts
 
     public static function uninstall($event): void
     {
+        if (static::shouldSkipSaiadminPlugin($event, 'uninstall')) {
+            return;
+        }
+
         if (!static::loadWebmanPlugin()) {
             return;
         }
 
         Plugin::uninstall($event);
+    }
+
+    private static function shouldSkipSaiadminPlugin($event, string $action): bool
+    {
+        if (!method_exists($event, 'getOperation')) {
+            return false;
+        }
+        
+        $operation = $event->getOperation();
+        $package = method_exists($operation, 'getPackage') ? $operation->getPackage() : (method_exists($operation, 'getTargetPackage') ? $operation->getTargetPackage() : null);
+        
+        if (!$package || $package->getName() !== 'saithink/saiadmin') {
+            return false;
+        }
+
+        $pluginPath = dirname(__DIR__) . '/plugin/saiadmin';
+        if (!is_dir($pluginPath)) {
+            // Allow copy_dir if SoT doesn't exist
+            return false;
+        }
+
+        if (getenv('FORCE_SAIADMIN_PLUGIN_INSTALL') == '1') {
+            return false;
+        }
+
+        $io = method_exists($event, 'getIO') ? $event->getIO() : null;
+        if ($io) {
+            $io->write("<warning>检测到 server/plugin/saiadmin (SoT) 已存在，已跳过 saithink/saiadmin 的 {$action} 操作，防止覆盖/删除本地定制。</warning>");
+            $io->write("<info>若需强制覆盖，请设置环境变量 FORCE_SAIADMIN_PLUGIN_INSTALL=1</info>");
+        }
+
+        return true;
     }
 
     private static function loadWebmanPlugin(): bool
