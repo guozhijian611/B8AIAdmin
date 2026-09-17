@@ -3,7 +3,7 @@
     <ElCard class="flex flex-col flex-1 min-h-0 art-table-card" shadow="never">
       <!-- 提示警告 -->
       <ElAlert type="warning" :closable="false">
-        仅支持上传由插件市场下载的zip压缩包进行安装，请您务必确认插件包文件来自官方渠道或经由官方认证的插件作者！
+        请仅安装来源可信的插件包。本地 zip 上传会标记为 b8_local；上游市场仅在管理员开启后可见。
       </ElAlert>
 
       <!-- 工具栏 -->
@@ -26,7 +26,7 @@
         </ElButton>
 
         <div class="flex items-center gap-1 ml-auto">
-          <div class="version-title">saiadmin版本</div>
+          <div class="version-title">框架版本</div>
           <div class="version-value">{{ version?.saiadmin_version?.describe }}</div>
           <div class="version-title">状态</div>
           <div
@@ -37,7 +37,7 @@
           >
             {{ version?.saiadmin_version?.notes }}
           </div>
-          <div class="version-title">saipackage安装器</div>
+          <div class="version-title">安装器版本</div>
           <div class="version-value">{{ version?.saipackage_version?.describe }}</div>
           <div class="version-title">状态</div>
           <div
@@ -51,10 +51,10 @@
         </div>
       </div>
 
-      <!-- Tab切换 -->
+      <!-- Tab切换：已安装 / B8 市场 / 上游市场(可选) -->
       <ElTabs v-model="activeTab" type="border-card">
-        <!-- 本地安装 Tab -->
-        <ElTabPane label="本地安装" name="local">
+        <!-- 已安装 -->
+        <ElTabPane label="已安装" name="local">
           <ArtTable
             :loading="loading"
             :data="installList"
@@ -140,8 +140,24 @@
           </ArtTable>
         </ElTabPane>
 
-        <!-- 在线商店 Tab -->
-        <ElTabPane v-if="upstreamEnabled" label="在线商店" name="online">
+        <!-- B8 市场（K9 远程目录占位，本轮不接真实 API） -->
+        <ElTabPane label="B8 市场" name="b8">
+          <div class="b8-market-placeholder">
+            <ElEmpty description="B8 扩展市场即将开放">
+              <template #description>
+                <p class="mb-2">B8AIAdmin 扩展市场即将开放，当前请使用本地上传安装插件。</p>
+                <p class="text-gray-400 text-sm mb-4">远程目录与计费能力将在后续版本提供，不会影响现有本地安装流程。</p>
+              </template>
+              <ElSpace>
+                <ElButton type="primary" @click="handleUpload" v-ripple>上传插件包</ElButton>
+                <ElButton @click="activeTab = 'local'" v-ripple>查看已安装</ElButton>
+              </ElSpace>
+            </ElEmpty>
+          </div>
+        </ElTabPane>
+
+        <!-- 上游市场：仅 upstream_enabled 时显示 -->
+        <ElTabPane v-if="upstreamEnabled" label="上游市场" name="online">
           <!-- 搜索栏 -->
           <div class="flex flex-wrap items-center gap-4 mb-4">
             <ElInput
@@ -756,6 +772,9 @@
     try {
       const resp = await saipackageApi.getOnlineStatus()
       upstreamEnabled.value = resp?.upstream_enabled || false
+      if (!upstreamEnabled.value && activeTab.value === 'online') {
+        activeTab.value = 'local'
+      }
     } catch {
       // default false
     }
@@ -768,6 +787,14 @@
 </script>
 
 <style lang="scss" scoped>
+  .b8-market-placeholder {
+    min-height: 320px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 48px 16px;
+  }
+
   .version-title {
     padding: 5px 10px;
     background: var(--el-fill-color-light);
