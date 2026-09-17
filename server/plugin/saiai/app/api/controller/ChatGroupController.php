@@ -4,7 +4,7 @@
 // +----------------------------------------------------------------------
 namespace plugin\saiai\app\api\controller;
 
-use plugin\saiadmin\basic\BaseController;
+use plugin\saiuser\basic\BaseController;
 use plugin\saiai\app\api\logic\ChatGroupLogic;
 use support\Request;
 use support\Response;
@@ -28,7 +28,7 @@ class ChatGroupController extends BaseController
      */
     public function getList(Request $request): Response
     {
-        $userId = $this->adminId;
+        $userId = $this->memberId;
         $list = $this->logic->getUserGroupList($userId);
         return $this->success($list);
     }
@@ -38,7 +38,7 @@ class ChatGroupController extends BaseController
      */
     public function create(Request $request): Response
     {
-        $userId = $this->adminId;
+        $userId = $this->memberId;
         $title = $request->input('title', '新对话');
         $group = $this->logic->createGroup($userId, $title);
         return $this->success($group);
@@ -53,7 +53,7 @@ class ChatGroupController extends BaseController
         if (!$id) {
             return $this->fail('参数错误');
         }
-        $userId = $this->adminId;
+        $userId = $this->memberId;
         $data = $this->logic->getDetail($id, $userId);
         if (!$data) {
             return $this->fail('会话不存在');
@@ -71,7 +71,7 @@ class ChatGroupController extends BaseController
         if (!$id || !$title) {
             return $this->fail('参数错误');
         }
-        $userId = $this->adminId;
+        $userId = $this->memberId;
         $this->logic->updateTitle($id, $userId, $title);
         return $this->success();
     }
@@ -85,7 +85,7 @@ class ChatGroupController extends BaseController
         if (!$id) {
             return $this->fail('参数错误');
         }
-        $userId = $this->adminId;
+        $userId = $this->memberId;
         $this->logic->deleteGroup($id, $userId);
         return $this->success();
     }

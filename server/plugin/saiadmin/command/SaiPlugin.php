@@ -110,6 +110,7 @@ use plugin\\saiadmin\\basic\\OpenController;
 
 class IndexController extends OpenController
 {
+    protected array $noNeedLogin = ['index'];
 
     public function index()
     {
@@ -232,6 +233,7 @@ EOF;
 use plugin\saiadmin\app\middleware\SystemLog;
 use plugin\saiadmin\app\middleware\CheckLogin;
 use plugin\saiadmin\app\middleware\CheckAuth;
+use plugin\saiuser\app\middleware\CheckMemberLogin;
 
 return [
     'admin' => [
@@ -240,6 +242,7 @@ return [
         SystemLog::class,
     ],
     'api' => [
+        CheckMemberLogin::class,
     ]
 ];
 

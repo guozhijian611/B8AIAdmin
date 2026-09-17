@@ -41,12 +41,20 @@ class BaseController extends OpenController
      */
     protected function init(): void
     {
-        $result = getSaiUser();
-        if (!$result) {
-            throw new ApiException('用户信息读取失败,请重新登录', 400);
+        $request = request();
+        $isLogin = $request ? $request->header('check_member_login') : false;
+        
+        if ($isLogin) {
+            $result = $request->header('check_member');
+        } else {
+            $result = getSaiUser();
         }
-        if ($result['plat'] && $result['plat'] !== 'saiuser') {
-            throw new ApiException('用户信息读取失败,请重新登录', 400);
+
+        if (!$result) {
+            throw new ApiException('用户信息读取失败,请重新登录', 401);
+        }
+        if (isset($result['plat']) && $result['plat'] !== 'saiuser') {
+            throw new ApiException('用户信息读取失败,请重新登录', 401);
         }
         $userInfoCache = MemberInfoCache::getUserInfo($result['id']);
         $this->memberId = $result['id'];

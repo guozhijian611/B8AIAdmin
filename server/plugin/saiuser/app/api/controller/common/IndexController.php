@@ -11,6 +11,7 @@ use support\Response;
 
 class IndexController extends OpenController
 {
+    protected array $noNeedLogin = ['protocol', 'siteInfo', 'dictData', 'captcha', 'sendCode', 'sendEmail', 'sendForgotEmail', 'emailReset', 'accountLogin', 'accountRegister', 'phoneLogin', 'mnpLogin', 'wechat', 'wechatOauth', 'wechatLogin', 'workOauth', 'workLogin', 'dingtalkCropId', 'dingtalkLogin'];
 
     protected $logic;
 

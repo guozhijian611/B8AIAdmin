@@ -12,6 +12,7 @@ use support\Response;
  */
 class ArticleController extends OpenController
 {
+    protected array $noNeedLogin = ['banner', 'category', 'articles', 'hotArticles', 'randomArticles', 'article', 'articleAround'];
     protected $logic;
 
     /**

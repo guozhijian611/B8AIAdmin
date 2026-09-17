@@ -6,7 +6,7 @@ use plugin\saiai\app\api\logic\ChatGroupLogic;
 use plugin\saiai\app\api\logic\ChatLogic;
 use plugin\saiai\app\api\logic\IndexLogic;
 use plugin\saiai\app\service\AiFactory;
-use plugin\saiadmin\basic\BaseController;
+use plugin\saiuser\basic\BaseController;
 use support\Log;
 use support\Request;
 use support\Response;
@@ -44,7 +44,7 @@ class IndexController extends BaseController
         $type = $request->input('type', 'deepseek');
         $model = $request->input('model');
         $groupId = $request->input('group_id');
-        $userId = $this->adminId;
+        $userId = $this->memberId;
 
         if (!$groupId) {
             $groupLogic = new ChatGroupLogic();
